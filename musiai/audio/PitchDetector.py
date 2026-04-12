@@ -15,11 +15,14 @@ class PitchDetector:
     """
 
     def __init__(self, tempo_bpm: float = 120.0,
-                 beats_per_measure: float = 4.0):
+                 beats_per_measure: float = 4.0,
+                 fmin: str = "C3", fmax: str = "C6"):
         self.tempo_bpm = tempo_bpm
         self.beats_per_measure = beats_per_measure
         self.quantize_grid = 0.25  # Sechzehntelnote
         self.min_duration_beats = 0.25  # Mindestdauer
+        self.fmin = fmin  # Tiefster erkannter Ton
+        self.fmax = fmax  # Höchster erkannter Ton
 
     def detect(self, samples: np.ndarray, sr: int) -> list[dict]:
         """Audio → Liste von Noten-Dicts.
@@ -31,8 +34,8 @@ class PitchDetector:
         import librosa
 
         f0, voiced_flag, voiced_prob = librosa.pyin(
-            samples, fmin=librosa.note_to_hz('C2'),
-            fmax=librosa.note_to_hz('C7'), sr=sr,
+            samples, fmin=librosa.note_to_hz(self.fmin),
+            fmax=librosa.note_to_hz(self.fmax), sr=sr,
             frame_length=2048, hop_length=512,
         )
 

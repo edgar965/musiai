@@ -210,9 +210,50 @@ class MeasureRenderer:
                     scene.addItem(z)
                     self._items.append(z)
 
+            # Hilfslinien für Noten über/unter dem Notensystem
+            self._draw_ledger_lines(scene, note.pitch, nx, ny)
+
             ni = NoteItem(note, nx, ny, self.center_y)
             scene.addItem(ni)
             self.note_items.append(ni)
+
+    def _draw_ledger_lines(self, scene: QGraphicsScene,
+                           midi_pitch: int, nx: float, ny: float) -> None:
+        """Hilfslinien für Noten über/unter dem 5-Linien-System."""
+        octave = midi_pitch // 12
+        pc = midi_pitch % 12
+        diatonic = self._CHROMATIC_TO_DIATONIC[pc]
+        staff_pos = octave * 7 + diatonic
+
+        # Notenlinien-Positionen (staff_pos):
+        #   Linie 1 (E4): 37, Linie 2 (G4): 39, Linie 3 (B4): 41,
+        #   Linie 4 (D5): 43, Linie 5 (F5): 45
+        half_sp = STAFF_LINE_SPACING / 2
+        ledger_half_w = 10  # Halbe Breite der Hilfslinie
+        color = QColor(80, 80, 90)
+        pen = QPen(color, 1.2)
+
+        if staff_pos <= 35:
+            # Unter dem System: Hilfslinien bei 35 (C4), 33 (A3), ...
+            pos = 35
+            while pos >= staff_pos:
+                y = self.center_y - (pos - self._REF_STAFF_POS) * half_sp
+                line = scene.addLine(nx - ledger_half_w, y,
+                                     nx + ledger_half_w, y, pen)
+                line.setZValue(6)
+                self._items.append(line)
+                pos -= 2  # Jede Linie = 2 diatonische Schritte
+
+        elif staff_pos >= 47:
+            # Über dem System: Hilfslinien bei 47 (A5), 49 (C6), ...
+            pos = 47
+            while pos <= staff_pos:
+                y = self.center_y - (pos - self._REF_STAFF_POS) * half_sp
+                line = scene.addLine(nx - ledger_half_w, y,
+                                     nx + ledger_half_w, y, pen)
+                line.setZValue(6)
+                self._items.append(line)
+                pos += 2
 
     def _add_line(self, scene, x1, y1, x2, y2, width=1.5, color=None):
         c = color or QColor(*COLOR_MEASURE_LINE)
