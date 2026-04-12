@@ -7,7 +7,7 @@ from PySide6.QtGui import QFont
 
 logger = logging.getLogger("musiai.ui.AboutDialog")
 
-VERSION = "0.11"
+VERSION = "0.12"
 VERSION_DATE = "2026-04-12"
 
 
