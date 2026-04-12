@@ -19,3 +19,7 @@ build/
 media/soundfonts/*.sf2
 media/mp3/
 !media/soundfonts/VintageDreamsWaves-v2.sf2
+
+pythonENV_OLD/
+pythonENV_OLD/
+pythonENV_OLD/

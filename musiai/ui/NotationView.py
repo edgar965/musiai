@@ -160,15 +160,16 @@ class NotationView(QGraphicsView):
         logger.info("Edit Mode deaktiviert")
 
     def contextMenuEvent(self, event):
-        """Rechtsklick-Menü für Stimm-Labels."""
+        """Rechtsklick-Menü für Stimm-Labels, Waveforms, Mute-Icons."""
         scene_pos = self.mapToScene(event.pos())
         scene = self.scene()
         if not isinstance(scene, NotationScene):
             super().contextMenuEvent(event)
             return
+        # Part-Index finden (Label, Mute oder Waveform)
         for item in scene.items(scene_pos):
             tag = item.data(0)
-            if tag == "part_label":
+            if tag in ("part_label", "part_mute", "waveform"):
                 idx = item.data(1)
                 from PySide6.QtWidgets import QMenu
                 menu = QMenu(self)

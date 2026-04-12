@@ -63,7 +63,7 @@ class NotationScene(QGraphicsScene):
 
             if is_audio:
                 # Audio-Stimme: nur Waveform, keine Notenlinien
-                self._draw_waveform(part, center_y,
+                self._draw_waveform(part, part_idx, center_y,
                                     self.piece.initial_tempo)
                 # Breite aus Audio-Dauer berechnen
                 ppb = PIXELS_PER_BEAT
@@ -160,19 +160,20 @@ class NotationScene(QGraphicsScene):
         """Alias für x_to_beat."""
         return self.x_to_beat(x)
 
-    def _draw_waveform(self, part, y: float, tempo: float) -> None:
-        """Audio-Waveform unter den Notenlinien zeichnen."""
+    def _draw_waveform(self, part, part_idx: int,
+                       y: float, tempo: float) -> None:
+        """Audio-Waveform zeichnen."""
         from musiai.notation.WaveformItem import WaveformItem
+        ppb = (self.measure_renderers[0].pixels_per_beat
+               if self.measure_renderers else PIXELS_PER_BEAT)
         for i, block in enumerate(part.audio_track.blocks):
             dur_beats = block.duration_beats(tempo)
-            # Breite in Pixeln (nutze ersten Renderer als Referenz)
-            if self.measure_renderers:
-                ppb = self.measure_renderers[0].pixels_per_beat
-            else:
-                ppb = PIXELS_PER_BEAT
             width = dur_beats * ppb
             x = self.MARGIN_LEFT + block.start_beat * ppb
             item = WaveformItem(block.samples, block.sr, width, x, y, i)
+            # Part-Index für Rechtsklick-Menü
+            item.setData(0, "waveform")
+            item.setData(1, part_idx)
             self.addItem(item)
 
     def _draw_part_label(self, part, part_idx: int, center_y: float) -> None:
