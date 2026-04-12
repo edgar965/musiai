@@ -31,6 +31,10 @@ class PlaybackEngine:
         self._sf_player = None   # SoundFontPlayer (lazy)
         self._port_player = None  # MidiPortPlayer (lazy)
 
+        # Audio-Player für mp3/wav Spuren
+        from musiai.audio.AudioPlayer import AudioPlayer
+        self.audio_player = AudioPlayer()
+
         # Tracking
         self._active_notes: dict[int, tuple] = {}
         self._last_beat = 0.0
@@ -122,9 +126,21 @@ class PlaybackEngine:
         self.piece = piece
         self.transport.tempo_bpm = piece.initial_tempo
         self._prepare_note_list()
+        self._prepare_audio_tracks()
         for part in piece.parts:
             self.player.set_instrument(part.channel, 0, part.instrument)
         logger.info(f"Playback vorbereitet: {len(self._all_notes)} Noten")
+
+    def _prepare_audio_tracks(self) -> None:
+        """Audio-Tracks aus Parts registrieren."""
+        self.audio_player._tracks.clear()
+        if not self.piece:
+            return
+        for i, part in enumerate(self.piece.parts):
+            if part.audio_track and part.audio_track.file_path:
+                self.audio_player.set_track(i, part.audio_track.file_path)
+                if part.muted:
+                    self.audio_player.set_muted(True)
 
     def _prepare_note_list(self) -> None:
         self._all_notes.clear()
@@ -141,16 +157,25 @@ class PlaybackEngine:
         self._all_notes.sort(key=lambda x: x[0])
 
     def play(self) -> None:
+        if self.transport.state == "paused":
+            self.audio_player.unpause()
+        else:
+            # Beat → Sekunden für Audio-Start
+            beat = self.transport.current_beat
+            sec = beat * 60.0 / self.transport.tempo_bpm
+            self.audio_player.play(sec)
         self.transport.play()
         self.signal_bus.playback_started.emit()
 
     def pause(self) -> None:
         self.transport.pause()
         self.player.all_notes_off()
+        self.audio_player.pause()
 
     def stop(self) -> None:
         self.transport.stop()
         self.player.all_notes_off()
+        self.audio_player.stop()
         self._active_notes.clear()
         self.signal_bus.playback_stopped.emit()
 
@@ -192,6 +217,7 @@ class PlaybackEngine:
     def shutdown(self) -> None:
         self.stop()
         self.player.shutdown()
+        self.audio_player.shutdown()
         if self._sf_player and self._sf_player is not self.player:
             self._sf_player.shutdown()
         if self._port_player and self._port_player is not self.player:
