@@ -52,13 +52,14 @@ class SettingsDialog(QDialog):
 
         self._engines = {}
         engines_info = [
-            ("pyin", "librosa pyin (monophon)",
-             "Schnell, erkennt eine Stimme. Gut für Solo-Instrumente."),
+            ("basic-pitch", "Spotify basic-pitch (polyphon)",
+             "Beste polyphone Erkennung. Nutzt TF-Modell\n"
+             "in separater Python 3.10 Umgebung."),
             ("demucs+pyin", "demucs + pyin (polyphon)",
              "Trennt Audio in Stimmen (Vocals/Bass/Drums/Other),\n"
-             "dann erkennt pyin jede Stimme einzeln. Beste Qualität."),
-            ("madmom", "madmom (Beat/Onset)",
-             "Erkennt Beats und Onsets. Ergänzung zu pyin."),
+             "dann erkennt pyin jede Stimme einzeln."),
+            ("pyin", "librosa pyin (monophon)",
+             "Schnell, erkennt eine Stimme. Gut für Solo-Instrumente."),
         ]
 
         self._status_labels = {}
@@ -88,32 +89,42 @@ class SettingsDialog(QDialog):
     def _detect_engines(self) -> None:
         """Prüft welche Engines installiert sind."""
         checks = {
-            "pyin": "librosa",
+            "basic-pitch": None,  # Special check via subprocess
             "demucs+pyin": "demucs",
-            "madmom": "madmom",
+            "pyin": "librosa",
         }
         for key, module in checks.items():
-            try:
-                __import__(module)
+            available = False
+            if key == "basic-pitch":
+                # Nur prüfen ob python310ENV existiert (schnell)
+                import os
+                available = os.path.exists(os.path.join("python310ENV", "python.exe"))
+            else:
+                try:
+                    __import__(module)
+                    available = True
+                except ImportError:
+                    pass
+
+            if available:
                 self._status_labels[key].setText("installiert")
                 self._status_labels[key].setStyleSheet(
                     "font-weight: bold; color: #2a7a2a; margin-left: 20px;"
                 )
                 self._engines[key].setEnabled(True)
-            except ImportError:
+            else:
                 self._status_labels[key].setText("nicht installiert")
                 self._status_labels[key].setStyleSheet(
                     "font-weight: bold; color: #c03030; margin-left: 20px;"
                 )
                 self._engines[key].setEnabled(False)
 
-        # Default Engine auswählen (beste verfügbare)
-        if self._engines.get("demucs+pyin") and self._engines["demucs+pyin"].isEnabled():
-            self._engines["demucs+pyin"].setChecked(True)
-            self._selected_engine = "demucs+pyin"
-        elif self._engines.get("pyin") and self._engines["pyin"].isEnabled():
-            self._engines["pyin"].setChecked(True)
-            self._selected_engine = "pyin"
+        # Default: beste verfügbare Engine
+        for pref in ["basic-pitch", "demucs+pyin", "pyin"]:
+            if self._engines.get(pref) and self._engines[pref].isEnabled():
+                self._engines[pref].setChecked(True)
+                self._selected_engine = pref
+                break
 
     @property
     def selected_engine(self) -> str:

@@ -52,7 +52,7 @@ class AppController:
         )
 
         self._tempo_target_measure = None
-        self._detection_engine = "demucs+pyin"  # Default: beste verfügbare
+        self._detection_engine = "basic-pitch"  # Default: beste verfügbare
         self._connect_signals()
         logger.info("AppController initialisiert")
 
@@ -473,7 +473,7 @@ class AppController:
     def _add_audio_voice(self) -> None:
         """Audio-Datei laden und als neue Stimme hinzufügen."""
         path, _ = QFileDialog.getOpenFileName(
-            self.main_window, "Audio laden", "media/music",
+            self.main_window, "Audio laden", "media/mp3",
             "Audio Dateien (*.wav *.mp3 *.flac *.ogg);;Alle Dateien (*)"
         )
         if not path:
@@ -534,6 +534,7 @@ class AppController:
             return
         name = piece.parts[part_idx].name
         del piece.parts[part_idx]
+        self.playback_engine.set_piece(piece)  # Playback-Liste neu
         self.main_window.properties_panel.clear()
         self.notation_scene.refresh()
         self.signal_bus.status_message.emit(f"Stimme '{name}' gelöscht")
@@ -558,7 +559,9 @@ class AppController:
         QApplication.processEvents()
 
         try:
-            if engine == "demucs+pyin":
+            if engine == "basic-pitch":
+                self._detect_basic_pitch(part, piece)
+            elif engine == "demucs+pyin":
                 self._detect_demucs(part, piece)
             else:
                 self._detect_pyin(part, piece)
@@ -567,6 +570,18 @@ class AppController:
             self.signal_bus.status_message.emit(f"Fehler: {e}")
         finally:
             QApplication.restoreOverrideCursor()
+
+    def _detect_basic_pitch(self, part, piece) -> None:
+        """Polyphone Erkennung mit Spotify basic-pitch."""
+        from musiai.audio.BasicPitchDetector import BasicPitchDetector
+        detector = BasicPitchDetector(
+            tempo_bpm=piece.initial_tempo, beats_per_measure=4.0
+        )
+        notes = detector.detect(part.audio_track.file_path)
+        if notes:
+            self._add_detected_part(piece, f"Erkannt: {part.name}", notes)
+        else:
+            self.signal_bus.status_message.emit("Keine Noten erkannt")
 
     def _detect_pyin(self, part, piece) -> None:
         """Monophone Erkennung mit pyin."""
@@ -639,6 +654,7 @@ class AppController:
             new_part.measures[m_idx].add_note(note)
 
         piece.add_part(new_part)
+        self.playback_engine.set_piece(piece)  # Playback-Liste neu
         self.notation_scene.refresh()
         self.signal_bus.status_message.emit(
             f"{len(notes_data)} Noten → '{name}'"
@@ -749,18 +765,46 @@ class AppController:
         self.main_window.properties_panel.show_time_signature(ts, tempo)
 
     def _load_default_file(self) -> None:
-        """Standard-Datei beim Start laden wenn vorhanden."""
+        """Standard-Dateien beim Start laden wenn vorhanden."""
         import os
-        default = os.path.abspath("media/music/test.musicxml")
-        if os.path.exists(default):
+
+        # MusicXML laden
+        default_xml = os.path.abspath("media/music/test.musicxml")
+        if os.path.exists(default_xml):
             try:
                 from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
-                piece = MusicXmlImporter().import_file(default)
+                piece = MusicXmlImporter().import_file(default_xml)
                 self.project.add_piece(piece)
                 self.signal_bus.piece_loaded.emit(piece)
-                logger.info(f"Standard-Datei geladen: {default}")
+                logger.info(f"Standard-Datei geladen: {default_xml}")
             except Exception as e:
-                logger.warning(f"Standard-Datei konnte nicht geladen werden: {e}")
+                logger.warning(f"MusicXML laden fehlgeschlagen: {e}")
+
+        # test.mp3 als Audio-Stimme laden
+        default_mp3 = os.path.abspath("media/mp3/test.mp3")
+        if os.path.exists(default_mp3) and self.notation_scene.piece:
+            try:
+                from musiai.model.AudioTrack import AudioTrack
+                from musiai.model.Part import Part
+                from musiai.model.Measure import Measure
+                from musiai.model.TimeSignature import TimeSignature
+
+                track = AudioTrack()
+                if track.load(default_mp3):
+                    piece = self.notation_scene.piece
+                    part = Part(name="Audio: test", channel=len(piece.parts))
+                    part.audio_track = track
+                    tempo = piece.initial_tempo
+                    beats = track.duration_seconds * (tempo / 60.0)
+                    ts = TimeSignature(4, 4)
+                    for i in range(max(1, int(beats / 4) + 1)):
+                        part.add_measure(Measure(i + 1, ts))
+                    piece.add_part(part)
+                    self.playback_engine.set_piece(piece)
+                    self.notation_scene.refresh()
+                    logger.info(f"Audio geladen: {default_mp3}")
+            except Exception as e:
+                logger.warning(f"Audio laden fehlgeschlagen: {e}")
 
     def start(self) -> None:
         """App starten."""

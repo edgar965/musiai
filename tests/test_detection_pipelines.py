@@ -181,7 +181,7 @@ class TestEngineAvailability(unittest.TestCase):
         from musiai.ui.SettingsDialog import SettingsDialog
         dialog = SettingsDialog()
         engine = dialog.selected_engine
-        self.assertIn(engine, ["pyin", "demucs+pyin", "madmom"])
+        self.assertIn(engine, ["pyin", "demucs+pyin", "madmom", "basic-pitch"])
 
 
 # ==============================================================
