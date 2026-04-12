@@ -149,10 +149,10 @@ class TestDurationItem(unittest.TestCase):
         d = DurationItem(1.15, 50, 50)
         self.assertTrue(d.isVisible())
 
-    def test_hidden_when_standard(self):
+    def test_text_when_standard(self):
         from musiai.notation.DurationItem import DurationItem
         d = DurationItem(1.0, 50, 50)
-        self.assertFalse(d.isVisible())
+        self.assertEqual(d.text(), "+0.00")
 
 
 if __name__ == "__main__":

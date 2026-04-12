@@ -92,10 +92,18 @@ class AppController:
         view = self.main_window.notation_view
         view.note_clicked.connect(self.edit_controller.select_note)
         view.measure_clicked.connect(self._on_measure_clicked)
-        view.copy_requested.connect(self.edit_controller.copy)
-        view.paste_requested.connect(self.edit_controller.paste)
+        view.clef_clicked.connect(self._on_clef_clicked)
+        view.time_sig_clicked.connect(self._on_ts_clicked_from_view)
+        view.tempo_clicked.connect(self._on_tempo_clicked)
+        view.deselect_requested.connect(self._on_deselect)
         self.signal_bus.note_selected.connect(self._on_note_selected)
         self.signal_bus.notes_deselected.connect(props.clear)
+
+        # --- Edit Mode ---
+        view.edit_mode_changed.connect(self._on_edit_mode_changed)
+        view.cursor_moved.connect(self._on_cursor_moved)
+        view.copy_requested.connect(self.edit_controller.copy)
+        view.paste_requested.connect(self._on_paste)
 
         # --- Properties → Edit ---
         props.velocity_changed.connect(self.edit_controller.change_velocity)
@@ -106,12 +114,15 @@ class AppController:
         )
         props.duration_changed.connect(self.edit_controller.change_duration_deviation)
         props.glide_type_changed.connect(self._on_glide_type_changed)
-        props.measure_duration_changed.connect(self._on_measure_duration_changed)
+        props.tempo_changed.connect(self._on_tempo_changed)
 
         # --- Delete ---
         self.main_window._delete_action.triggered.connect(
             self.edit_controller.delete_selected
         )
+
+        # --- Neue Stimme ---
+        self.main_window._new_voice_action.triggered.connect(self._add_new_voice)
 
         # --- Playback Position → Playhead ---
         self.signal_bus.playback_position.connect(
@@ -189,8 +200,9 @@ class AppController:
             )
 
     def _on_note_selected(self, note) -> None:
-        """Note ausgewählt → Properties Panel anzeigen."""
+        """Note ausgewählt → Properties Panel anzeigen, Takt-Highlight entfernen."""
         if note:
+            self.notation_scene.clear_measure_highlight()
             self.main_window.properties_panel.show_note(note)
 
     def _on_measure_clicked(self, measure) -> None:
@@ -199,28 +211,180 @@ class AppController:
         self.edit_controller.select_measure(measure)
         tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
         self.main_window.properties_panel.show_time_signature(
-            measure.time_signature, tempo, measure.duration_deviation
+            measure.time_signature, tempo
         )
         self.signal_bus.status_message.emit(
             f"Takt {measure.number} ausgewählt ({len(measure.notes)} Noten)"
         )
 
-    def _on_measure_duration_changed(self, deviation: float) -> None:
-        """Taktlänge geändert → Model updaten und neu rendern."""
-        measure = self.edit_controller.selected_measure
-        if not measure:
+    def _on_edit_mode_changed(self, active: bool) -> None:
+        """Edit Mode ein/aus."""
+        self.main_window.status_bar.set_edit_mode(active)
+        if active:
+            self.notation_scene.update_cursor(
+                self.main_window.notation_view.cursor_beat
+            )
+            self.signal_bus.status_message.emit(
+                "Edit Mode — Pfeiltasten/Mausklick: Cursor bewegen, "
+                "Ctrl+C/V: Copy/Paste, Esc: beenden"
+            )
+        else:
+            self.notation_scene.hide_cursor()
+            self.signal_bus.status_message.emit("Edit Mode beendet")
+
+    def _on_cursor_moved(self, beat: float) -> None:
+        """Edit-Cursor wurde bewegt."""
+        self.notation_scene.update_cursor(beat)
+        # Finde Takt + lokalen Beat für Statusanzeige
+        measure_num, local_beat = self._beat_to_measure_info(beat)
+        self.main_window.status_bar.set_position(measure_num, local_beat)
+
+    def _on_paste(self) -> None:
+        """Paste an der Cursor-Position im Edit Mode."""
+        view = self.main_window.notation_view
+        if not view.edit_mode:
             return
-        measure.duration_deviation = deviation
+        beat = view.cursor_beat
+        target_measure, local_beat = self._find_measure_at_beat(beat)
+        self.edit_controller.paste_at(target_measure, local_beat)
+
+    def _beat_to_measure_info(self, global_beat: float) -> tuple[int, float]:
+        """Globaler Beat → (Taktnummer, lokaler Beat)."""
+        piece = self.notation_scene.piece
+        if not piece or not piece.parts:
+            return 1, global_beat
+        cumulative = 0.0
+        for m in piece.parts[0].measures:
+            dur = m.duration_beats
+            if global_beat < cumulative + dur:
+                return m.number, global_beat - cumulative
+            cumulative += dur
+        # Hinter dem letzten Takt
+        last = piece.parts[0].measures[-1]
+        return last.number, global_beat - (cumulative - last.duration_beats)
+
+    def _find_measure_at_beat(self, global_beat: float):
+        """Globaler Beat → (Measure, lokaler Beat)."""
+        from musiai.model.Measure import Measure
+        piece = self.notation_scene.piece
+        if not piece or not piece.parts:
+            return None, 0.0
+        cumulative = 0.0
+        for m in piece.parts[0].measures:
+            dur = m.duration_beats
+            if global_beat < cumulative + dur:
+                return m, global_beat - cumulative
+            cumulative += dur
+        last = piece.parts[0].measures[-1]
+        return last, global_beat - (cumulative - last.duration_beats)
+
+    def _on_tempo_changed(self, bpm: float) -> None:
+        """Tempo geändert → NUR den selektierten Takt oder globales Tempo."""
+        piece = self.notation_scene.piece
+        if not piece:
+            return
+
+        sel_measure = self.edit_controller.selected_measure
+        from musiai.model.Tempo import Tempo
+
+        if sel_measure:
+            # Nur diesen Takt ändern
+            sel_measure.tempo = Tempo(bpm, 0)
+        else:
+            # Kein Takt selektiert → globales Tempo
+            if piece.tempos:
+                piece.tempos[0].bpm = bpm
+
+        self.playback_engine.transport.tempo_bpm = bpm
+
+        # Selektion nach refresh wiederherstellen
         self.notation_scene.refresh()
-        logger.debug(f"Takt {measure.number} Dauer → {deviation:.0%}")
+        if sel_measure:
+            self.notation_scene.highlight_measure(sel_measure)
+        self.signal_bus.status_message.emit(f"Tempo: {bpm:.0f} BPM")
+        logger.info(f"Tempo → {bpm:.0f} BPM")
+
+    def _on_deselect(self) -> None:
+        """Escape (outside edit mode): Alles deselektieren."""
+        self.edit_controller.deselect()
+        self.notation_scene.clear_measure_highlight()
+        self.main_window.properties_panel.clear()
+        self.signal_bus.status_message.emit("Auswahl aufgehoben")
 
     def _on_note_changed(self, note) -> None:
         """Note wurde geändert → Panel updaten falls selektiert."""
         if self.edit_controller.selected_note is note:
             self.main_window.properties_panel.show_note(note)
 
+    def _add_new_voice(self) -> None:
+        """Neue Stimme (Part) zum aktuellen Piece hinzufügen."""
+        piece = self.project.current_piece
+        if not piece:
+            self.signal_bus.status_message.emit("Kein Stück geladen")
+            return
+
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+        from musiai.model.TimeSignature import TimeSignature
+
+        part_num = len(piece.parts) + 1
+        new_part = Part(name=f"Stimme {part_num}", channel=min(part_num, 15))
+
+        # Gleiche Taktanzahl wie erste Stimme, leere Takte
+        if piece.parts:
+            for i, existing in enumerate(piece.parts[0].measures):
+                m = Measure(
+                    number=existing.number,
+                    time_signature=TimeSignature(
+                        existing.time_signature.numerator,
+                        existing.time_signature.denominator,
+                    ),
+                )
+                new_part.add_measure(m)
+        else:
+            new_part.add_measure(Measure(number=1))
+
+        piece.add_part(new_part)
+        self.notation_scene.refresh()
+        self.signal_bus.status_message.emit(
+            f"Neue Stimme '{new_part.name}' hinzugefügt"
+        )
+        logger.info(f"Neue Stimme: {new_part.name} (Part {part_num})")
+
+    def _on_tempo_clicked(self) -> None:
+        """Tempo-Anzeige angeklickt → Globales Tempo editieren."""
+        piece = self.notation_scene.piece
+        if not piece:
+            return
+        # Takt-Selektion aufheben damit Tempo global geändert wird
+        self.edit_controller.deselect()
+        self.notation_scene.clear_measure_highlight()
+        tempo = piece.initial_tempo
+        # Zeige Taktart-Panel mit globalem Tempo (kein Takt selektiert)
+        ts = piece.parts[0].measures[0].time_signature if piece.parts else None
+        if ts:
+            self.main_window.properties_panel.show_time_signature(ts, tempo)
+        self.signal_bus.status_message.emit(
+            f"Globales Tempo: {tempo:.0f} BPM (gilt für alle Takte)"
+        )
+
+    def _on_clef_clicked(self, measure) -> None:
+        """Schlüssel angeklickt → Properties zeigen."""
+        self.main_window.properties_panel.show_clef()
+        self.signal_bus.status_message.emit("Notenschlüssel ausgewählt")
+
+    def _on_ts_clicked_from_view(self, measure) -> None:
+        """Taktart in Notation angeklickt → Properties zeigen."""
+        tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
+        self.main_window.properties_panel.show_time_signature(
+            measure.time_signature, tempo
+        )
+        self.signal_bus.status_message.emit(
+            f"Taktart {measure.time_signature} ausgewählt"
+        )
+
     def _on_ts_clicked(self, ts_item) -> None:
-        """Taktart angeklickt → Properties zeigen."""
+        """Taktart angeklickt → Properties zeigen (legacy)."""
         ts = ts_item.time_sig
         tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
         self.main_window.properties_panel.show_time_signature(ts, tempo)

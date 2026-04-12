@@ -11,10 +11,18 @@ class StatusBar(QStatusBar):
 
     def __init__(self):
         super().__init__()
+        self._edit_mode_label = QLabel("")
+        self._edit_mode_label.setStyleSheet(
+            "background: #0070e0; color: white; font-weight: bold; "
+            "padding: 2px 8px; border-radius: 3px; margin-right: 6px;"
+        )
+        self._edit_mode_label.setVisible(False)
+
         self._position_label = QLabel("Takt 1 | Beat 1.0")
         self._midi_label = QLabel("MIDI: ---")
         self._message_label = QLabel("")
 
+        self.addWidget(self._edit_mode_label)
         self.addWidget(self._position_label)
         self.addWidget(self._midi_label)
         self.addPermanentWidget(self._message_label)
@@ -30,6 +38,13 @@ class StatusBar(QStatusBar):
         else:
             self._midi_label.setText("MIDI: ---")
             self._midi_label.setStyleSheet("color: #888;")
+
+    def set_edit_mode(self, active: bool) -> None:
+        if active:
+            self._edit_mode_label.setText("EDIT MODE  (Esc = beenden)")
+            self._edit_mode_label.setVisible(True)
+        else:
+            self._edit_mode_label.setVisible(False)
 
     def set_message(self, text: str) -> None:
         self._message_label.setText(text)

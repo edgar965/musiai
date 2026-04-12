@@ -417,10 +417,10 @@ class TestWorkflowSelectAndEdit(unittest.TestCase):
 
     def test_duration_clamped(self):
         self.ctrl.select_note(self.items[0])
-        self.ctrl.change_duration_deviation(2.0)
-        self.assertAlmostEqual(self.ctrl.selected_note.expression.duration_deviation, 1.2)
-        self.ctrl.change_duration_deviation(0.5)
-        self.assertAlmostEqual(self.ctrl.selected_note.expression.duration_deviation, 0.8)
+        self.ctrl.change_duration_deviation(20.0)
+        self.assertAlmostEqual(self.ctrl.selected_note.expression.duration_deviation, 10.0)
+        self.ctrl.change_duration_deviation(0.01)
+        self.assertAlmostEqual(self.ctrl.selected_note.expression.duration_deviation, 0.10)
 
 
 class TestWorkflowDeleteNote(unittest.TestCase):
@@ -515,7 +515,8 @@ class TestWorkflowAddMeasure(unittest.TestCase):
         piece.parts[0].add_measure(new_m)
         scene.set_piece(piece)
         widths = [r.width for r in scene.measure_renderers]
-        self.assertAlmostEqual(widths[4], 3.0 * 80)  # 6/8 = 3 beats
+        # 6/8 = 3 beats, Tempo 100 → scale 120/100 = 1.2
+        self.assertAlmostEqual(widths[4], 3.0 * 80 * 1.2)  # 288
 
 
 # ==============================================================
@@ -592,15 +593,17 @@ class TestWorkflowExpressionVisuals(unittest.TestCase):
         c = ColorScheme.duration_to_color(1.15)
         self.assertGreater(c.blue(), 150)  # Blau
 
-    def test_duration_item_hidden_when_standard(self):
+    def test_duration_item_text_standard(self):
         from musiai.notation.DurationItem import DurationItem
         d = DurationItem(1.0, 50, 50)
-        self.assertFalse(d.isVisible())
+        self.assertEqual(d.text(), "+0.00")
 
-    def test_duration_item_visible_when_deviation(self):
+    def test_duration_item_text_deviation(self):
         from musiai.notation.DurationItem import DurationItem
         d = DurationItem(0.85, 50, 50)
-        self.assertTrue(d.isVisible())
+        self.assertEqual(d.text(), "-0.15")
+        d2 = DurationItem(1.2, 50, 50)
+        self.assertEqual(d2.text(), "+0.20")
 
     def test_proportional_measure_width(self):
         from musiai.notation.NotationScene import NotationScene
@@ -608,6 +611,209 @@ class TestWorkflowExpressionVisuals(unittest.TestCase):
         scene.set_piece(make_test_piece())
         widths = [r.width for r in scene.measure_renderers]
         self.assertLess(widths[2], widths[0])  # 3/4 < 4/4
+
+
+# ==============================================================
+# DIATONIC NOTE POSITIONING
+# ==============================================================
+
+class TestDiatonicPositioning(unittest.TestCase):
+    """Noten sitzen auf den korrekten Notenlinien (diatonisch)."""
+
+    def _pitch_y(self, midi_pitch, center_y=200):
+        from musiai.notation.MeasureRenderer import MeasureRenderer
+        from musiai.model.Measure import Measure
+        r = MeasureRenderer(Measure(), 0, center_y, effective_tempo=120)
+        return r.pitch_to_y(midi_pitch)
+
+    def test_b4_on_middle_line(self):
+        """B4 (MIDI 71) = 3. Linie = center_y."""
+        self.assertAlmostEqual(self._pitch_y(71), 200)
+
+    def test_e4_on_bottom_line(self):
+        """E4 (MIDI 64) = 1. Linie = center_y + 24."""
+        self.assertAlmostEqual(self._pitch_y(64), 224)
+
+    def test_f5_on_top_line(self):
+        """F5 (MIDI 77) = 5. Linie = center_y - 24."""
+        self.assertAlmostEqual(self._pitch_y(77), 176)
+
+    def test_g4_on_second_line(self):
+        """G4 (MIDI 67) = 2. Linie = center_y + 12."""
+        self.assertAlmostEqual(self._pitch_y(67), 212)
+
+    def test_d5_on_fourth_line(self):
+        """D5 (MIDI 74) = 4. Linie = center_y - 12."""
+        self.assertAlmostEqual(self._pitch_y(74), 188)
+
+    def test_c5_in_space(self):
+        """C5 (MIDI 72) = Zwischenraum über 3. Linie."""
+        y = self._pitch_y(72)
+        self.assertLess(y, 200)    # Über center_y
+        self.assertGreater(y, 188)  # Unter 4. Linie
+
+
+# ==============================================================
+# TEMPO AFFECTS MEASURE WIDTH
+# ==============================================================
+
+class TestTempoMeasureWidth(unittest.TestCase):
+    """Tempo beeinflusst die visuelle Taktbreite."""
+
+    def test_slow_tempo_wider(self):
+        """Langsames Tempo → breitere Takte."""
+        from musiai.notation.MeasureRenderer import MeasureRenderer
+        from musiai.model.Measure import Measure
+        m = Measure()
+        r_normal = MeasureRenderer(m, 0, 100, effective_tempo=120)
+        r_slow = MeasureRenderer(m, 0, 100, effective_tempo=60)
+        self.assertGreater(r_slow.width, r_normal.width)
+
+    def test_fast_tempo_narrower(self):
+        """Schnelles Tempo → schmalere Takte."""
+        from musiai.notation.MeasureRenderer import MeasureRenderer
+        from musiai.model.Measure import Measure
+        m = Measure()
+        r_normal = MeasureRenderer(m, 0, 100, effective_tempo=120)
+        r_fast = MeasureRenderer(m, 0, 100, effective_tempo=240)
+        self.assertLess(r_fast.width, r_normal.width)
+
+    def test_reference_tempo_scale_1(self):
+        """Bei 120 BPM ist tempo_scale = 1.0."""
+        from musiai.notation.MeasureRenderer import MeasureRenderer
+        from musiai.model.Measure import Measure
+        r = MeasureRenderer(Measure(), 0, 100, effective_tempo=120)
+        self.assertAlmostEqual(r.tempo_scale, 1.0)
+
+    def test_tempo_change_updates_scene(self):
+        """Tempo ändern → Scene hat neue Breiten."""
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        piece = make_test_piece()
+        scene.set_piece(piece)
+        w_before = [r.width for r in scene.measure_renderers]
+        piece.tempos[0].bpm = 60
+        for m in piece.parts[0].measures:
+            if m.tempo:
+                m.tempo.bpm = 60
+        scene.refresh()
+        w_after = [r.width for r in scene.measure_renderers]
+        for wb, wa in zip(w_before, w_after):
+            self.assertGreater(wa, wb)
+
+
+# ==============================================================
+# EDIT MODE
+# ==============================================================
+
+class TestEditMode(unittest.TestCase):
+    """Edit Mode mit Cursor."""
+
+    def test_cursor_item_exists(self):
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        self.assertIsNotNone(scene.cursor)
+
+    def test_cursor_hidden_by_default(self):
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        self.assertFalse(scene.cursor.isVisible())
+
+    def test_update_cursor_shows(self):
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        scene.set_piece(make_test_piece())
+        scene.update_cursor(2.0)
+        self.assertTrue(scene.cursor.isVisible())
+
+    def test_hide_cursor(self):
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        scene.set_piece(make_test_piece())
+        scene.update_cursor(2.0)
+        scene.hide_cursor()
+        self.assertFalse(scene.cursor.isVisible())
+
+
+# ==============================================================
+# DURATION DEVIATION
+# ==============================================================
+
+class TestDurationDeviation(unittest.TestCase):
+    """Dauer-Abweichung einer Note ändern."""
+
+    def test_change_deviation(self):
+        """Deviation wird korrekt gesetzt."""
+        scene, ec = self._make_scene_and_controller()
+        ni = scene.get_all_note_items()[0]
+        ec.select_note(ni)
+        ec.change_duration_deviation(0.9)
+        self.assertAlmostEqual(ni.note.expression.duration_deviation, 0.9)
+
+    def test_deviation_clamped(self):
+        """Deviation wird auf 0.10-10.0 begrenzt."""
+        scene, ec = self._make_scene_and_controller()
+        ni = scene.get_all_note_items()[0]
+        ec.select_note(ni)
+        ec.change_duration_deviation(0.01)
+        self.assertAlmostEqual(ni.note.expression.duration_deviation, 0.10)
+        ec.change_duration_deviation(20.0)
+        self.assertAlmostEqual(ni.note.expression.duration_deviation, 10.0)
+
+    def test_deviation_creates_duration_item(self):
+        """Nach Deviation != 1.0 wird DurationItem erzeugt."""
+        from musiai.notation.DurationItem import DurationItem
+        scene, ec = self._make_scene_and_controller()
+        ni = scene.get_all_note_items()[0]
+        ec.select_note(ni)
+        ec.change_duration_deviation(1.15)
+        items = [i for i in scene.items() if isinstance(i, DurationItem)]
+        self.assertGreater(len(items), 0)
+
+    def _make_scene_and_controller(self):
+        from musiai.notation.NotationScene import NotationScene
+        from musiai.controller.EditController import EditController
+        from musiai.util.SignalBus import SignalBus
+        scene = NotationScene()
+        scene.set_piece(make_test_piece())
+        bus = SignalBus()
+        ec = EditController(scene, bus)
+        return scene, ec
+
+
+# ==============================================================
+# NEUE STIMME
+# ==============================================================
+
+class TestNeueStimme(unittest.TestCase):
+    """Neue Stimme hinzufügen."""
+
+    def test_add_voice(self):
+        piece = make_test_piece()
+        self.assertEqual(len(piece.parts), 1)
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+        new_part = Part("Stimme 2", 1)
+        for m in piece.parts[0].measures:
+            new_part.add_measure(Measure(m.number, m.time_signature))
+        piece.add_part(new_part)
+        self.assertEqual(len(piece.parts), 2)
+        self.assertEqual(len(piece.parts[1].measures), len(piece.parts[0].measures))
+
+    def test_new_voice_renders(self):
+        from musiai.notation.NotationScene import NotationScene
+        piece = make_test_piece()
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+        new_part = Part("Stimme 2")
+        for m in piece.parts[0].measures:
+            new_part.add_measure(Measure(m.number, m.time_signature))
+        piece.add_part(new_part)
+        scene = NotationScene()
+        scene.set_piece(piece)
+        # Beide Parts gerendert: doppelte Taktanzahl
+        n_measures = len(piece.parts[0].measures) + len(piece.parts[1].measures)
+        self.assertEqual(len(scene.measure_renderers), n_measures)
 
 
 # ==============================================================
@@ -653,7 +859,7 @@ class TestWorkflowPropertiesPanel(unittest.TestCase):
         panel.show_note(n)
         self.assertEqual(panel._vel_slider.value(), 100)
         self.assertEqual(panel._cent_slider.value(), 15)
-        self.assertEqual(panel._dur_slider.value(), 105)
+        self.assertAlmostEqual(panel._dur_spin.value(), 1.05)
 
     def test_clear_shows_empty(self):
         from musiai.ui.PropertiesPanel import PropertiesPanel

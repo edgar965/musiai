@@ -6,7 +6,7 @@ from PySide6.QtGui import QBrush, QPen, QColor
 from PySide6.QtCore import Qt
 from musiai.model.Note import Note
 from musiai.notation.ColorScheme import ColorScheme
-from musiai.util.Constants import NOTE_RADIUS, MIDI_MIDDLE_C
+from musiai.util.Constants import NOTE_RADIUS
 
 logger = logging.getLogger("musiai.notation.NoteItem")
 
@@ -16,10 +16,11 @@ STEM_LENGTH = 30
 class NoteItem(QGraphicsEllipseItem):
     """Visuelle Darstellung einer Note: farbiger Kopf + Hals."""
 
-    def __init__(self, note: Note, x: float, y: float):
+    def __init__(self, note: Note, x: float, y: float, center_y: float = 0):
         r = NOTE_RADIUS
         super().__init__(-r, -r + 1, r * 2, (r - 1) * 2)
         self.note = note
+        self._center_y = center_y
         self.setPos(x, y)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -36,10 +37,12 @@ class NoteItem(QGraphicsEllipseItem):
     def _update_stem(self) -> None:
         """Notenhals-Richtung nach Standard-Regel:
 
-        Noten UNTER der 3. Notenlinie (Mittellinie, B4=71): Hals nach OBEN
+        Noten UNTER der 3. Notenlinie (center_y): Hals nach OBEN
         Noten AUF oder ÜBER der 3. Notenlinie: Hals nach UNTEN
+        Basiert auf der tatsächlichen Y-Position, nicht auf MIDI-Pitch.
         """
-        if self.note.pitch < 71:  # Unter B4 (3. Linie)
+        # y > center_y means visually below middle line → stem up
+        if self.y() > self._center_y:
             # Hals nach oben (rechts vom Kopf)
             self._stem.setLine(NOTE_RADIUS - 1, 0, NOTE_RADIUS - 1, -STEM_LENGTH)
         else:

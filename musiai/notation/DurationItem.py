@@ -1,41 +1,32 @@
-"""DurationItem - Farbige Linie um Note herum für Dauer-Abweichung."""
+"""DurationItem - Zeigt Dauer-Abweichung als Zahl über der Note."""
 
 import logging
-from PySide6.QtWidgets import QGraphicsLineItem
-from PySide6.QtGui import QPen
-from PySide6.QtCore import Qt
-from musiai.notation.ColorScheme import ColorScheme
+from PySide6.QtWidgets import QGraphicsSimpleTextItem
+from PySide6.QtGui import QFont, QBrush, QColor
 
 logger = logging.getLogger("musiai.notation.DurationItem")
 
 
-class DurationItem(QGraphicsLineItem):
-    """Farbige Linie um die Note: zeigt Dauer-Abweichung.
+class DurationItem(QGraphicsSimpleTextItem):
+    """Zahl über der Note: zeigt Dauer-Abweichung (Faktor - 1).
 
-    Rot-Gelb = kürzer als Standard
-    Grau = Standard (unsichtbar)
-    Blau = länger als Standard
+    z.B. +0.2 für Faktor 1.2 (20% länger)
+         -0.1 für Faktor 0.9 (10% kürzer)
     """
 
-    HALF_WIDTH = 20  # Pixel links/rechts der Note
-
     def __init__(self, deviation: float, x: float, y: float):
-        super().__init__(-self.HALF_WIDTH, 0, self.HALF_WIDTH, 0)
-        self.deviation = deviation
-        self.setPos(x, y)
-        self.setZValue(4)
-        self._update_color()
+        diff = deviation - 1.0
+        sign = "+" if diff >= 0 else ""
+        super().__init__(f"{sign}{diff:.2f}")
+        self.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+        self.setPos(x - 12, y - 18)
+        self.setZValue(15)
+        self._update_color(deviation)
 
-    def _update_color(self) -> None:
-        if abs(self.deviation - 1.0) < 0.01:
-            self.setVisible(False)
-            return
-
-        self.setVisible(True)
-        color = ColorScheme.duration_to_color(self.deviation)
-        self.setPen(QPen(color, 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-
-    def update_deviation(self, deviation: float) -> None:
-        """Abweichung aktualisieren."""
-        self.deviation = deviation
-        self._update_color()
+    def _update_color(self, deviation: float) -> None:
+        if deviation < 1.0:
+            # Kürzer → Orange/Rot
+            self.setBrush(QBrush(QColor(200, 100, 0)))
+        else:
+            # Länger → Blau
+            self.setBrush(QBrush(QColor(0, 80, 200)))

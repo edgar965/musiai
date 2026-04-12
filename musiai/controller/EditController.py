@@ -40,6 +40,10 @@ class EditController:
     def select_note(self, note_item: NoteItem, ctrl: bool = False,
                     shift: bool = False) -> None:
         """Note auswählen. Ctrl=toggle, Shift=range, sonst Einzelauswahl."""
+        # Takt-Highlight entfernen wenn Einzelnote gewählt wird
+        if not ctrl and not shift:
+            self.scene.clear_measure_highlight()
+
         if ctrl:
             self._toggle_note(note_item.note)
         elif shift and self._selected_notes:
@@ -144,13 +148,15 @@ class EditController:
             self._reselect_all_visual()
 
     def change_duration_deviation(self, deviation: float) -> None:
-        dev = max(0.8, min(1.2, deviation))
+        dev = max(0.10, min(10.0, deviation))
+        count = len(self._selected_notes)
         for note in self._selected_notes:
             note.expression.duration_deviation = dev
         if self._selected_notes:
-            self.signal_bus.note_changed.emit(self._selected_notes[0])
+            logger.info(f"Dauer-Abweichung → ×{dev:.2f} für {count} Noten")
             self.scene.refresh()
             self._reselect_all_visual()
+            self.signal_bus.note_changed.emit(self._selected_notes[0])
 
     # ---- Copy / Paste ----
 
@@ -166,11 +172,35 @@ class EditController:
             logger.info(f"{len(self._selected_notes)} Noten kopiert")
 
     def paste(self, target_measure: Measure | None = None) -> None:
-        """Aus Zwischenablage einfügen."""
+        """Aus Zwischenablage einfügen (ohne Position)."""
         if self._clipboard_measures:
             self._paste_measures()
         elif self._clipboard_notes:
             self._paste_notes(target_measure)
+
+    def paste_at(self, target_measure: Measure | None = None,
+                 start_beat: float = 0.0) -> None:
+        """Noten an einer bestimmten Beat-Position einfügen."""
+        if self._clipboard_measures:
+            self._paste_measures()
+            return
+        if not self._clipboard_notes or target_measure is None:
+            return
+
+        # Offset berechnen: erste kopierte Note als Referenz
+        first_beat = min(d["start_beat"] for d in self._clipboard_notes)
+        offset = start_beat - first_beat
+
+        for note_dict in self._clipboard_notes:
+            new_note = Note.from_dict(note_dict)
+            new_note.start_beat = max(0.0, new_note.start_beat + offset)
+            target_measure.add_note(new_note)
+
+        self.scene.refresh()
+        logger.info(
+            f"{len(self._clipboard_notes)} Noten eingefügt in "
+            f"Takt {target_measure.number} bei Beat {start_beat:.1f}"
+        )
 
     def _paste_notes(self, target_measure: Measure | None) -> None:
         """Noten einfügen in den aktuellen oder angegebenen Takt."""

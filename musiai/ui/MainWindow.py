@@ -70,6 +70,8 @@ class MainWindow(QMainWindow):
         edit_menu = menu_bar.addMenu("&Bearbeiten")
         self._delete_action = edit_menu.addAction("Note löschen")
         self._delete_action.setShortcut(QKeySequence.StandardKey.Delete)
+        edit_menu.addSeparator()
+        self._new_voice_action = edit_menu.addAction("Neue Stimme")
 
         # Ansicht-Menü
         view_menu = menu_bar.addMenu("&Ansicht")

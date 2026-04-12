@@ -7,7 +7,8 @@ from PySide6.QtGui import QFont
 
 logger = logging.getLogger("musiai.ui.AboutDialog")
 
-VERSION = "0.01"
+VERSION = "0.11"
+VERSION_DATE = "2026-04-12"
 
 
 class AboutDialog(QDialog):
@@ -34,7 +35,7 @@ class AboutDialog(QDialog):
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
 
-        version = QLabel(f"Version {VERSION}")
+        version = QLabel(f"Version {VERSION}  ({VERSION_DATE})")
         version.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         version.setStyleSheet("color: #2d5aa0; margin-top: 10px;")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)

@@ -3,7 +3,8 @@
 import logging
 from PySide6.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QLabel, QSlider,
-    QComboBox, QGroupBox, QFormLayout, QSpinBox, QStackedWidget,
+    QComboBox, QGroupBox, QFormLayout, QSpinBox, QDoubleSpinBox,
+    QStackedWidget,
 )
 from PySide6.QtCore import Qt, Signal
 from musiai.model.Note import Note
@@ -21,7 +22,6 @@ class PropertiesPanel(QDockWidget):
     glide_type_changed = Signal(str)
     time_sig_changed = Signal(int, int)
     tempo_changed = Signal(float)
-    measure_duration_changed = Signal(float)  # deviation 0.7-1.3
 
     def __init__(self):
         super().__init__("Eigenschaften")
@@ -90,12 +90,19 @@ class PropertiesPanel(QDockWidget):
 
         dur_group = QGroupBox("Dauer-Abweichung")
         dur_lay = QFormLayout(dur_group)
-        self._dur_slider = QSlider(Qt.Orientation.Horizontal)
-        self._dur_slider.setRange(80, 120)
-        self._dur_slider.setValue(100)
-        self._dur_label = QLabel("100%")
-        self._dur_slider.valueChanged.connect(self._on_duration_changed)
-        dur_lay.addRow(self._dur_label, self._dur_slider)
+        self._dur_spin = QDoubleSpinBox()
+        self._dur_spin.setRange(0.10, 10.0)
+        self._dur_spin.setValue(1.0)
+        self._dur_spin.setSingleStep(0.04)  # Pfeiltasten: ±0.04
+        self._dur_spin.setDecimals(2)
+        self._dur_spin.setPrefix("× ")
+        self._dur_spin.setToolTip(
+            "Dauer-Faktor: 1.0 = Standard\n"
+            "Pfeiltasten: ±0.04 pro Schritt\n"
+            "Beliebig per Texteingabe änderbar"
+        )
+        self._dur_spin.valueChanged.connect(self._on_duration_changed)
+        dur_lay.addRow("Faktor:", self._dur_spin)
         layout.addWidget(dur_group)
         return page
 
@@ -131,21 +138,6 @@ class PropertiesPanel(QDockWidget):
         tempo_lay.addRow("Bezeichnung:", self._tempo_name)
         layout.addWidget(tempo_group)
 
-        # Taktlänge-Abweichung
-        dur_group = QGroupBox("Taktlänge")
-        dur_lay = QFormLayout(dur_group)
-        self._measure_dur_slider = QSlider(Qt.Orientation.Horizontal)
-        self._measure_dur_slider.setRange(70, 130)
-        self._measure_dur_slider.setValue(100)
-        self._measure_dur_slider.valueChanged.connect(self._on_measure_dur_changed)
-        self._measure_dur_label = QLabel("100% (Standard)")
-        self._measure_dur_label.setStyleSheet("font-weight: bold;")
-        dur_lay.addRow(self._measure_dur_label, self._measure_dur_slider)
-        self._measure_dur_info = QLabel("Schwarz = Standard\nGelb = kürzer, Blau = länger")
-        self._measure_dur_info.setStyleSheet("color: #888; font-size: 9px;")
-        dur_lay.addRow(self._measure_dur_info)
-        layout.addWidget(dur_group)
-
         return page
 
     def _build_clef_page(self) -> QWidget:
@@ -170,16 +162,14 @@ class PropertiesPanel(QDockWidget):
         self._update_vel_label(note.expression.velocity)
         self._cent_slider.setValue(int(note.expression.cent_offset))
         self._cent_label.setText(f"{note.expression.cent_offset:.0f} ct")
-        self._dur_slider.setValue(int(note.expression.duration_deviation * 100))
-        self._dur_label.setText(f"{note.expression.duration_deviation * 100:.0f}%")
+        self._dur_spin.setValue(note.expression.duration_deviation)
         idx = self._glide_combo.findText(note.expression.glide_type)
         if idx >= 0:
             self._glide_combo.setCurrentIndex(idx)
         self._stack.setCurrentIndex(1)
         self._updating = False
 
-    def show_time_signature(self, ts: TimeSignature, tempo: float = 120,
-                            duration_deviation: float = 1.0) -> None:
+    def show_time_signature(self, ts: TimeSignature, tempo: float = 120) -> None:
         self._updating = True
         self._type_label.setText(f"Takt: {ts}")
         self._ts_num.setValue(ts.numerator)
@@ -188,10 +178,6 @@ class PropertiesPanel(QDockWidget):
         self._tempo_spin.setValue(int(tempo))
         from musiai.notation.TempoMarking import TempoMarking
         self._tempo_name.setText(TempoMarking.from_bpm(tempo))
-        # Taktlänge
-        pct = int(duration_deviation * 100)
-        self._measure_dur_slider.setValue(pct)
-        self._update_measure_dur_label(pct)
         self._stack.setCurrentIndex(2)
         self._updating = False
 
@@ -225,11 +211,10 @@ class PropertiesPanel(QDockWidget):
         self._cent_label.setText(f"{value} ct")
         self.cent_offset_changed.emit(float(value))
 
-    def _on_duration_changed(self, value: int) -> None:
+    def _on_duration_changed(self, value: float) -> None:
         if self._updating:
             return
-        self._dur_label.setText(f"{value}%")
-        self.duration_changed.emit(value / 100.0)
+        self.duration_changed.emit(value)
 
     def _on_glide_changed(self, text: str) -> None:
         if self._updating:
@@ -250,19 +235,3 @@ class PropertiesPanel(QDockWidget):
         self._tempo_name.setText(TempoMarking.from_bpm(float(value)))
         self.tempo_changed.emit(float(value))
 
-    def _on_measure_dur_changed(self, value: int) -> None:
-        if self._updating:
-            return
-        self._update_measure_dur_label(value)
-        self.measure_duration_changed.emit(value / 100.0)
-
-    def _update_measure_dur_label(self, pct: int) -> None:
-        if pct < 95:
-            self._measure_dur_label.setText(f"{pct}% (kürzer)")
-            self._measure_dur_label.setStyleSheet("font-weight: bold; color: #b08800;")
-        elif pct > 105:
-            self._measure_dur_label.setText(f"{pct}% (länger)")
-            self._measure_dur_label.setStyleSheet("font-weight: bold; color: #2050b0;")
-        else:
-            self._measure_dur_label.setText(f"{pct}% (Standard)")
-            self._measure_dur_label.setStyleSheet("font-weight: bold; color: #333;")
