@@ -236,7 +236,9 @@ class PropertiesPanel(QDockWidget):
     def _load_instruments(self) -> None:
         """Instrumente aus JSON laden."""
         import json, os
-        path = os.path.join("media", "Stimmen", "instruments.json")
+        # Pfad relativ zum Projektverzeichnis (neben main.py)
+        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.join(base, "media", "Stimmen", "instruments.json")
         self._instrument_programs: list[int] = []
         try:
             with open(path, "r", encoding="utf-8") as f:

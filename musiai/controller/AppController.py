@@ -540,7 +540,7 @@ class AppController:
         self.signal_bus.status_message.emit(f"Stimme '{name}' gelöscht")
 
     def _on_part_detect(self, part_idx: int) -> None:
-        """Noten aus Audio erkennen mit gewählter Engine."""
+        """Noten aus Audio erkennen (asynchron mit Fortschrittsanzeige)."""
         piece = self.notation_scene.piece
         if not piece or part_idx >= len(piece.parts):
             return
@@ -549,84 +549,52 @@ class AppController:
             self.signal_bus.status_message.emit("Keine Audio-Daten vorhanden")
             return
 
-        from PySide6.QtCore import Qt
-        from PySide6.QtWidgets import QApplication
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        QApplication.processEvents()
+        # Verhindere doppelten Start
+        if hasattr(self, '_detect_worker') and self._detect_worker and self._detect_worker.isRunning():
+            self.signal_bus.status_message.emit("Erkennung läuft bereits...")
+            return
+
+        from musiai.audio.DetectionWorker import DetectionWorker
 
         engine = self._detection_engine
+        self._detect_worker = DetectionWorker(
+            engine, part.audio_track.file_path,
+            piece.initial_tempo, 4.0
+        )
+        self._detect_worker.progress.connect(
+            self.signal_bus.status_message.emit
+        )
+        self._detect_worker.finished.connect(
+            lambda results: self._on_detect_finished(results, part)
+        )
+        self._detect_worker.error.connect(
+            lambda msg: self.signal_bus.status_message.emit(f"Fehler: {msg}")
+        )
+        self._detect_worker.start()
         self.signal_bus.status_message.emit(f"Erkenne Noten ({engine})...")
-        QApplication.processEvents()
 
-        try:
-            if engine == "basic-pitch":
-                self._detect_basic_pitch(part, piece)
-            elif engine == "demucs+pyin":
-                self._detect_demucs(part, piece)
-            else:
-                self._detect_pyin(part, piece)
-        except Exception as e:
-            logger.error(f"Erkennung fehlgeschlagen: {e}", exc_info=True)
-            self.signal_bus.status_message.emit(f"Fehler: {e}")
-        finally:
-            QApplication.restoreOverrideCursor()
-
-    def _detect_basic_pitch(self, part, piece) -> None:
-        """Polyphone Erkennung mit Spotify basic-pitch."""
-        from musiai.audio.BasicPitchDetector import BasicPitchDetector
-        detector = BasicPitchDetector(
-            tempo_bpm=piece.initial_tempo, beats_per_measure=4.0
-        )
-        notes = detector.detect(part.audio_track.file_path)
-        if notes:
-            self._add_detected_part(piece, f"Erkannt: {part.name}", notes)
-        else:
-            self.signal_bus.status_message.emit("Keine Noten erkannt")
-
-    def _detect_pyin(self, part, piece) -> None:
-        """Monophone Erkennung mit pyin."""
-        from musiai.audio.PitchDetector import PitchDetector
-        import numpy as np, librosa
-
-        all_samples = np.concatenate([b.samples for b in part.audio_track.blocks])
-        sr = part.audio_track.sr
-        if len(all_samples) > sr * 30:
-            all_samples = all_samples[:sr * 30]
-        if sr != 22050:
-            all_samples = librosa.resample(all_samples, orig_sr=sr, target_sr=22050)
-            sr = 22050
-
-        detector = PitchDetector(piece.initial_tempo)
-        notes = detector.detect(all_samples, sr)
-        if notes:
-            self._add_detected_part(piece, f"Erkannt: {part.name}", notes)
-        else:
-            self.signal_bus.status_message.emit("Keine Noten erkannt")
-
-    def _detect_demucs(self, part, piece) -> None:
-        """Polyphone Erkennung: demucs trennt → pyin pro Stimme."""
-        from musiai.audio.DemucsDetector import DemucsDetector
-
-        detector = DemucsDetector(
-            tempo_bpm=piece.initial_tempo, beats_per_measure=4.0
-        )
-        results = detector.detect(part.audio_track.file_path)
-
-        if not results:
-            self.signal_bus.status_message.emit("Keine Noten erkannt")
+    def _on_detect_finished(self, results: dict, source_part) -> None:
+        """Worker fertig → Erkannte Noten als Stimmen hinzufügen."""
+        piece = self.notation_scene.piece
+        if not piece:
             return
 
         total = 0
         for stem_name, notes in results.items():
-            self._add_detected_part(
-                piece, f"{stem_name}: {part.name}", notes
-            )
-            total += len(notes)
+            if notes:
+                self._add_detected_part(
+                    piece, f"{stem_name}: {source_part.name}", notes
+                )
+                total += len(notes)
 
-        self.notation_scene.refresh()
-        self.signal_bus.status_message.emit(
-            f"{total} Noten in {len(results)} Stimmen erkannt"
-        )
+        if total > 0:
+            self.playback_engine.set_piece(piece)
+            self.notation_scene.refresh()
+            self.signal_bus.status_message.emit(
+                f"{total} Noten in {len(results)} Stimmen erkannt"
+            )
+        else:
+            self.signal_bus.status_message.emit("Keine Noten erkannt")
 
     def _add_detected_part(self, piece, name: str,
                            notes_data: list[dict]) -> None:
