@@ -479,12 +479,18 @@ class AppController:
         if not path:
             return
 
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
+
         from musiai.model.AudioTrack import AudioTrack
         from musiai.model.Part import Part
         from musiai.model.Measure import Measure
 
         track = AudioTrack()
         if not track.load(path):
+            QApplication.restoreOverrideCursor()
             self.signal_bus.status_message.emit("Audio laden fehlgeschlagen")
             return
 
@@ -513,6 +519,7 @@ class AppController:
         # Playback-Engine aktualisieren (Audio-Track registrieren)
         self.playback_engine.set_piece(piece)
         self.notation_scene.refresh()
+        QApplication.restoreOverrideCursor()
         self.signal_bus.status_message.emit(
             f"Audio-Stimme '{part.name}' geladen ({track.duration_seconds:.1f}s)"
         )
