@@ -18,7 +18,7 @@ class DurationItem(QGraphicsSimpleTextItem):
         diff = deviation - 1.0
         sign = "+" if diff >= 0 else ""
         super().__init__(f"{sign}{diff:.2f}")
-        self.setFont(QFont("Arial", 7, QFont.Weight.Bold))
+        self.setFont(QFont("Arial", 8, QFont.Weight.Bold))
         self.setPos(x - 12, y - 18)
         self.setZValue(15)
         self._update_color(deviation)

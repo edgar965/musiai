@@ -151,12 +151,30 @@ class EditController:
         dev = max(0.10, min(10.0, deviation))
         count = len(self._selected_notes)
         for note in self._selected_notes:
+            old_dev = note.expression.duration_deviation
             note.expression.duration_deviation = dev
+            # Folgende Noten im selben Takt verschieben
+            self._shift_following_notes(note, old_dev, dev)
         if self._selected_notes:
             logger.info(f"Dauer-Abweichung → ×{dev:.2f} für {count} Noten")
+            self.signal_bus.note_changed.emit(self._selected_notes[0])
+            self.signal_bus.piece_changed.emit()  # Playback-Liste neu berechnen
             self.scene.refresh()
             self._reselect_all_visual()
-            self.signal_bus.note_changed.emit(self._selected_notes[0])
+
+    def _shift_following_notes(self, changed_note: Note,
+                               old_dev: float, new_dev: float) -> None:
+        """Folgende Noten im Takt verschieben wenn sich Dauer ändert."""
+        delta = changed_note.duration_beats * (new_dev - old_dev)
+        if abs(delta) < 0.001:
+            return
+        # Takt der Note finden
+        for renderer in self.scene.measure_renderers:
+            if changed_note in renderer.measure.notes:
+                for note in renderer.measure.notes:
+                    if note.start_beat > changed_note.start_beat:
+                        note.start_beat += delta
+                break
 
     # ---- Copy / Paste ----
 

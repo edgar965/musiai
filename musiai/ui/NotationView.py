@@ -19,6 +19,10 @@ class NotationView(QGraphicsView):
     clef_clicked = Signal(object)              # Measure (containing clef)
     time_sig_clicked = Signal(object)          # Measure (containing time sig)
     tempo_clicked = Signal()                   # Tempo-Anzeige angeklickt
+    part_label_clicked = Signal(int)           # Part-Index
+    part_mute_clicked = Signal(int)            # Part-Index
+    part_detect_requested = Signal(int)        # Part-Index (Rechtsklick)
+    part_delete_requested = Signal(int)        # Part-Index (Rechtsklick)
     copy_requested = Signal()
     paste_requested = Signal()
     deselect_requested = Signal()
@@ -155,6 +159,33 @@ class NotationView(QGraphicsView):
         self.edit_mode_changed.emit(False)
         logger.info("Edit Mode deaktiviert")
 
+    def contextMenuEvent(self, event):
+        """Rechtsklick-Menü für Stimm-Labels."""
+        scene_pos = self.mapToScene(event.pos())
+        scene = self.scene()
+        if not isinstance(scene, NotationScene):
+            super().contextMenuEvent(event)
+            return
+        for item in scene.items(scene_pos):
+            tag = item.data(0)
+            if tag == "part_label":
+                idx = item.data(1)
+                from PySide6.QtWidgets import QMenu
+                menu = QMenu(self)
+                menu.addAction("Eigenschaften").triggered.connect(
+                    lambda _, i=idx: self.part_label_clicked.emit(i)
+                )
+                menu.addAction("Noten erkennen...").triggered.connect(
+                    lambda _, i=idx: self.part_detect_requested.emit(i)
+                )
+                menu.addSeparator()
+                menu.addAction("Stimme löschen").triggered.connect(
+                    lambda _, i=idx: self.part_delete_requested.emit(i)
+                )
+                menu.exec(event.globalPos())
+                return
+        super().contextMenuEvent(event)
+
     def mousePressEvent(self, event):
         self.setFocus()  # Keyboard-Focus sicherstellen
         if event.button() != Qt.MouseButton.LeftButton:
@@ -187,6 +218,12 @@ class NotationView(QGraphicsView):
                 return
             if tag == "tempo":
                 self.tempo_clicked.emit()
+                return
+            if tag == "part_label":
+                self.part_label_clicked.emit(item.data(1))
+                return
+            if tag == "part_mute":
+                self.part_mute_clicked.emit(item.data(1))
                 return
 
         # Edit Mode: Klick setzt Cursor-Position

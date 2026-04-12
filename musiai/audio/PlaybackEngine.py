@@ -1,4 +1,4 @@
-"""PlaybackEngine - Orchestriert Playback: Transport + FluidSynth + Noten."""
+"""PlaybackEngine - Orchestriert Playback mit wählbarem Audio-Backend."""
 
 import logging
 from musiai.model.Piece import Piece
@@ -12,45 +12,132 @@ logger = logging.getLogger("musiai.audio.PlaybackEngine")
 
 
 class PlaybackEngine:
-    """Spielt ein Piece ab: liest Noten, sendet an FluidSynth."""
+    """Spielt ein Piece ab mit wählbarem Backend.
+
+    Backends:
+      - "windows_gm": Windows GS Wavetable Synth (pygame.midi)
+      - "soundfont":   FluidSynth mit .sf2 SoundFonts
+      - "midi_port":   Externer MIDI-Port (z.B. HALion via loopMIDI)
+    """
 
     def __init__(self, signal_bus: SignalBus):
         self.signal_bus = signal_bus
         self.transport = Transport()
-        self.player = FluidSynthPlayer()
         self.piece: Piece | None = None
+        self._backend_name = "windows_gm"
 
-        # Tracking welche Noten gerade spielen
-        self._active_notes: dict[int, Note] = {}  # MIDI-Note → Note
+        # Standard-Backend: Windows GS Wavetable
+        self.player = FluidSynthPlayer()
+        self._sf_player = None   # SoundFontPlayer (lazy)
+        self._port_player = None  # MidiPortPlayer (lazy)
+
+        # Tracking
+        self._active_notes: dict[int, tuple] = {}
         self._last_beat = 0.0
-        self._all_notes: list[tuple[float, Note, int]] = []  # (abs_beat, note, channel)
+        self._all_notes: list[tuple[float, Note, int, object]] = []
 
         self.transport.position_changed.connect(self._on_beat)
         self.transport.state_changed.connect(self._on_state_changed)
 
+    @property
+    def backend_name(self) -> str:
+        return self._backend_name
+
+    def switch_backend(self, name: str) -> bool:
+        """Backend wechseln. Gibt True zurück bei Erfolg."""
+        self.stop()
+
+        if name == "windows_gm":
+            self.player = FluidSynthPlayer()
+            self._backend_name = name
+            logger.info("Backend: Windows GS Wavetable Synth")
+            return True
+
+        if name == "soundfont":
+            if not self._sf_player:
+                from musiai.audio.SoundFontPlayer import SoundFontPlayer
+                self._sf_player = SoundFontPlayer()
+            if self._sf_player.is_available:
+                self.player = self._sf_player
+                self._backend_name = name
+                logger.info("Backend: FluidSynth SoundFont")
+                return True
+            logger.warning("FluidSynth nicht verfügbar")
+            return False
+
+        if name == "midi_port":
+            if not self._port_player:
+                from musiai.audio.MidiPortPlayer import MidiPortPlayer
+                self._port_player = MidiPortPlayer()
+            self.player = self._port_player
+            self._backend_name = name
+            logger.info("Backend: Externer MIDI Port")
+            return True
+
+        logger.warning(f"Unbekanntes Backend: {name}")
+        return False
+
+    def load_soundfont(self, path: str) -> bool:
+        """SoundFont laden (wechselt automatisch zum SoundFont-Backend)."""
+        if not self._sf_player:
+            from musiai.audio.SoundFontPlayer import SoundFontPlayer
+            self._sf_player = SoundFontPlayer()
+        if not self._sf_player.is_available:
+            return False
+        sfid = self._sf_player.load_soundfont(path)
+        if sfid is not None:
+            self.switch_backend("soundfont")
+            # Default: alle Kanäle auf diesen SoundFont
+            for ch in range(16):
+                self._sf_player.set_instrument(ch, sfid, 0, 0)
+            return True
+        return False
+
+    def set_soundfont_for_part(self, part_channel: int,
+                               sfont_path: str, program: int) -> None:
+        """SoundFont + Program für eine bestimmte Stimme setzen."""
+        if not self._sf_player or not self._sf_player.is_available:
+            return
+        sfid = self._sf_player.load_soundfont(sfont_path)
+        if sfid is not None:
+            self._sf_player.set_instrument(part_channel, sfid, 0, program)
+
+    def connect_midi_port(self, port_id: int) -> bool:
+        """Mit einem externen MIDI-Port verbinden."""
+        if not self._port_player:
+            from musiai.audio.MidiPortPlayer import MidiPortPlayer
+            self._port_player = MidiPortPlayer()
+        if self._port_player.connect(port_id):
+            self.switch_backend("midi_port")
+            return True
+        return False
+
+    def list_midi_ports(self) -> list[tuple[int, str]]:
+        from musiai.audio.MidiPortPlayer import MidiPortPlayer
+        return MidiPortPlayer.list_output_ports()
+
+    # ---- Piece / Playback ----
+
     def set_piece(self, piece: Piece) -> None:
-        """Piece setzen und für Playback vorbereiten."""
         self.piece = piece
         self.transport.tempo_bpm = piece.initial_tempo
         self._prepare_note_list()
+        for part in piece.parts:
+            self.player.set_instrument(part.channel, 0, part.instrument)
         logger.info(f"Playback vorbereitet: {len(self._all_notes)} Noten")
 
     def _prepare_note_list(self) -> None:
-        """Alle Noten mit absoluten Beat-Positionen sammeln."""
         self._all_notes.clear()
         if not self.piece:
             return
-
         for part in self.piece.parts:
             abs_beat = 0.0
             for measure in part.measures:
                 for note in measure.notes:
                     abs_start = abs_beat + note.start_beat
-                    self._all_notes.append((abs_start, note, part.channel))
-                abs_beat += measure.duration_beats
-
+                    self._all_notes.append((abs_start, note, part.channel, part))
+                abs_beat += measure.effective_duration_beats
             self.transport.set_end_beat(abs_beat)
-
         self._all_notes.sort(key=lambda x: x[0])
 
     def play(self) -> None:
@@ -68,51 +155,44 @@ class PlaybackEngine:
         self.signal_bus.playback_stopped.emit()
 
     def _on_beat(self, current_beat: float) -> None:
-        """Bei jedem Timer-Tick: Noten starten/stoppen."""
         self.signal_bus.playback_position.emit(current_beat)
 
-        # Note-Ons
-        for abs_beat, note, channel in self._all_notes:
+        for abs_beat, note, channel, part in self._all_notes:
             if self._last_beat <= abs_beat < current_beat:
-                self._play_note(note, channel)
+                if not part.muted:
+                    self._play_note(note, channel)
 
-        # Note-Offs (aktive Noten prüfen)
         finished = []
         for midi_note, note_data in self._active_notes.items():
             abs_beat, note, channel = note_data
-            if current_beat >= abs_beat + note.duration_beats * note.expression.duration_deviation:
+            eff_dur = note.duration_beats * note.expression.duration_deviation
+            if current_beat >= abs_beat + eff_dur:
                 self.player.note_off(channel, midi_note)
                 finished.append(midi_note)
-
         for midi_note in finished:
             del self._active_notes[midi_note]
 
         self._last_beat = current_beat
 
     def _play_note(self, note: Note, channel: int) -> None:
-        """Eine Note mit Expression abspielen."""
-        # Pitch Bend für Cent-Offset
         if abs(note.expression.cent_offset) > 0.5:
             bend = cents_to_pitch_bend(note.expression.cent_offset)
             self.player.set_pitch_bend(channel, bend)
         else:
-            self.player.set_pitch_bend(channel, 8192)  # Reset
-
-        # Note On
-        vel = note.expression.velocity
-        self.player.note_on(channel, note.pitch, vel)
-
-        # Für Note-Off tracking
-        abs_beat = self.transport.current_beat
-        self._active_notes[note.pitch] = (abs_beat, note, channel)
+            self.player.set_pitch_bend(channel, 8192)
+        self.player.note_on(channel, note.pitch, note.expression.velocity)
+        self._active_notes[note.pitch] = (
+            self.transport.current_beat, note, channel
+        )
 
     def _on_state_changed(self, state: str) -> None:
         if state == "stopped":
             self._last_beat = 0.0
 
-    def load_soundfont(self, path: str) -> bool:
-        return self.player.load_soundfont(path)
-
     def shutdown(self) -> None:
         self.stop()
         self.player.shutdown()
+        if self._sf_player and self._sf_player is not self.player:
+            self._sf_player.shutdown()
+        if self._port_player and self._port_player is not self.player:
+            self._port_player.shutdown()

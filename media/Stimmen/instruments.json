@@ -1,0 +1,83 @@
+{
+  "categories": [
+    {
+      "name": "Tasteninstrumente",
+      "instruments": [
+        {"name": "Klavier", "program": 0},
+        {"name": "E-Piano", "program": 4},
+        {"name": "Cembalo", "program": 6},
+        {"name": "Orgel", "program": 19},
+        {"name": "Akkordeon", "program": 21}
+      ]
+    },
+    {
+      "name": "Streicher",
+      "instruments": [
+        {"name": "Violine", "program": 40},
+        {"name": "Viola", "program": 41},
+        {"name": "Cello", "program": 42},
+        {"name": "Kontrabass", "program": 43},
+        {"name": "Streicher Ensemble", "program": 48},
+        {"name": "Pizzicato Streicher", "program": 45}
+      ]
+    },
+    {
+      "name": "Holzbläser",
+      "instruments": [
+        {"name": "Flöte", "program": 73},
+        {"name": "Oboe", "program": 68},
+        {"name": "Klarinette", "program": 71},
+        {"name": "Fagott", "program": 70},
+        {"name": "Blockflöte", "program": 74}
+      ]
+    },
+    {
+      "name": "Blechbläser",
+      "instruments": [
+        {"name": "Trompete", "program": 56},
+        {"name": "Posaune", "program": 57},
+        {"name": "Horn", "program": 60},
+        {"name": "Tuba", "program": 58}
+      ]
+    },
+    {
+      "name": "Zupfinstrumente",
+      "instruments": [
+        {"name": "Akustik-Gitarre", "program": 24},
+        {"name": "E-Gitarre (clean)", "program": 27},
+        {"name": "E-Gitarre (overdrive)", "program": 29},
+        {"name": "E-Bass", "program": 33},
+        {"name": "Harfe", "program": 46},
+        {"name": "Banjo", "program": 105}
+      ]
+    },
+    {
+      "name": "Ethnisch / Spezial",
+      "instruments": [
+        {"name": "Ney (Flöte)", "program": 77},
+        {"name": "Sitar", "program": 104},
+        {"name": "Shamisen", "program": 106},
+        {"name": "Kalimba", "program": 108},
+        {"name": "Pan-Flöte", "program": 75}
+      ]
+    },
+    {
+      "name": "Gesang / Chor",
+      "instruments": [
+        {"name": "Chor Aah", "program": 52},
+        {"name": "Chor Ooh", "program": 53},
+        {"name": "Synth Voice", "program": 54}
+      ]
+    },
+    {
+      "name": "Perkussion",
+      "instruments": [
+        {"name": "Xylophon", "program": 13},
+        {"name": "Glockenspiel", "program": 9},
+        {"name": "Vibraphon", "program": 11},
+        {"name": "Marimba", "program": 12},
+        {"name": "Röhrenglocken", "program": 14}
+      ]
+    }
+  ]
+}

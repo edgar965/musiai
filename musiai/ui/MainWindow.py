@@ -61,7 +61,16 @@ class MainWindow(QMainWindow):
         file_menu.addAction("MIDI importieren", self.toolbar.import_midi_clicked.emit)
         file_menu.addAction("MusicXML importieren", self.toolbar.import_musicxml_clicked.emit)
         file_menu.addSeparator()
-        file_menu.addAction("Projekt speichern", self.toolbar.save_project_clicked.emit, QKeySequence.StandardKey.Save)
+
+        # Musik Datei speichern
+        self._save_music_action = file_menu.addAction("Musik speichern")
+        self._save_music_action.setShortcut(QKeySequence.StandardKey.Save)
+        self._save_music_as_action = file_menu.addAction("Musik speichern unter...")
+        self._save_music_as_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
+        file_menu.addSeparator()
+
+        # Projekt
+        file_menu.addAction("Projekt speichern", self.toolbar.save_project_clicked.emit)
         file_menu.addAction("Projekt laden", self.toolbar.load_project_clicked.emit, QKeySequence.StandardKey.Open)
         file_menu.addSeparator()
         file_menu.addAction("MIDI exportieren", self.toolbar.export_midi_clicked.emit)
@@ -72,11 +81,22 @@ class MainWindow(QMainWindow):
         self._delete_action.setShortcut(QKeySequence.StandardKey.Delete)
         edit_menu.addSeparator()
         self._new_voice_action = edit_menu.addAction("Neue Stimme")
+        self._new_audio_action = edit_menu.addAction("Neue Stimme — Aufnahme...")
 
         # Ansicht-Menü
         view_menu = menu_bar.addMenu("&Ansicht")
         view_menu.addAction("Zoom +", self.toolbar.zoom_in_clicked.emit, "Ctrl+=")
         view_menu.addAction("Zoom -", self.toolbar.zoom_out_clicked.emit, "Ctrl+-")
+
+        # Audio-Menü
+        audio_menu = menu_bar.addMenu("&Audio")
+        self._backend_gm_action = audio_menu.addAction("Windows GM Synth")
+        self._backend_gm_action.setCheckable(True)
+        self._backend_gm_action.setChecked(True)
+        self._backend_sf_action = audio_menu.addAction("SoundFont laden...")
+        self._backend_port_action = audio_menu.addAction("Externer MIDI-Port...")
+        audio_menu.addSeparator()
+        audio_menu.addAction("MIDI Device", self.toolbar.midi_device_clicked.emit)
 
         # Transport-Menü
         transport_menu = menu_bar.addMenu("&Transport")

@@ -35,8 +35,15 @@ class Measure:
 
     @property
     def effective_duration_beats(self) -> float:
-        """Tatsächliche Dauer inkl. Abweichung."""
-        return self.duration_beats * self.duration_deviation
+        """Tatsächliche Dauer: Maximum aus Taktart und Noten-Endzeiten."""
+        base = self.duration_beats
+        if self.notes:
+            max_end = max(
+                n.start_beat + n.duration_beats * n.expression.duration_deviation
+                for n in self.notes
+            )
+            base = max(base, max_end)
+        return base
 
     def duration_seconds(self, tempo_bpm: float) -> float:
         return self.effective_duration_beats * (60.0 / tempo_bpm)

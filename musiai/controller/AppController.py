@@ -51,6 +51,7 @@ class AppController:
             self.playback_engine.transport, self.signal_bus,
         )
 
+        self._tempo_target_measure = None  # Welcher Takt wird gerade editiert
         self._connect_signals()
         logger.info("AppController initialisiert")
 
@@ -65,6 +66,12 @@ class AppController:
         toolbar.save_project_clicked.connect(self.file_controller.save_project)
         toolbar.load_project_clicked.connect(self.file_controller.load_project)
         toolbar.export_midi_clicked.connect(self._export_midi)
+        self.main_window._save_music_action.triggered.connect(
+            self.file_controller.save_music
+        )
+        self.main_window._save_music_as_action.triggered.connect(
+            self.file_controller.save_music_as
+        )
 
         # --- Zoom ---
         toolbar.zoom_in_clicked.connect(self.main_window.notation_view.zoom_in)
@@ -82,6 +89,17 @@ class AppController:
         # --- MIDI Device ---
         toolbar.midi_device_clicked.connect(self._show_midi_dialog)
 
+        # --- Audio Backend ---
+        self.main_window._backend_gm_action.triggered.connect(
+            lambda: self._switch_backend("windows_gm")
+        )
+        self.main_window._backend_sf_action.triggered.connect(
+            self._load_global_soundfont
+        )
+        self.main_window._backend_port_action.triggered.connect(
+            self._select_midi_port
+        )
+
         # --- Piece geladen ---
         self.signal_bus.piece_loaded.connect(self._on_piece_loaded)
 
@@ -95,6 +113,18 @@ class AppController:
         view.clef_clicked.connect(self._on_clef_clicked)
         view.time_sig_clicked.connect(self._on_ts_clicked_from_view)
         view.tempo_clicked.connect(self._on_tempo_clicked)
+        view.part_label_clicked.connect(self._on_part_label_clicked)
+        view.part_mute_clicked.connect(self._on_part_mute_clicked)
+        view.part_detect_requested.connect(self._on_part_detect)
+        view.part_delete_requested.connect(self._on_part_delete)
+
+        # --- Stimm-Properties ---
+        props.part_instrument_changed.connect(self._on_part_instrument_changed)
+        props.part_muted_changed.connect(self._on_part_muted_changed)
+        props.part_name_changed.connect(self._on_part_name_changed)
+        props.part_soundfont_requested.connect(self._on_part_soundfont)
+        props.part_delete_requested.connect(self._on_part_delete)
+        props.part_detect_requested.connect(self._on_part_detect)
         view.deselect_requested.connect(self._on_deselect)
         self.signal_bus.note_selected.connect(self._on_note_selected)
         self.signal_bus.notes_deselected.connect(props.clear)
@@ -123,6 +153,7 @@ class AppController:
 
         # --- Neue Stimme ---
         self.main_window._new_voice_action.triggered.connect(self._add_new_voice)
+        self.main_window._new_audio_action.triggered.connect(self._add_audio_voice)
 
         # --- Playback Position → Playhead ---
         self.signal_bus.playback_position.connect(
@@ -134,6 +165,9 @@ class AppController:
 
         # --- Note changed → Refresh ---
         self.signal_bus.note_changed.connect(self._on_note_changed)
+        self.signal_bus.piece_changed.connect(
+            self.playback_engine._prepare_note_list
+        )
 
         # --- MIDI Keyboard Status ---
         self.midi_keyboard.connected.connect(
@@ -188,6 +222,44 @@ class AppController:
             self.midi_exporter.export_file(piece, path)
             self.signal_bus.status_message.emit(f"MIDI exportiert: {path}")
 
+    def _switch_backend(self, name: str) -> None:
+        if self.playback_engine.switch_backend(name):
+            mw = self.main_window
+            mw._backend_gm_action.setChecked(name == "windows_gm")
+            if self.playback_engine.piece:
+                self.playback_engine.set_piece(self.playback_engine.piece)
+            self.signal_bus.status_message.emit(f"Audio: {name}")
+
+    def _load_global_soundfont(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self.main_window, "SoundFont laden", "media/soundfonts",
+            "SoundFont Dateien (*.sf2);;Alle Dateien (*)"
+        )
+        if path and self.playback_engine.load_soundfont(path):
+            self.main_window._backend_gm_action.setChecked(False)
+            if self.playback_engine.piece:
+                self.playback_engine.set_piece(self.playback_engine.piece)
+            self.signal_bus.status_message.emit(
+                f"SoundFont: {path.split('/')[-1].split(chr(92))[-1]}"
+            )
+
+    def _select_midi_port(self) -> None:
+        ports = self.playback_engine.list_midi_ports()
+        if not ports:
+            self.signal_bus.status_message.emit("Keine MIDI-Ports gefunden")
+            return
+        from PySide6.QtWidgets import QInputDialog
+        names = [f"{pid}: {name}" for pid, name in ports]
+        choice, ok = QInputDialog.getItem(
+            self.main_window, "MIDI-Port wählen",
+            "Ziel-Port (z.B. loopMIDI für HALion):", names, 0, False
+        )
+        if ok and choice:
+            port_id = int(choice.split(":")[0])
+            if self.playback_engine.connect_midi_port(port_id):
+                self.main_window._backend_gm_action.setChecked(False)
+                self.signal_bus.status_message.emit(f"MIDI-Port: {choice}")
+
     def _show_midi_dialog(self) -> None:
         dialog = MidiDeviceDialog(self.midi_keyboard, self.main_window)
         dialog.exec()
@@ -202,6 +274,7 @@ class AppController:
     def _on_note_selected(self, note) -> None:
         """Note ausgewählt → Properties Panel anzeigen, Takt-Highlight entfernen."""
         if note:
+            self._tempo_target_measure = None
             self.notation_scene.clear_measure_highlight()
             self.main_window.properties_panel.show_note(note)
 
@@ -209,7 +282,11 @@ class AppController:
         """Klick in Takt-Bereich → Takt selektieren, Properties zeigen."""
         self.notation_scene.highlight_measure(measure)
         self.edit_controller.select_measure(measure)
-        tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
+        # Tempo dieses Takts anzeigen (per-Takt oder global)
+        tempo = measure.tempo.bpm if measure.tempo else (
+            self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
+        )
+        self._tempo_target_measure = measure
         self.main_window.properties_panel.show_time_signature(
             measure.time_signature, tempo
         )
@@ -279,33 +356,45 @@ class AppController:
         return last, global_beat - (cumulative - last.duration_beats)
 
     def _on_tempo_changed(self, bpm: float) -> None:
-        """Tempo geändert → NUR den selektierten Takt oder globales Tempo."""
+        """Tempo geändert → NUR den Ziel-Takt oder globales Tempo.
+
+        _tempo_target_measure bestimmt, was geändert wird:
+          - None → globales Tempo (piece.tempos[0])
+          - Measure → nur dieser Takt (measure.tempo)
+        """
         piece = self.notation_scene.piece
         if not piece:
             return
 
-        sel_measure = self.edit_controller.selected_measure
         from musiai.model.Tempo import Tempo
+        target = self._tempo_target_measure
 
-        if sel_measure:
-            # Nur diesen Takt ändern
-            sel_measure.tempo = Tempo(bpm, 0)
+        if target:
+            # NUR diesen einen Takt ändern
+            target.tempo = Tempo(bpm, 0)
+            logger.info(f"Takt {target.number} Tempo → {bpm:.0f} BPM")
         else:
-            # Kein Takt selektiert → globales Tempo
+            # Globales Tempo für alle Takte
             if piece.tempos:
                 piece.tempos[0].bpm = bpm
+            # Auch alle per-Takt-Tempos aktualisieren
+            for part in piece.parts:
+                for m in part.measures:
+                    if m.tempo:
+                        m.tempo.bpm = bpm
+            logger.info(f"Globales Tempo → {bpm:.0f} BPM")
 
         self.playback_engine.transport.tempo_bpm = bpm
-
-        # Selektion nach refresh wiederherstellen
         self.notation_scene.refresh()
-        if sel_measure:
-            self.notation_scene.highlight_measure(sel_measure)
-        self.signal_bus.status_message.emit(f"Tempo: {bpm:.0f} BPM")
-        logger.info(f"Tempo → {bpm:.0f} BPM")
+        if target:
+            self.notation_scene.highlight_measure(target)
+        self.signal_bus.status_message.emit(
+            f"Tempo: {bpm:.0f} BPM ({'Takt ' + str(target.number) if target else 'global'})"
+        )
 
     def _on_deselect(self) -> None:
         """Escape (outside edit mode): Alles deselektieren."""
+        self._tempo_target_measure = None
         self.edit_controller.deselect()
         self.notation_scene.clear_measure_highlight()
         self.main_window.properties_panel.clear()
@@ -356,17 +445,217 @@ class AppController:
         piece = self.notation_scene.piece
         if not piece:
             return
-        # Takt-Selektion aufheben damit Tempo global geändert wird
         self.edit_controller.deselect()
         self.notation_scene.clear_measure_highlight()
+        self._tempo_target_measure = None  # Global
         tempo = piece.initial_tempo
-        # Zeige Taktart-Panel mit globalem Tempo (kein Takt selektiert)
         ts = piece.parts[0].measures[0].time_signature if piece.parts else None
         if ts:
             self.main_window.properties_panel.show_time_signature(ts, tempo)
         self.signal_bus.status_message.emit(
             f"Globales Tempo: {tempo:.0f} BPM (gilt für alle Takte)"
         )
+
+    def _add_audio_voice(self) -> None:
+        """Audio-Datei laden und als neue Stimme hinzufügen."""
+        path, _ = QFileDialog.getOpenFileName(
+            self.main_window, "Audio laden", "media/music",
+            "Audio Dateien (*.wav *.mp3 *.flac *.ogg);;Alle Dateien (*)"
+        )
+        if not path:
+            return
+
+        from musiai.model.AudioTrack import AudioTrack
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+
+        track = AudioTrack()
+        if not track.load(path):
+            self.signal_bus.status_message.emit("Audio laden fehlgeschlagen")
+            return
+
+        piece = self.notation_scene.piece
+        if not piece:
+            from musiai.model.Piece import Piece
+            piece = Piece("Audio Import")
+            self.project.add_piece(piece)
+
+        # Neue Stimme mit Audio
+        import os
+        name = os.path.splitext(os.path.basename(path))[0]
+        part = Part(name=f"Audio: {name}", channel=len(piece.parts))
+        part.audio_track = track
+
+        # Leere Takte anlegen (Dauer = Audio-Dauer)
+        tempo = piece.initial_tempo
+        beats = track.duration_seconds * (tempo / 60.0)
+        from musiai.model.TimeSignature import TimeSignature
+        ts = TimeSignature(4, 4)
+        n_measures = max(1, int(beats / ts.beats_per_measure()) + 1)
+        for i in range(n_measures):
+            part.add_measure(Measure(i + 1, ts))
+
+        piece.add_part(part)
+        self.notation_scene.refresh()
+        self.signal_bus.status_message.emit(
+            f"Audio-Stimme '{part.name}' geladen ({track.duration_seconds:.1f}s)"
+        )
+
+    def _on_part_delete(self, part_idx: int) -> None:
+        """Stimme löschen."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        if len(piece.parts) <= 1:
+            self.signal_bus.status_message.emit("Letzte Stimme kann nicht gelöscht werden")
+            return
+        name = piece.parts[part_idx].name
+        del piece.parts[part_idx]
+        self.main_window.properties_panel.clear()
+        self.notation_scene.refresh()
+        self.signal_bus.status_message.emit(f"Stimme '{name}' gelöscht")
+
+    def _on_part_detect(self, part_idx: int) -> None:
+        """Noten aus Audio erkennen und als neue Stimme hinzufügen."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        part = piece.parts[part_idx]
+        if not part.audio_track or not part.audio_track.blocks:
+            self.signal_bus.status_message.emit("Keine Audio-Daten vorhanden")
+            return
+
+        self.signal_bus.status_message.emit("Erkenne Noten... (kann dauern)")
+
+        from musiai.audio.PitchDetector import PitchDetector
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+        from musiai.model.Note import Note
+        from musiai.model.Expression import Expression
+        from musiai.model.TimeSignature import TimeSignature
+        import numpy as np
+
+        # Alle Blöcke zusammenfügen
+        all_samples = np.concatenate([b.samples for b in part.audio_track.blocks])
+        sr = part.audio_track.sr
+
+        detector = PitchDetector(tempo_bpm=piece.initial_tempo)
+        notes_data = detector.detect(all_samples, sr)
+
+        if not notes_data:
+            self.signal_bus.status_message.emit("Keine Noten erkannt")
+            return
+
+        # Neue Stimme mit erkannten Noten
+        new_part = Part(name=f"Erkannt: {part.name}", channel=len(piece.parts))
+        ts = TimeSignature(4, 4)
+        beats_per_measure = ts.beats_per_measure()
+
+        # Noten in Takte aufteilen
+        max_beat = max(n["start_beat"] + n["duration_beats"] for n in notes_data)
+        n_measures = max(1, int(max_beat / beats_per_measure) + 1)
+
+        for i in range(n_measures):
+            new_part.add_measure(Measure(i + 1, ts))
+
+        for nd in notes_data:
+            measure_idx = min(int(nd["start_beat"] / beats_per_measure), n_measures - 1)
+            local_beat = nd["start_beat"] - measure_idx * beats_per_measure
+            expr = Expression(
+                velocity=nd["velocity"],
+                cent_offset=nd["cent_offset"],
+            )
+            note = Note(
+                pitch=nd["pitch"],
+                start_beat=local_beat,
+                duration_beats=nd["duration_beats"],
+                expression=expr,
+            )
+            new_part.measures[measure_idx].add_note(note)
+
+        piece.add_part(new_part)
+        self.notation_scene.refresh()
+        self.signal_bus.status_message.emit(
+            f"{len(notes_data)} Noten erkannt → Stimme '{new_part.name}'"
+        )
+
+    def _on_part_label_clicked(self, part_idx: int) -> None:
+        """Stimm-Label angeklickt → Eigenschaften im Panel zeigen."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        part = piece.parts[part_idx]
+        self.edit_controller.deselect()
+        self.notation_scene.clear_measure_highlight()
+        self.main_window.properties_panel.show_part(part, part_idx)
+        self.signal_bus.status_message.emit(
+            f"Stimme '{part.name}' (Kanal {part.channel})"
+        )
+
+    def _on_part_mute_clicked(self, part_idx: int) -> None:
+        """Mute-Icon angeklickt → Mute togglen."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        part = piece.parts[part_idx]
+        part.muted = not part.muted
+        self.notation_scene.refresh()
+        status = "stumm" if part.muted else "aktiv"
+        self.signal_bus.status_message.emit(f"Stimme '{part.name}': {status}")
+
+    def _on_part_instrument_changed(self, part_idx: int, program: int) -> None:
+        """Instrument geändert → MIDI Program setzen."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        part = piece.parts[part_idx]
+        part.instrument = program
+        self.playback_engine.player.set_instrument(part.channel, 0, program)
+        self.signal_bus.status_message.emit(
+            f"Stimme '{part.name}': Instrument → Program {program}"
+        )
+
+    def _on_part_muted_changed(self, part_idx: int, muted: bool) -> None:
+        """Mute über Properties Panel geändert."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        part = piece.parts[part_idx]
+        part.muted = muted
+        self.notation_scene.refresh()
+
+    def _on_part_name_changed(self, part_idx: int, name: str) -> None:
+        """Stimm-Name geändert."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        piece.parts[part_idx].name = name
+        self.notation_scene.refresh()
+
+    def _on_part_soundfont(self, part_idx: int) -> None:
+        """SoundFont für Stimme laden."""
+        piece = self.notation_scene.piece
+        if not piece or part_idx >= len(piece.parts):
+            return
+        part = piece.parts[part_idx]
+        path, _ = QFileDialog.getOpenFileName(
+            self.main_window, "SoundFont laden", "media/soundfonts",
+            "SoundFont Dateien (*.sf2);;Alle Dateien (*)"
+        )
+        if not path:
+            return
+        if self.playback_engine.load_soundfont(path):
+            self.playback_engine.set_soundfont_for_part(
+                part.channel, path, part.instrument
+            )
+            self.main_window.properties_panel._sf_label.setText(
+                path.split("/")[-1].split("\\")[-1]
+            )
+            self.signal_bus.status_message.emit(
+                f"SoundFont geladen für '{part.name}'"
+            )
+        else:
+            self.signal_bus.status_message.emit("SoundFont konnte nicht geladen werden")
 
     def _on_clef_clicked(self, measure) -> None:
         """Schlüssel angeklickt → Properties zeigen."""

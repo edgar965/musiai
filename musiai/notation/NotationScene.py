@@ -1,8 +1,8 @@
 """NotationScene - QGraphicsScene die das gesamte Stück rendert."""
 
 import logging
-from PySide6.QtWidgets import QGraphicsScene
-from PySide6.QtGui import QColor, QPen
+from PySide6.QtWidgets import QGraphicsScene, QGraphicsSimpleTextItem
+from PySide6.QtGui import QColor, QPen, QFont, QBrush
 from musiai.model.Piece import Piece
 from musiai.notation.MeasureRenderer import MeasureRenderer
 from musiai.notation.PlayheadItem import PlayheadItem
@@ -16,8 +16,9 @@ logger = logging.getLogger("musiai.notation.NotationScene")
 class NotationScene(QGraphicsScene):
     """Scene die ein Piece als farbige Notation rendert."""
 
-    MARGIN_LEFT = 40
+    MARGIN_LEFT = 100  # Platz für Stimm-Labels links
     MARGIN_TOP = 80
+    LABEL_WIDTH = 90   # Breite des Stimm-Label-Bereichs
 
     def __init__(self):
         super().__init__()
@@ -55,6 +56,9 @@ class NotationScene(QGraphicsScene):
         for part_idx, part in enumerate(self.piece.parts):
             x_offset = self.MARGIN_LEFT
 
+            # Stimm-Label links (klickbar)
+            self._draw_part_label(part, part_idx, center_y)
+
             # Standard-Velocity aus erster Note ermitteln
             first_vel = 80
             if part.measures and part.measures[0].notes:
@@ -86,6 +90,12 @@ class NotationScene(QGraphicsScene):
                         x_offset, center_y + staff_half, pen)
 
             total_width = max(total_width, x_offset)
+
+            # Waveform zeichnen falls Audio-Spur vorhanden
+            if part.audio_track and part.audio_track.blocks:
+                self._draw_waveform(part, center_y + staff_half + 10,
+                                    self.piece.initial_tempo)
+
             center_y += 150
 
         # Playhead + Cursor Bereich setzen
@@ -145,6 +155,44 @@ class NotationScene(QGraphicsScene):
     def beat_at_x(self, x: float) -> float:
         """Alias für x_to_beat."""
         return self.x_to_beat(x)
+
+    def _draw_waveform(self, part, y: float, tempo: float) -> None:
+        """Audio-Waveform unter den Notenlinien zeichnen."""
+        from musiai.notation.WaveformItem import WaveformItem
+        for i, block in enumerate(part.audio_track.blocks):
+            dur_beats = block.duration_beats(tempo)
+            # Breite in Pixeln (nutze ersten Renderer als Referenz)
+            if self.measure_renderers:
+                ppb = self.measure_renderers[0].pixels_per_beat
+            else:
+                ppb = PIXELS_PER_BEAT
+            width = dur_beats * ppb
+            x = self.MARGIN_LEFT + block.start_beat * ppb
+            item = WaveformItem(block.samples, block.sr, width, x, y, i)
+            self.addItem(item)
+
+    def _draw_part_label(self, part, part_idx: int, center_y: float) -> None:
+        """Stimm-Name und Mute-Icon links neben der Stimme zeichnen."""
+        x = 4
+        # Stimm-Name (klickbar)
+        label = QGraphicsSimpleTextItem(part.name)
+        label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        label.setBrush(QBrush(QColor(30, 30, 80)))
+        label.setPos(x, center_y - 10)
+        label.setZValue(5)
+        label.setData(0, "part_label")
+        label.setData(1, part_idx)
+        self.addItem(label)
+
+        # Mute-Icon (Lautsprecher)
+        mute_char = "\U0001F507" if part.muted else "\U0001F50A"  # 🔇 / 🔊
+        mute = QGraphicsSimpleTextItem(mute_char)
+        mute.setFont(QFont("Segoe UI Emoji", 12))
+        mute.setPos(x, center_y + 8)
+        mute.setZValue(5)
+        mute.setData(0, "part_mute")
+        mute.setData(1, part_idx)
+        self.addItem(mute)
 
     def highlight_measure(self, measure) -> None:
         """Takt visuell hervorheben mit blauem Hintergrund."""

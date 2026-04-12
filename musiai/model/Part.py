@@ -17,7 +17,10 @@ class Part:
     def __init__(self, name: str = "Klavier", channel: int = 0):
         self.name = name
         self.channel = channel
+        self.instrument: int = 0  # MIDI Program Number (GM)
+        self.muted: bool = False
         self.measures: list[Measure] = []
+        self.audio_track = None  # AudioTrack | None (für Aufnahme-Stimmen)
 
     def add_measure(self, measure: Measure) -> None:
         self.measures.append(measure)
@@ -40,12 +43,16 @@ class Part:
         return {
             "name": self.name,
             "channel": self.channel,
+            "instrument": self.instrument,
+            "muted": self.muted,
             "measures": [m.to_dict() for m in self.measures],
         }
 
     @classmethod
     def from_dict(cls, data: dict) -> Part:
         part = cls(name=data.get("name", "Klavier"), channel=data.get("channel", 0))
+        part.instrument = data.get("instrument", 0)
+        part.muted = data.get("muted", False)
         for measure_data in data.get("measures", []):
             part.measures.append(Measure.from_dict(measure_data))
         return part

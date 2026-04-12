@@ -52,7 +52,7 @@ class MeasureRenderer:
 
     @property
     def width(self) -> float:
-        return self.measure.duration_beats * self.pixels_per_beat + self.header_width
+        return self.measure.effective_duration_beats * self.pixels_per_beat + self.header_width
 
     def _staff_line_color(self) -> QColor:
         """Notenlinien-Farbe basierend auf Tempo.
@@ -186,6 +186,14 @@ class MeasureRenderer:
                   note.start_beat * ppb + ppb / 2)
             ny = self.pitch_to_y(note.pitch)
             expr = note.expression
+
+            # Dauerlinie: zeigt effektive Notenlänge
+            eff_dur = note.duration_beats * expr.duration_deviation
+            line_w = eff_dur * ppb
+            dur_line = scene.addLine(nx, ny, nx + line_w - 8, ny,
+                                     QPen(QColor(100, 100, 120, 80), 2))
+            dur_line.setZValue(5)
+            self._items.append(dur_line)
 
             if abs(expr.duration_deviation - 1.0) >= 0.01:
                 d = DurationItem(expr.duration_deviation, nx, ny)

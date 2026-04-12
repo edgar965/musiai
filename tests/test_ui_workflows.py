@@ -835,7 +835,7 @@ class TestWorkflowCorrectPlayback(unittest.TestCase):
         from musiai.util.SignalBus import SignalBus
         engine = PlaybackEngine(SignalBus())
         engine.set_piece(make_test_piece())
-        beats = [ab for ab, _, _ in engine._all_notes]
+        beats = [ab for ab, *_ in engine._all_notes]
         self.assertEqual(beats, sorted(beats))
 
     def test_pitch_bend_calculation(self):

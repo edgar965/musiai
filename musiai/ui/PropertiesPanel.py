@@ -21,6 +21,13 @@ class PropertiesPanel(QDockWidget):
     duration_changed = Signal(float)
     glide_type_changed = Signal(str)
     time_sig_changed = Signal(int, int)
+    # Stimme
+    part_instrument_changed = Signal(int, int)  # part_index, program
+    part_muted_changed = Signal(int, bool)      # part_index, muted
+    part_name_changed = Signal(int, str)        # part_index, name
+    part_soundfont_requested = Signal(int)      # part_index → Datei-Dialog
+    part_delete_requested = Signal(int)         # part_index → Stimme löschen
+    part_detect_requested = Signal(int)         # part_index → Noten erkennen
     tempo_changed = Signal(float)
 
     def __init__(self):
@@ -53,6 +60,7 @@ class PropertiesPanel(QDockWidget):
         self._stack.addWidget(self._build_note_page())      # 1: Note
         self._stack.addWidget(self._build_time_sig_page())  # 2: Taktart
         self._stack.addWidget(self._build_clef_page())      # 3: Schlüssel
+        self._stack.addWidget(self._build_part_page())      # 4: Stimme
 
         layout.addStretch()
         self.setWidget(container)
@@ -93,13 +101,12 @@ class PropertiesPanel(QDockWidget):
         self._dur_spin = QDoubleSpinBox()
         self._dur_spin.setRange(0.10, 10.0)
         self._dur_spin.setValue(1.0)
-        self._dur_spin.setSingleStep(0.04)  # Pfeiltasten: ±0.04
+        self._dur_spin.setSingleStep(0.10)  # Pfeiltasten: ±0.10
         self._dur_spin.setDecimals(2)
-        self._dur_spin.setPrefix("× ")
+        self._dur_spin.setKeyboardTracking(False)
         self._dur_spin.setToolTip(
             "Dauer-Faktor: 1.0 = Standard\n"
-            "Pfeiltasten: ±0.04 pro Schritt\n"
-            "Beliebig per Texteingabe änderbar"
+            "Pfeiltasten: ±0.10 pro Schritt"
         )
         self._dur_spin.valueChanged.connect(self._on_duration_changed)
         dur_lay.addRow("Faktor:", self._dur_spin)
@@ -151,6 +158,101 @@ class PropertiesPanel(QDockWidget):
         layout.addWidget(group)
         return page
 
+    def _build_part_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        # Stimm-Name
+        name_group = QGroupBox("Stimme")
+        name_lay = QFormLayout(name_group)
+        self._part_name_edit = QComboBox()
+        self._part_name_edit.setEditable(True)
+        self._part_name_edit.addItems([
+            "Klavier", "Violine", "Viola", "Cello", "Kontrabass",
+            "Flöte", "Oboe", "Klarinette", "Fagott",
+            "Trompete", "Posaune", "Horn", "Tuba",
+            "Akustik-Gitarre", "E-Gitarre", "E-Bass", "Harfe",
+        ])
+        self._part_name_edit.currentTextChanged.connect(self._on_part_name_changed)
+        name_lay.addRow("Name:", self._part_name_edit)
+        layout.addWidget(name_group)
+
+        # Instrument (MIDI Program)
+        instr_group = QGroupBox("Instrument (MIDI)")
+        instr_lay = QFormLayout(instr_group)
+        self._part_instrument = QComboBox()
+        self._load_instruments()
+        self._part_instrument.currentIndexChanged.connect(
+            self._on_part_instrument_changed
+        )
+        instr_lay.addRow("Sound:", self._part_instrument)
+        layout.addWidget(instr_group)
+
+        # SoundFont
+        sf_group = QGroupBox("SoundFont (.sf2)")
+        sf_lay = QFormLayout(sf_group)
+        from PySide6.QtWidgets import QPushButton
+        self._sf_label = QLabel("Standard (Windows GM)")
+        self._sf_label.setStyleSheet("color: #555; font-size: 9px;")
+        sf_lay.addRow(self._sf_label)
+        self._sf_button = QPushButton("SoundFont laden...")
+        self._sf_button.clicked.connect(self._on_sf_button)
+        sf_lay.addRow(self._sf_button)
+        layout.addWidget(sf_group)
+
+        # Mute
+        from PySide6.QtWidgets import QCheckBox
+        self._part_mute = QCheckBox("Stumm (Mute)")
+        self._part_mute.toggled.connect(self._on_part_mute_changed)
+        layout.addWidget(self._part_mute)
+
+        # Noten erkennen (nur bei Audio-Stimmen)
+        from PySide6.QtWidgets import QPushButton
+        self._detect_button = QPushButton("Noten erkennen...")
+        self._detect_button.setStyleSheet(
+            "background: #2060b0; color: white; font-weight: bold; "
+            "padding: 4px; border-radius: 3px;"
+        )
+        self._detect_button.clicked.connect(self._on_detect)
+        self._detect_button.setVisible(False)
+        layout.addWidget(self._detect_button)
+
+        # Info
+        self._part_info = QLabel("")
+        self._part_info.setStyleSheet("color: #888; font-size: 9px;")
+        layout.addWidget(self._part_info)
+
+        # Stimme löschen
+        self._delete_part_btn = QPushButton("Stimme löschen")
+        self._delete_part_btn.setStyleSheet(
+            "background: #c03030; color: white; padding: 4px; "
+            "border-radius: 3px; margin-top: 8px;"
+        )
+        self._delete_part_btn.clicked.connect(self._on_delete_part)
+        layout.addWidget(self._delete_part_btn)
+
+        return page
+
+    def _load_instruments(self) -> None:
+        """Instrumente aus JSON laden."""
+        import json, os
+        path = os.path.join("media", "Stimmen", "instruments.json")
+        self._instrument_programs: list[int] = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for cat in data["categories"]:
+                for instr in cat["instruments"]:
+                    self._part_instrument.addItem(
+                        f"{instr['name']}  ({cat['name']})"
+                    )
+                    self._instrument_programs.append(instr["program"])
+        except Exception as e:
+            logger.warning(f"instruments.json nicht geladen: {e}")
+            # Fallback: nur Klavier
+            self._part_instrument.addItem("Klavier")
+            self._instrument_programs.append(0)
+
     # ---- Show ----
 
     def show_note(self, note: Note) -> None:
@@ -184,6 +286,42 @@ class PropertiesPanel(QDockWidget):
     def show_clef(self) -> None:
         self._type_label.setText("Notenschlüssel")
         self._stack.setCurrentIndex(3)
+
+    def show_part(self, part, part_index: int) -> None:
+        """Stimm-Eigenschaften anzeigen."""
+        self._updating = True
+        self._current_part_index = part_index
+        self._type_label.setText(f"Stimme: {part.name}")
+        # Name
+        idx = self._part_name_edit.findText(part.name)
+        if idx >= 0:
+            self._part_name_edit.setCurrentIndex(idx)
+        else:
+            self._part_name_edit.setEditText(part.name)
+        # Instrument
+        if part.instrument in self._instrument_programs:
+            self._part_instrument.setCurrentIndex(
+                self._instrument_programs.index(part.instrument)
+            )
+        # Mute
+        self._part_mute.setChecked(part.muted)
+        # Detect-Button nur bei Audio-Stimmen
+        has_audio = part.audio_track is not None
+        self._detect_button.setVisible(has_audio)
+        if has_audio:
+            dur = part.audio_track.duration_seconds
+            self._sf_label.setText(
+                f"Audio: {part.audio_track.file_path.split('/')[-1]} "
+                f"({dur:.1f}s)"
+            )
+        # Info
+        n_notes = sum(len(m.notes) for m in part.measures)
+        self._part_info.setText(
+            f"Kanal: {part.channel} | Takte: {len(part.measures)} | "
+            f"Noten: {n_notes}"
+        )
+        self._stack.setCurrentIndex(4)
+        self._updating = False
 
     def clear(self) -> None:
         self._current_note = None
@@ -234,4 +372,31 @@ class PropertiesPanel(QDockWidget):
         from musiai.notation.TempoMarking import TempoMarking
         self._tempo_name.setText(TempoMarking.from_bpm(float(value)))
         self.tempo_changed.emit(float(value))
+
+    def _on_part_name_changed(self, text: str) -> None:
+        if self._updating:
+            return
+        self.part_name_changed.emit(self._current_part_index, text)
+
+    def _on_part_instrument_changed(self, idx: int) -> None:
+        if self._updating or idx < 0:
+            return
+        program = self._instrument_programs[idx]
+        self.part_instrument_changed.emit(self._current_part_index, program)
+
+    def _on_part_mute_changed(self, checked: bool) -> None:
+        if self._updating:
+            return
+        self.part_muted_changed.emit(self._current_part_index, checked)
+
+    def _on_sf_button(self) -> None:
+        if self._updating:
+            return
+        self.part_soundfont_requested.emit(self._current_part_index)
+
+    def _on_delete_part(self) -> None:
+        self.part_delete_requested.emit(self._current_part_index)
+
+    def _on_detect(self) -> None:
+        self.part_detect_requested.emit(self._current_part_index)
 

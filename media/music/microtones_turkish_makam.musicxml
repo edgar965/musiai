@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN"
+  "http://www.musicxml.org/dtds/partwise.dtd">
+<!--
+  Turkish Makam Hicaz - Vierteltöne und feine Cent-Abweichungen
+  Enthält: quarter-sharp (+50ct), quarter-flat (-50ct), feine Abweichungen
+-->
+<score-partwise version="4.0">
+  <work><work-title>Hicaz Makam Seyir (Mikrotonal)</work-title></work>
+  <part-list>
+    <score-part id="P1"><part-name>Ney</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>480</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction placement="above">
+        <direction-type><metronome>
+          <beat-unit>quarter</beat-unit><per-minute>80</per-minute>
+        </metronome></direction-type>
+        <sound tempo="80"/>
+      </direction>
+      <!-- A4 exakt -->
+      <note>
+        <pitch><step>A</step><alter>0</alter><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="70"/>
+      </note>
+      <!-- Bb4 + 30 Cent (Hicaz-typisch, leicht erhöht) -->
+      <note>
+        <pitch><step>B</step><alter>-0.70</alter><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="85"/>
+      </note>
+      <!-- C#5 - 15 Cent (tiefer Leitton) -->
+      <note>
+        <pitch><step>C</step><alter>0.85</alter><octave>5</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="90"/>
+      </note>
+      <!-- D5 exakt (Karar/Grundton) -->
+      <note>
+        <pitch><step>D</step><alter>0</alter><octave>5</octave></pitch>
+        <duration>504</duration><type>quarter</type>
+        <sound dynamics="100"/>
+      </note>
+    </measure>
+
+    <measure number="2">
+      <!-- D5, leichtes Vibrato-Feeling durch Cent-Shift -->
+      <note>
+        <pitch><step>D</step><alter>0.08</alter><octave>5</octave></pitch>
+        <duration>240</duration><type>eighth</type>
+        <sound dynamics="80"/>
+      </note>
+      <note>
+        <pitch><step>D</step><alter>-0.06</alter><octave>5</octave></pitch>
+        <duration>240</duration><type>eighth</type>
+        <sound dynamics="75"/>
+      </note>
+      <!-- C#5 Quarter-Flat (Viertelton tiefer = ~+50ct von C) -->
+      <note>
+        <pitch><step>C</step><alter>0.50</alter><octave>5</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="70"/>
+      </note>
+      <!-- Bb4 Quarter-Sharp (+50ct von Bb = -50ct von B) -->
+      <note>
+        <pitch><step>B</step><alter>-0.50</alter><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="65"/>
+      </note>
+      <!-- A4 - 20 Cent (instabil, Spannung) -->
+      <note>
+        <pitch><step>A</step><alter>-0.20</alter><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="60"/>
+      </note>
+    </measure>
+
+    <measure number="3">
+      <!-- Abstieg mit feinen Cent-Variationen -->
+      <note>
+        <pitch><step>A</step><alter>0</alter><octave>4</octave></pitch>
+        <duration>360</duration><type>quarter</type>
+        <sound dynamics="75"/>
+      </note>
+      <note>
+        <pitch><step>G</step><alter>0.12</alter><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="80"/>
+      </note>
+      <note>
+        <pitch><step>F</step><alter>0.35</alter><octave>4</octave></pitch>
+        <duration>480</duration><type>quarter</type>
+        <sound dynamics="70"/>
+      </note>
+      <!-- E4 - Sechstelton tiefer -->
+      <note>
+        <pitch><step>E</step><alter>-0.33</alter><octave>4</octave></pitch>
+        <duration>600</duration><type>quarter</type>
+        <sound dynamics="90"/>
+      </note>
+    </measure>
+
+    <measure number="4">
+      <!-- Schluss auf D4 mit expressivem Approach -->
+      <note>
+        <pitch><step>E</step><alter>-0.10</alter><octave>4</octave></pitch>
+        <duration>240</duration><type>eighth</type>
+        <sound dynamics="60"/>
+      </note>
+      <note>
+        <pitch><step>D</step><alter>0.05</alter><octave>4</octave></pitch>
+        <duration>240</duration><type>eighth</type>
+        <sound dynamics="55"/>
+      </note>
+      <note>
+        <pitch><step>D</step><alter>0</alter><octave>4</octave></pitch>
+        <duration>960</duration><type>half</type>
+        <sound dynamics="95"/>
+      </note>
+    </measure>
+  </part>
+</score-partwise>

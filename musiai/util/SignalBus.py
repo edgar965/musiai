@@ -11,6 +11,7 @@ class SignalBus(QObject):
 
     # Piece/Projekt
     piece_loaded = Signal(object)       # Piece
+    piece_changed = Signal()            # Noten/Takte geändert → Playback neu
     project_saved = Signal(str)         # Dateipfad
 
     # Noten-Auswahl und -Bearbeitung
