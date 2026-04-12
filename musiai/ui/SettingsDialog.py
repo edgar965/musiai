@@ -61,11 +61,11 @@ class SettingsDialog(QDialog):
              "Erkennt Beats und Onsets. Ergänzung zu pyin."),
         ]
 
+        self._status_labels = {}
         for i, (key, name, desc) in enumerate(engines_info):
             radio = QRadioButton(name)
             info = QLabel(desc)
             info.setStyleSheet("color: #666; font-size: 9px; margin-left: 20px;")
-            self._status_labels = {}
             status = QLabel("")
             status.setStyleSheet("font-weight: bold; margin-left: 20px;")
             self._status_labels[key] = status

@@ -36,8 +36,17 @@ class DemucsDetector:
 
         logger.info(f"Demucs: Lade {audio_path}...")
 
-        # Audio laden
-        waveform, sr = torchaudio.load(audio_path)
+        # Audio laden (torchaudio oder librosa als Fallback)
+        try:
+            waveform, sr = torchaudio.load(audio_path)
+        except Exception:
+            import librosa
+            y, sr = librosa.load(audio_path, sr=44100, mono=False)
+            if y.ndim == 1:
+                y = np.stack([y, y])
+            waveform = torch.from_numpy(y)
+            logger.info("Audio via librosa geladen (torchaudio Fallback)")
+
         # Auf Stereo erweitern falls Mono
         if waveform.shape[0] == 1:
             waveform = waveform.repeat(2, 1)

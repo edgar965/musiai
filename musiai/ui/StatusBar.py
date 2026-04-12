@@ -2,6 +2,7 @@
 
 import logging
 from PySide6.QtWidgets import QStatusBar, QLabel
+from PySide6.QtCore import Qt
 
 logger = logging.getLogger("musiai.ui.StatusBar")
 
@@ -21,6 +22,11 @@ class StatusBar(QStatusBar):
         self._position_label = QLabel("Takt 1 | Beat 1.0")
         self._midi_label = QLabel("MIDI: ---")
         self._message_label = QLabel("")
+        self._message_label.setTextInteractionFlags(
+            self._message_label.textInteractionFlags()
+            | Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._message_label.setCursor(Qt.CursorShape.IBeamCursor)
 
         self.addWidget(self._edit_mode_label)
         self.addWidget(self._position_label)
