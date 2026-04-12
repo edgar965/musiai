@@ -655,12 +655,12 @@ class TestWorkflowPropertiesPanel(unittest.TestCase):
         self.assertEqual(panel._cent_slider.value(), 15)
         self.assertEqual(panel._dur_slider.value(), 105)
 
-    def test_clear_disables_sliders(self):
+    def test_clear_shows_empty(self):
         from musiai.ui.PropertiesPanel import PropertiesPanel
         panel = PropertiesPanel()
         panel.show_note(Note(60, 0, 1, Expression(100)))
         panel.clear()
-        self.assertFalse(panel._vel_slider.isEnabled())
+        self.assertEqual(panel._stack.currentIndex(), 0)  # Leere Seite
 
     def test_velocity_signal(self):
         from musiai.ui.PropertiesPanel import PropertiesPanel

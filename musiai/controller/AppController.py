@@ -88,10 +88,11 @@ class AppController:
         # --- Status ---
         self.signal_bus.status_message.connect(self.main_window.status_bar.set_message)
 
-        # --- Note Selection ---
-        self.main_window.notation_view.note_clicked.connect(
-            self.edit_controller.select_note
-        )
+        # --- Selection: Note, Schlüssel, Taktart ---
+        view = self.main_window.notation_view
+        view.note_clicked.connect(self.edit_controller.select_note)
+        view.clef_clicked.connect(lambda: props.show_clef())
+        view.time_signature_clicked.connect(self._on_ts_clicked)
         self.signal_bus.note_selected.connect(props.show_note)
         self.signal_bus.notes_deselected.connect(props.clear)
 
@@ -190,10 +191,32 @@ class AppController:
         if self.edit_controller.selected_note is note:
             self.main_window.properties_panel.show_note(note)
 
+    def _on_ts_clicked(self, ts_item) -> None:
+        """Taktart angeklickt → Properties zeigen."""
+        ts = ts_item.time_sig
+        tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
+        self.main_window.properties_panel.show_time_signature(ts, tempo)
+
+    def _load_default_file(self) -> None:
+        """Standard-Datei beim Start laden wenn vorhanden."""
+        import os
+        default = os.path.abspath("media/music/test.musicxml")
+        if os.path.exists(default):
+            try:
+                from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
+                piece = MusicXmlImporter().import_file(default)
+                self.project.add_piece(piece)
+                self.signal_bus.piece_loaded.emit(piece)
+                logger.info(f"Standard-Datei geladen: {default}")
+            except Exception as e:
+                logger.warning(f"Standard-Datei konnte nicht geladen werden: {e}")
+
     def start(self) -> None:
         """App starten."""
         self.main_window.show()
-        self.signal_bus.status_message.emit("Bereit. MIDI oder MusicXML importieren.")
+        self._load_default_file()
+        if not self.project.current_piece:
+            self.signal_bus.status_message.emit("Bereit. MIDI oder MusicXML importieren.")
         logger.info("MusiAI gestartet")
 
     def shutdown(self) -> None:
