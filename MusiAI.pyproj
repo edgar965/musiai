@@ -23,23 +23,26 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="main.py" />
-    <Compile Include="test_all.py" />
+    <!-- Model -->
     <Compile Include="musiai\__init__.py" />
     <Compile Include="musiai\model\__init__.py" />
+    <Compile Include="musiai\model\AudioTrack.py" />
     <Compile Include="musiai\model\Expression.py" />
-    <Compile Include="musiai\model\Note.py" />
     <Compile Include="musiai\model\Measure.py" />
+    <Compile Include="musiai\model\Note.py" />
     <Compile Include="musiai\model\Part.py" />
     <Compile Include="musiai\model\Piece.py" />
     <Compile Include="musiai\model\Project.py" />
-    <Compile Include="musiai\model\TimeSignature.py" />
     <Compile Include="musiai\model\Tempo.py" />
+    <Compile Include="musiai\model\TimeSignature.py" />
+    <!-- MIDI -->
     <Compile Include="musiai\midi\__init__.py" />
     <Compile Include="musiai\midi\MidiImporter.py" />
-    <Compile Include="musiai\midi\MusicXmlImporterCompat.py" />
     <Compile Include="musiai\midi\MidiExporter.py" />
     <Compile Include="musiai\midi\MidiKeyboard.py" />
     <Compile Include="musiai\midi\MidiMapping.py" />
+    <Compile Include="musiai\midi\MusicXmlImporterCompat.py" />
+    <!-- MusicXML -->
     <Compile Include="musiai\musicXML\__init__.py" />
     <Compile Include="musiai\musicXML\MusicXmlConstants.py" />
     <Compile Include="musiai\musicXML\PitchParser.py" />
@@ -47,44 +50,63 @@
     <Compile Include="musiai\musicXML\MeasureParser.py" />
     <Compile Include="musiai\musicXML\MusicXmlImporter.py" />
     <Compile Include="musiai\musicXML\MusicXmlExporter.py" />
+    <!-- Audio -->
     <Compile Include="musiai\audio\__init__.py" />
+    <Compile Include="musiai\audio\AudioPlayer.py" />
+    <Compile Include="musiai\audio\BasicPitchDetector.py" />
+    <Compile Include="musiai\audio\DemucsDetector.py" />
     <Compile Include="musiai\audio\FluidSynthPlayer.py" />
-    <Compile Include="musiai\audio\Transport.py" />
+    <Compile Include="musiai\audio\MidiPortPlayer.py" />
+    <Compile Include="musiai\audio\PitchDetector.py" />
     <Compile Include="musiai\audio\PlaybackEngine.py" />
+    <Compile Include="musiai\audio\SoundFontPlayer.py" />
+    <Compile Include="musiai\audio\Transport.py" />
+    <!-- Notation -->
     <Compile Include="musiai\notation\__init__.py" />
-    <Compile Include="musiai\notation\NotationScene.py" />
-    <Compile Include="musiai\notation\StaffRenderer.py" />
-    <Compile Include="musiai\notation\MeasureRenderer.py" />
-    <Compile Include="musiai\notation\NoteItem.py" />
-    <Compile Include="musiai\notation\ZigzagItem.py" />
+    <Compile Include="musiai\notation\ClefItem.py" />
+    <Compile Include="musiai\notation\ColorScheme.py" />
+    <Compile Include="musiai\notation\CursorItem.py" />
     <Compile Include="musiai\notation\CurveItem.py" />
     <Compile Include="musiai\notation\DurationItem.py" />
+    <Compile Include="musiai\notation\MeasureRenderer.py" />
+    <Compile Include="musiai\notation\NotationScene.py" />
+    <Compile Include="musiai\notation\NoteItem.py" />
     <Compile Include="musiai\notation\PlayheadItem.py" />
-    <Compile Include="musiai\notation\ColorScheme.py" />
+    <Compile Include="musiai\notation\StaffRenderer.py" />
     <Compile Include="musiai\notation\TempoMarking.py" />
+    <Compile Include="musiai\notation\TimeSignatureItem.py" />
+    <Compile Include="musiai\notation\WaveformItem.py" />
+    <Compile Include="musiai\notation\ZigzagItem.py" />
+    <!-- UI -->
     <Compile Include="musiai\ui\__init__.py" />
+    <Compile Include="musiai\ui\AboutDialog.py" />
     <Compile Include="musiai\ui\MainWindow.py" />
-    <Compile Include="musiai\ui\NotationView.py" />
-    <Compile Include="musiai\ui\Toolbar.py" />
-    <Compile Include="musiai\ui\PropertiesPanel.py" />
     <Compile Include="musiai\ui\MeasureInputDialog.py" />
     <Compile Include="musiai\ui\MidiDeviceDialog.py" />
+    <Compile Include="musiai\ui\NotationView.py" />
+    <Compile Include="musiai\ui\PropertiesPanel.py" />
+    <Compile Include="musiai\ui\SettingsDialog.py" />
     <Compile Include="musiai\ui\SoundfontDialog.py" />
     <Compile Include="musiai\ui\StatusBar.py" />
-    <Compile Include="musiai\ui\AboutDialog.py" />
+    <Compile Include="musiai\ui\Toolbar.py" />
+    <Compile Include="musiai\ui\ZoomWidget.py" />
+    <!-- Controller -->
     <Compile Include="musiai\controller\__init__.py" />
     <Compile Include="musiai\controller\AppController.py" />
     <Compile Include="musiai\controller\EditController.py" />
-    <Compile Include="musiai\controller\RecordingController.py" />
     <Compile Include="musiai\controller\FileController.py" />
+    <Compile Include="musiai\controller\RecordingController.py" />
+    <!-- Util -->
     <Compile Include="musiai\util\__init__.py" />
     <Compile Include="musiai\util\Constants.py" />
+    <Compile Include="musiai\util\LoggingConfig.py" />
     <Compile Include="musiai\util\PitchUtils.py" />
     <Compile Include="musiai\util\SignalBus.py" />
-    <Compile Include="musiai\util\LoggingConfig.py" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="requirements.txt" />
+    <Content Include="CLAUDE.md" />
+    <Content Include="media\Stimmen\instruments.json" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="musiai\" />
@@ -98,10 +120,11 @@
     <Folder Include="musiai\util\" />
     <Folder Include="media\" />
     <Folder Include="media\music\" />
-    <Folder Include="media\pdf\" />
     <Folder Include="media\mp3\" />
+    <Folder Include="media\pdf\" />
     <Folder Include="media\projects\" />
     <Folder Include="media\soundfonts\" />
+    <Folder Include="media\Stimmen\" />
     <Folder Include="Recherche\" />
     <Folder Include="logs\" />
   </ItemGroup>
