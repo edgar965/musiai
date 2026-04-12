@@ -52,7 +52,7 @@ class AppController:
         )
 
         self._tempo_target_measure = None
-        self._detection_engine = "basic-pitch"  # Default: beste verfügbare
+        self._detection_engine = "demucs+pyin"  # Default: beste integrierte Engine
         self._connect_signals()
         logger.info("AppController initialisiert")
 

@@ -1,181 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN"
-  "http://www.musicxml.org/dtds/partwise.dtd">
-<!--
-  Micro-Expression Beispiel
-  ==========================
-  Zeigt: Feine Tonhöhen- und Längen-Abweichungen
-  wie bei einer echten Live-Performance.
-
-  divisions=480 ermöglicht ~0.2% Genauigkeit bei der Dauer.
-  alter=Dezimalwert ermöglicht Cent-genaue Tonhöhen.
--->
 <score-partwise version="4.0">
   <work>
     <work-title>Micro-Expression Demo</work-title>
   </work>
   <part-list>
     <score-part id="P1">
-      <part-name>Klavier</part-name>
+      <part-name>Audio: test</part-name>
     </score-part>
   </part-list>
-
   <part id="P1">
     <measure number="1">
       <attributes>
-        <!--
-          DIVISIONS = 480
-          Das ist der Schlüssel für feine Längen-Kontrolle!
-          480 Ticks = 1 Viertelnote
-          1 Tick = 0.208% einer Viertelnote
-        -->
         <divisions>480</divisions>
-        <key><fifths>0</fifths></key>
-        <time><beats>4</beats><beat-type>4</beat-type></time>
-        <clef><sign>G</sign><line>2</line></clef>
+        <key>
+          <fifths>0</fifths>
+        </key>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
       </attributes>
-
-      <direction placement="above">
-        <direction-type><metronome>
-          <beat-unit>quarter</beat-unit>
-          <per-minute>100</per-minute>
-        </metronome></direction-type>
-        <sound tempo="100"/>
+      <direction>
+        <sound tempo="100.0"/>
       </direction>
-
-      <!--
-        =============================================
-        NOTE 1: Exakte Viertelnote C4 (Referenz)
-        =============================================
-        Tonhöhe: C4 exakt (alter=0)
-        Dauer:   480 Ticks = genau 1 Viertelnote
-        Dynamik: mf (80/127)
-      -->
-      <note>
-        <pitch>
-          <step>C</step>
-          <alter>0</alter>          <!-- exakt C4, 0 Cent Abweichung -->
-          <octave>4</octave>
-        </pitch>
-        <duration>480</duration>    <!-- exakt 1 Viertelnote -->
-        <type>quarter</type>
-        <sound dynamics="80"/>
-      </note>
-
-      <!--
-        =============================================
-        NOTE 2: E4, 4 Cent höher, 1% länger
-        =============================================
-        Tonhöhe: E4 + 4 Cent (alter=0.04)
-                 → Frequenz: 329.63 Hz × 1.0023 = 330.39 Hz
-                 → Kaum hörbar, aber fühlbar "wärmer"
-
-        Dauer:   485 Ticks = 480 × 1.0104 = +1.04% länger
-                 → Bei 100 BPM: 0.600s statt 0.594s
-                 → Die Note "lehnt" sich leicht in die nächste
-
-        Dynamik: etwas lauter (90/127)
-      -->
-      <note>
-        <pitch>
-          <step>E</step>
-          <alter>0.04</alter>       <!-- +4 Cent höher als reines E4 -->
-          <octave>4</octave>
-        </pitch>
-        <duration>485</duration>    <!-- 1% länger als 480 -->
-        <type>quarter</type>
-        <sound dynamics="90"/>      <!-- etwas lauter -->
-      </note>
-
-      <!--
-        =============================================
-        NOTE 3: G4, 10 Cent tiefer, 3% kürzer
-        =============================================
-        Tonhöhe: G4 - 10 Cent (alter=-0.10)
-                 → Leicht "blue note" Feeling
-
-        Dauer:   466 Ticks = 480 × 0.97 = -3% kürzer
-                 → Note lässt früher los, schafft Luft
-                 → Typisch für Jazz-Phrasierung
-
-        Dynamik: leiser (60/127), Note klingt zurückhaltend
-      -->
-      <note>
-        <pitch>
-          <step>G</step>
-          <alter>-0.10</alter>      <!-- -10 Cent, leicht tiefer -->
-          <octave>4</octave>
-        </pitch>
-        <duration>466</duration>    <!-- 3% kürzer als 480 -->
-        <type>quarter</type>
-        <sound dynamics="60"/>      <!-- leiser -->
-      </note>
-
-      <!--
-        =============================================
-        NOTE 4: C5, 15 Cent höher, 5% länger (Akzent!)
-        =============================================
-        Tonhöhe: C5 + 15 Cent
-                 → Leichtes "Overshooting" wie bei Sängern
-                 → Zielton wird von oben angesteuert
-
-        Dauer:   504 Ticks = 480 × 1.05 = +5% länger
-                 → Note wird leicht gehalten, betont
-
-        Dynamik: forte (105/127)
-      -->
-      <note>
-        <pitch>
-          <step>C</step>
-          <alter>0.15</alter>       <!-- +15 Cent, leicht überhöht -->
-          <octave>5</octave>
-        </pitch>
-        <duration>504</duration>    <!-- 5% länger als 480 -->
-        <type>quarter</type>
-        <sound dynamics="105"/>     <!-- laut, akzentuiert -->
-        <notations>
-          <articulations><accent/></articulations>
-        </notations>
-      </note>
-
     </measure>
-
-    <!--
-      =============================================
-      TAKT 2: Gleiche Noten OHNE Micro-Expression
-      Zum Vergleich: klingt "roboterhaft"
-      =============================================
-    -->
-    <measure number="2">
-
-      <note>
-        <pitch><step>C</step><alter>0</alter><octave>4</octave></pitch>
-        <duration>480</duration>
-        <type>quarter</type>
-        <sound dynamics="80"/>
-      </note>
-
-      <note>
-        <pitch><step>E</step><alter>0</alter><octave>4</octave></pitch>
-        <duration>480</duration>
-        <type>quarter</type>
-        <sound dynamics="80"/>
-      </note>
-
-      <note>
-        <pitch><step>G</step><alter>0</alter><octave>4</octave></pitch>
-        <duration>480</duration>
-        <type>quarter</type>
-        <sound dynamics="80"/>
-      </note>
-
-      <note>
-        <pitch><step>C</step><alter>0</alter><octave>5</octave></pitch>
-        <duration>480</duration>
-        <type>quarter</type>
-        <sound dynamics="80"/>
-      </note>
-
-    </measure>
+    <measure number="2"/>
+    <measure number="3"/>
+    <measure number="4"/>
+    <measure number="5"/>
   </part>
 </score-partwise>
