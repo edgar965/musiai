@@ -1,7 +1,7 @@
 """MeasureRenderer - Zeichnet einen einzelnen Takt mit Expression-Visuals."""
 
 import logging
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsItem, QGraphicsRectItem
+from PySide6.QtWidgets import QGraphicsScene, QGraphicsItem, QGraphicsSimpleTextItem
 from PySide6.QtGui import QPen, QColor, QFont, QBrush
 from PySide6.QtCore import Qt
 from musiai.model.Measure import Measure
@@ -10,17 +10,13 @@ from musiai.notation.ZigzagItem import ZigzagItem
 from musiai.notation.CurveItem import CurveItem
 from musiai.notation.DurationItem import DurationItem
 from musiai.notation.StaffRenderer import StaffRenderer
-from musiai.notation.ClefItem import ClefItem
-from musiai.notation.TimeSignatureItem import TimeSignatureItem
 from musiai.util.Constants import (
     PIXELS_PER_BEAT, STAFF_LINE_SPACING, COLOR_MEASURE_LINE, MIDI_MIDDLE_C,
 )
 
 logger = logging.getLogger("musiai.notation.MeasureRenderer")
 
-CLEF_WIDTH = 24
-TS_WIDTH = 24
-HEADER_GAP = 8
+HEADER_WIDTH = 58  # Platz für Schlüssel + Taktart
 
 
 class MeasureRenderer:
@@ -39,16 +35,14 @@ class MeasureRenderer:
 
     @property
     def header_width(self) -> float:
-        if not self.show_clef:
-            return 0
-        return CLEF_WIDTH + TS_WIDTH + HEADER_GAP * 2
+        return HEADER_WIDTH if self.show_clef else 0
 
     @property
     def width(self) -> float:
         return self.measure.duration_beats * PIXELS_PER_BEAT + self.header_width
 
     def render(self, scene: QGraphicsScene) -> None:
-        staff_half = 2 * STAFF_LINE_SPACING
+        sh = 2 * STAFF_LINE_SPACING  # staff_half
 
         # Notenlinien
         lines = StaffRenderer.draw_staff_lines(
@@ -57,82 +51,93 @@ class MeasureRenderer:
         self._items.extend(lines)
 
         # Taktstrich links
-        bar = scene.addLine(
-            self.x_offset, self.center_y - staff_half,
-            self.x_offset, self.center_y + staff_half,
-            QPen(QColor(*COLOR_MEASURE_LINE), 1.5),
-        )
-        bar.setZValue(1)
-        self._items.append(bar)
+        self._add_line(scene, self.x_offset, self.center_y - sh,
+                       self.x_offset, self.center_y + sh, 1.5)
 
-        # Header
         if self.show_clef:
-            self._draw_header(scene, staff_half)
+            self._draw_clef(scene, sh)
+            self._draw_time_signature(scene, sh)
+            self._draw_tempo(scene, sh)
+            self._draw_dynamic(scene, sh)
+            # Trennlinie nach Header
+            sep_x = self.x_offset + self.header_width
+            self._add_line(scene, sep_x, self.center_y - sh,
+                          sep_x, self.center_y + sh, 0.5,
+                          QColor(190, 190, 210))
 
-        # Taktnummer
-        self._draw_measure_number(scene, staff_half)
-
-        # Noten
+        self._draw_measure_number(scene, sh)
         self._draw_notes(scene)
 
-    def _draw_header(self, scene: QGraphicsScene, staff_half: float) -> None:
-        """Schlüssel + Taktart + Tempo/Dynamik."""
-        # Violinschlüssel
-        clef_x = self.x_offset + HEADER_GAP
-        clef = ClefItem(clef_x, self.center_y, staff_half)
-        scene.addItem(clef)
+    def _draw_clef(self, scene: QGraphicsScene, sh: float) -> None:
+        """Violinschlüssel - großes Unicode-Zeichen, sauber zentriert."""
+        clef = scene.addText("𝄞")
+        clef.setFont(QFont("Segoe UI Symbol", 30))
+        clef.setDefaultTextColor(QColor(30, 30, 60))
+        # Positionierung: linksbündig im Header, vertikal auf Notenlinien zentriert
+        # Das Unicode-Zeichen hat viel Whitespace, daher Offset-Korrektur
+        clef.setPos(self.x_offset + 2, self.center_y - sh - 14)
+        clef.setZValue(3)
         self._items.append(clef)
 
-        # Taktart
-        ts_x = self.x_offset + HEADER_GAP + CLEF_WIDTH + HEADER_GAP
-        ts_item = TimeSignatureItem(
-            self.measure.time_signature, ts_x, self.center_y, staff_half
-        )
-        scene.addItem(ts_item)
-        self._items.append(ts_item)
+    def _draw_time_signature(self, scene: QGraphicsScene, sh: float) -> None:
+        """Taktart: Zähler oben, Nenner unten, rechts vom Schlüssel."""
+        ts = self.measure.time_signature
+        font = QFont("Arial", 15, QFont.Weight.ExtraBold)
+        color = QColor(30, 30, 60)
+        ts_x = self.x_offset + 34
 
-        # Trennstrich nach Header
-        sep_x = self.x_offset + self.header_width
-        sep = scene.addLine(
-            sep_x, self.center_y - staff_half,
-            sep_x, self.center_y + staff_half,
-            QPen(QColor(180, 180, 200), 0.5),
-        )
-        sep.setZValue(1)
-        self._items.append(sep)
-
-        # Tempo (über dem System)
-        if self.tempo_bpm > 0:
-            from musiai.notation.TempoMarking import TempoMarking
-            text = TempoMarking.format_tempo(self.tempo_bpm)
-            tempo = scene.addText(text)
-            tempo.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-            tempo.setDefaultTextColor(QColor(30, 110, 30))
-            tempo.setPos(self.x_offset + self.header_width + 4,
-                        self.center_y - staff_half - 36)
-            tempo.setZValue(2)
-            self._items.append(tempo)
-
-        # Dynamik (unter dem System)
-        if self.velocity > 0:
-            from musiai.notation.TempoMarking import DynamicMarking
-            text = DynamicMarking.format_dynamic(self.velocity)
-            dyn = scene.addText(text)
-            dyn.setFont(QFont("Times New Roman", 10, QFont.Weight.Bold))
-            dyn.setDefaultTextColor(QColor(180, 30, 30))
-            dyn.setPos(self.x_offset + self.header_width + 4,
-                      self.center_y + staff_half + 4)
-            dyn.setZValue(2)
-            self._items.append(dyn)
-
-    def _draw_measure_number(self, scene: QGraphicsScene, staff_half: float) -> None:
-        x = self.x_offset + self.header_width + 2
-        num = scene.addText(str(self.measure.number))
-        num.setFont(QFont("Arial", 7))
-        num.setDefaultTextColor(QColor(160, 160, 180))
-        num.setPos(x, self.center_y - staff_half - 14)
-        num.setZValue(1)
+        # Zähler - zentriert in der oberen Hälfte der Notenlinien
+        num = QGraphicsSimpleTextItem(str(ts.numerator))
+        num.setFont(font)
+        num.setBrush(QBrush(color))
+        num_w = num.boundingRect().width()
+        num.setPos(ts_x + (16 - num_w) / 2, self.center_y - sh)
+        num.setZValue(3)
+        scene.addItem(num)
         self._items.append(num)
+
+        # Nenner - zentriert in der unteren Hälfte
+        den = QGraphicsSimpleTextItem(str(ts.denominator))
+        den.setFont(font)
+        den.setBrush(QBrush(color))
+        den_w = den.boundingRect().width()
+        den.setPos(ts_x + (16 - den_w) / 2, self.center_y + 2)
+        den.setZValue(3)
+        scene.addItem(den)
+        self._items.append(den)
+
+    def _draw_tempo(self, scene: QGraphicsScene, sh: float) -> None:
+        if self.tempo_bpm <= 0:
+            return
+        from musiai.notation.TempoMarking import TempoMarking
+        text = TempoMarking.format_tempo(self.tempo_bpm)
+        item = scene.addText(text)
+        item.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        item.setDefaultTextColor(QColor(20, 120, 20))
+        item.setPos(self.x_offset + 2, self.center_y - sh - 38)
+        item.setZValue(2)
+        self._items.append(item)
+
+    def _draw_dynamic(self, scene: QGraphicsScene, sh: float) -> None:
+        if self.velocity <= 0:
+            return
+        from musiai.notation.TempoMarking import DynamicMarking
+        text = DynamicMarking.format_dynamic(self.velocity)
+        item = scene.addText(text)
+        item.setFont(QFont("Times New Roman", 10, QFont.Weight.Bold))
+        item.setDefaultTextColor(QColor(180, 20, 20))
+        item.setPos(self.x_offset + 2, self.center_y + sh + 4)
+        item.setZValue(2)
+        self._items.append(item)
+
+    def _draw_measure_number(self, scene: QGraphicsScene, sh: float) -> None:
+        x = self.x_offset + self.header_width + 2
+        item = scene.addText(str(self.measure.number))
+        item.setFont(QFont("Arial", 7))
+        item.setDefaultTextColor(QColor(160, 160, 180))
+        item.setPos(x, self.center_y - sh - 14)
+        item.setZValue(1)
+        self._items.append(item)
 
     def _draw_notes(self, scene: QGraphicsScene) -> None:
         for note in self.measure.notes:
@@ -142,21 +147,29 @@ class MeasureRenderer:
             expr = note.expression
 
             if abs(expr.duration_deviation - 1.0) >= 0.01:
-                dur_item = DurationItem(expr.duration_deviation, nx, ny)
-                scene.addItem(dur_item)
-                self._items.append(dur_item)
+                d = DurationItem(expr.duration_deviation, nx, ny)
+                scene.addItem(d)
+                self._items.append(d)
 
             if abs(expr.cent_offset) > 0.5:
                 if expr.glide_type == "curve":
-                    item = CurveItem(expr.cent_offset, nx - 15, ny)
+                    c = CurveItem(expr.cent_offset, nx - 15, ny)
+                    scene.addItem(c)
+                    self._items.append(c)
                 else:
-                    item = ZigzagItem(expr.cent_offset, nx - 15, ny)
-                scene.addItem(item)
-                self._items.append(item)
+                    z = ZigzagItem(expr.cent_offset, nx - 15, ny)
+                    scene.addItem(z)
+                    self._items.append(z)
 
-            note_item = NoteItem(note, nx, ny)
-            scene.addItem(note_item)
-            self.note_items.append(note_item)
+            ni = NoteItem(note, nx, ny)
+            scene.addItem(ni)
+            self.note_items.append(ni)
+
+    def _add_line(self, scene, x1, y1, x2, y2, width=1.5, color=None):
+        c = color or QColor(*COLOR_MEASURE_LINE)
+        line = scene.addLine(x1, y1, x2, y2, QPen(c, width))
+        line.setZValue(1)
+        self._items.append(line)
 
     def pitch_to_y(self, midi_pitch: int) -> float:
         return self.center_y - (midi_pitch - MIDI_MIDDLE_C) * (STAFF_LINE_SPACING / 2)

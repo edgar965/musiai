@@ -6,8 +6,6 @@ from PySide6.QtGui import QPainter
 from PySide6.QtCore import Qt, Signal
 from musiai.notation.NotationScene import NotationScene
 from musiai.notation.NoteItem import NoteItem
-from musiai.notation.ClefItem import ClefItem
-from musiai.notation.TimeSignatureItem import TimeSignatureItem
 
 logger = logging.getLogger("musiai.ui.NotationView")
 
@@ -66,12 +64,6 @@ class NotationView(QGraphicsView):
             for item in scene.items(scene_pos):
                 if isinstance(item, NoteItem):
                     self.note_clicked.emit(item)
-                    return
-                if isinstance(item, ClefItem):
-                    self.clef_clicked.emit()
-                    return
-                if isinstance(item, TimeSignatureItem):
-                    self.time_signature_clicked.emit(item)
                     return
 
         super().mousePressEvent(event)
