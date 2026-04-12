@@ -2,7 +2,7 @@
 
 import logging
 from PySide6.QtWidgets import QGraphicsView
-from PySide6.QtGui import QPainter
+from PySide6.QtGui import QPainter, QKeySequence, QShortcut
 from PySide6.QtCore import Qt, Signal
 from musiai.notation.NotationScene import NotationScene
 from musiai.notation.NoteItem import NoteItem
@@ -13,10 +13,10 @@ logger = logging.getLogger("musiai.ui.NotationView")
 class NotationView(QGraphicsView):
     """Scrollbare, zoombare Ansicht der Notation."""
 
-    note_clicked = Signal(object)            # NoteItem
-    clef_clicked = Signal()                  # Schlüssel angeklickt
-    time_signature_clicked = Signal(object)  # TimeSignatureItem
-    measure_clicked = Signal(object)         # MeasureRenderer (via Takt-Bereich)
+    note_clicked = Signal(object, bool, bool)  # NoteItem, ctrl, shift
+    measure_clicked = Signal(object)           # Measure
+    copy_requested = Signal()
+    paste_requested = Signal()
 
     def __init__(self, scene: NotationScene):
         super().__init__(scene)
@@ -25,6 +25,13 @@ class NotationView(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._zoom_level = 1.0
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self) -> None:
+        copy_sc = QShortcut(QKeySequence.StandardKey.Copy, self)
+        copy_sc.activated.connect(self.copy_requested.emit)
+        paste_sc = QShortcut(QKeySequence.StandardKey.Paste, self)
+        paste_sc.activated.connect(self.paste_requested.emit)
 
     def zoom_in(self) -> None:
         if self._zoom_level < 3.0:
@@ -38,8 +45,7 @@ class NotationView(QGraphicsView):
 
     def scroll_to_beat(self, beat: float) -> None:
         from musiai.util.Constants import PIXELS_PER_BEAT
-        x = beat * PIXELS_PER_BEAT + 40
-        self.centerOn(x, self.sceneRect().height() / 2)
+        self.centerOn(beat * PIXELS_PER_BEAT + 40, self.sceneRect().height() / 2)
 
     def wheelEvent(self, event):
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -51,19 +57,37 @@ class NotationView(QGraphicsView):
             super().wheelEvent(event)
 
     def mousePressEvent(self, event):
-        """Klick erkennen: Note, Schlüssel, Taktart oder Takt-Bereich."""
-        if event.button() == Qt.MouseButton.LeftButton:
-            scene_pos = self.mapToScene(event.pos())
-            scene = self.scene()
+        if event.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
+            return
 
-            if not isinstance(scene, NotationScene):
-                super().mousePressEvent(event)
+        scene_pos = self.mapToScene(event.pos())
+        scene = self.scene()
+        if not isinstance(scene, NotationScene):
+            super().mousePressEvent(event)
+            return
+
+        ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+
+        # Note angeklickt?
+        for item in scene.items(scene_pos):
+            if isinstance(item, NoteItem):
+                self.note_clicked.emit(item, ctrl, shift)
                 return
 
-            # Was wurde angeklickt?
-            for item in scene.items(scene_pos):
-                if isinstance(item, NoteItem):
-                    self.note_clicked.emit(item)
-                    return
+        # Kein Item → Takt-Bereich prüfen
+        measure = self._find_measure_at(scene_pos, scene)
+        if measure:
+            self.measure_clicked.emit(measure)
+            return
 
         super().mousePressEvent(event)
+
+    def _find_measure_at(self, scene_pos, scene: NotationScene):
+        """Findet den Takt unter der Scene-Position."""
+        x = scene_pos.x()
+        for renderer in scene.measure_renderers:
+            if renderer.x_offset <= x < renderer.x_offset + renderer.width:
+                return renderer.measure
+        return None

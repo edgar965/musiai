@@ -88,12 +88,13 @@ class AppController:
         # --- Status ---
         self.signal_bus.status_message.connect(self.main_window.status_bar.set_message)
 
-        # --- Selection: Note, Schlüssel, Taktart ---
+        # --- Selection ---
         view = self.main_window.notation_view
         view.note_clicked.connect(self.edit_controller.select_note)
-        view.clef_clicked.connect(lambda: props.show_clef())
-        view.time_signature_clicked.connect(self._on_ts_clicked)
-        self.signal_bus.note_selected.connect(props.show_note)
+        view.measure_clicked.connect(self._on_measure_clicked)
+        view.copy_requested.connect(self.edit_controller.copy)
+        view.paste_requested.connect(self.edit_controller.paste)
+        self.signal_bus.note_selected.connect(self._on_note_selected)
         self.signal_bus.notes_deselected.connect(props.clear)
 
         # --- Properties → Edit ---
@@ -185,6 +186,22 @@ class AppController:
             self.edit_controller.change_cent_offset(
                 note.expression.cent_offset, glide_type
             )
+
+    def _on_note_selected(self, note) -> None:
+        """Note ausgewählt → Properties Panel anzeigen."""
+        if note:
+            self.main_window.properties_panel.show_note(note)
+
+    def _on_measure_clicked(self, measure) -> None:
+        """Klick in Takt-Bereich → Takt selektieren, Properties zeigen."""
+        self.edit_controller.select_measure(measure)
+        tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
+        self.main_window.properties_panel.show_time_signature(
+            measure.time_signature, tempo
+        )
+        self.signal_bus.status_message.emit(
+            f"Takt {measure.number} ausgewählt ({len(measure.notes)} Noten)"
+        )
 
     def _on_note_changed(self, note) -> None:
         """Note wurde geändert → Panel updaten falls selektiert."""

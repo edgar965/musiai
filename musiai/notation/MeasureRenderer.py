@@ -69,13 +69,14 @@ class MeasureRenderer:
         self._draw_notes(scene)
 
     def _draw_clef(self, scene: QGraphicsScene, sh: float) -> None:
-        """Violinschlüssel - großes Unicode-Zeichen, sauber zentriert."""
+        """Violinschlüssel - ragt über und unter die Notenlinien hinaus."""
         clef = scene.addText("𝄞")
-        clef.setFont(QFont("Segoe UI Symbol", 30))
+        # Größe 42: Schlüssel ragt deutlich über die 5 Linien hinaus
+        clef.setFont(QFont("Segoe UI Symbol", 42))
         clef.setDefaultTextColor(QColor(30, 30, 60))
-        # Positionierung: linksbündig im Header, vertikal auf Notenlinien zentriert
-        # Das Unicode-Zeichen hat viel Whitespace, daher Offset-Korrektur
-        clef.setPos(self.x_offset + 2, self.center_y - sh - 14)
+        # Y-Offset: Schlüssel-Mitte sitzt auf der 2. Linie (G-Linie),
+        # ragt oben über die 5. Linie und unten unter die 1. Linie
+        clef.setPos(self.x_offset - 2, self.center_y - sh - 24)
         clef.setZValue(3)
         self._items.append(clef)
 
