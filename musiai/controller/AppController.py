@@ -51,7 +51,8 @@ class AppController:
             self.playback_engine.transport, self.signal_bus,
         )
 
-        self._tempo_target_measure = None  # Welcher Takt wird gerade editiert
+        self._tempo_target_measure = None
+        self._detection_engine = "demucs+pyin"  # Default: beste verfügbare
         self._connect_signals()
         logger.info("AppController initialisiert")
 
@@ -88,6 +89,9 @@ class AppController:
 
         # --- MIDI Device ---
         toolbar.midi_device_clicked.connect(self._show_midi_dialog)
+
+        # --- Einstellungen ---
+        self.main_window._settings_action.triggered.connect(self._show_settings)
 
         # --- Audio Backend ---
         self.main_window._backend_gm_action.triggered.connect(
@@ -259,6 +263,16 @@ class AppController:
             if self.playback_engine.connect_midi_port(port_id):
                 self.main_window._backend_gm_action.setChecked(False)
                 self.signal_bus.status_message.emit(f"MIDI-Port: {choice}")
+
+    def _show_settings(self) -> None:
+        from musiai.ui.SettingsDialog import SettingsDialog
+        dialog = SettingsDialog(self.main_window)
+        # Aktuelle Engine vorselektieren
+        if dialog._engines.get(self._detection_engine):
+            dialog._engines[self._detection_engine].setChecked(True)
+        if dialog.exec():
+            self._detection_engine = dialog.selected_engine
+            logger.info(f"Erkennungs-Engine: {self._detection_engine}")
 
     def _show_midi_dialog(self) -> None:
         dialog = MidiDeviceDialog(self.midi_keyboard, self.main_window)
@@ -518,91 +532,109 @@ class AppController:
         self.signal_bus.status_message.emit(f"Stimme '{name}' gelöscht")
 
     def _on_part_detect(self, part_idx: int) -> None:
-        """Noten aus Audio erkennen und als neue Stimme hinzufügen."""
+        """Noten aus Audio erkennen mit gewählter Engine."""
         piece = self.notation_scene.piece
         if not piece or part_idx >= len(piece.parts):
             return
         part = piece.parts[part_idx]
-        if not part.audio_track or not part.audio_track.blocks:
+        if not part.audio_track or not part.audio_track.file_path:
             self.signal_bus.status_message.emit("Keine Audio-Daten vorhanden")
             return
 
-        self.signal_bus.status_message.emit("Erkenne Noten... (kann dauern)")
-
-        # Sanduhr-Cursor setzen
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QApplication
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        QApplication.processEvents()  # UI sofort aktualisieren
+        QApplication.processEvents()
 
+        engine = self._detection_engine
+        self.signal_bus.status_message.emit(f"Erkenne Noten ({engine})...")
+        QApplication.processEvents()
+
+        try:
+            if engine == "demucs+pyin":
+                self._detect_demucs(part, piece)
+            else:
+                self._detect_pyin(part, piece)
+        except Exception as e:
+            logger.error(f"Erkennung fehlgeschlagen: {e}", exc_info=True)
+            self.signal_bus.status_message.emit(f"Fehler: {e}")
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def _detect_pyin(self, part, piece) -> None:
+        """Monophone Erkennung mit pyin."""
         from musiai.audio.PitchDetector import PitchDetector
+        import numpy as np, librosa
+
+        all_samples = np.concatenate([b.samples for b in part.audio_track.blocks])
+        sr = part.audio_track.sr
+        if len(all_samples) > sr * 30:
+            all_samples = all_samples[:sr * 30]
+        if sr != 22050:
+            all_samples = librosa.resample(all_samples, orig_sr=sr, target_sr=22050)
+            sr = 22050
+
+        detector = PitchDetector(piece.initial_tempo)
+        notes = detector.detect(all_samples, sr)
+        if notes:
+            self._add_detected_part(piece, f"Erkannt: {part.name}", notes)
+        else:
+            self.signal_bus.status_message.emit("Keine Noten erkannt")
+
+    def _detect_demucs(self, part, piece) -> None:
+        """Polyphone Erkennung: demucs trennt → pyin pro Stimme."""
+        from musiai.audio.DemucsDetector import DemucsDetector
+
+        detector = DemucsDetector(
+            tempo_bpm=piece.initial_tempo, beats_per_measure=4.0
+        )
+        results = detector.detect(part.audio_track.file_path)
+
+        if not results:
+            self.signal_bus.status_message.emit("Keine Noten erkannt")
+            return
+
+        total = 0
+        for stem_name, notes in results.items():
+            self._add_detected_part(
+                piece, f"{stem_name}: {part.name}", notes
+            )
+            total += len(notes)
+
+        self.notation_scene.refresh()
+        self.signal_bus.status_message.emit(
+            f"{total} Noten in {len(results)} Stimmen erkannt"
+        )
+
+    def _add_detected_part(self, piece, name: str,
+                           notes_data: list[dict]) -> None:
+        """Erkannte Noten als neue Stimme hinzufügen."""
         from musiai.model.Part import Part
         from musiai.model.Measure import Measure
         from musiai.model.Note import Note
         from musiai.model.Expression import Expression
         from musiai.model.TimeSignature import TimeSignature
-        import numpy as np
 
-        # Audio zusammenfügen (max 30s für Performance)
-        all_samples = np.concatenate([b.samples for b in part.audio_track.blocks])
-        sr = part.audio_track.sr
-        max_samples = sr * 30  # Max 30 Sekunden
-        if len(all_samples) > max_samples:
-            all_samples = all_samples[:max_samples]
-            logger.info(f"Audio auf 30s begrenzt für Erkennung")
-
-        # pyin braucht sr=22050 für gute Performance
-        import librosa
-        if sr != 22050:
-            all_samples = librosa.resample(all_samples, orig_sr=sr, target_sr=22050)
-            sr = 22050
-
-        try:
-            detector = PitchDetector(tempo_bpm=piece.initial_tempo)
-            notes_data = detector.detect(all_samples, sr)
-        except Exception as e:
-            QApplication.restoreOverrideCursor()
-            logger.error(f"Pitch Detection fehlgeschlagen: {e}", exc_info=True)
-            self.signal_bus.status_message.emit(f"Erkennung fehlgeschlagen: {e}")
-            return
-
-        if not notes_data:
-            QApplication.restoreOverrideCursor()
-            self.signal_bus.status_message.emit("Keine Noten erkannt")
-            return
-
-        # Neue Stimme mit erkannten Noten
-        new_part = Part(name=f"Erkannt: {part.name}", channel=len(piece.parts))
+        new_part = Part(name=name, channel=min(len(piece.parts), 15))
         ts = TimeSignature(4, 4)
-        beats_per_measure = ts.beats_per_measure()
+        bpm = ts.beats_per_measure()
 
-        # Noten in Takte aufteilen
         max_beat = max(n["start_beat"] + n["duration_beats"] for n in notes_data)
-        n_measures = max(1, int(max_beat / beats_per_measure) + 1)
-
+        n_measures = max(1, int(max_beat / bpm) + 1)
         for i in range(n_measures):
             new_part.add_measure(Measure(i + 1, ts))
 
         for nd in notes_data:
-            measure_idx = min(int(nd["start_beat"] / beats_per_measure), n_measures - 1)
-            local_beat = nd["start_beat"] - measure_idx * beats_per_measure
-            expr = Expression(
-                velocity=nd["velocity"],
-                cent_offset=nd["cent_offset"],
-            )
-            note = Note(
-                pitch=nd["pitch"],
-                start_beat=local_beat,
-                duration_beats=nd["duration_beats"],
-                expression=expr,
-            )
-            new_part.measures[measure_idx].add_note(note)
+            m_idx = min(int(nd["start_beat"] / bpm), n_measures - 1)
+            local = nd["start_beat"] - m_idx * bpm
+            expr = Expression(velocity=nd["velocity"], cent_offset=nd["cent_offset"])
+            note = Note(nd["pitch"], local, nd["duration_beats"], expr)
+            new_part.measures[m_idx].add_note(note)
 
         piece.add_part(new_part)
         self.notation_scene.refresh()
-        QApplication.restoreOverrideCursor()
         self.signal_bus.status_message.emit(
-            f"{len(notes_data)} Noten erkannt → Stimme '{new_part.name}'"
+            f"{len(notes_data)} Noten → '{name}'"
         )
 
     def _on_part_label_clicked(self, part_idx: int) -> None:

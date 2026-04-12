@@ -104,6 +104,10 @@ class MainWindow(QMainWindow):
         self._play_pause_action.setShortcut("Space")
         transport_menu.addAction("Stop", self.toolbar.stop_clicked.emit, "Escape")
 
+        # Tools-Menü
+        tools_menu = menu_bar.addMenu("&Tools")
+        self._settings_action = tools_menu.addAction("Einstellungen...")
+
         # Hilfe-Menü
         help_menu = menu_bar.addMenu("&Hilfe")
         help_menu.addAction("Info", self._show_about)
