@@ -89,6 +89,31 @@ class NotationScene(QGraphicsScene):
     def hide_playhead(self) -> None:
         self.playhead.hide()
 
+    def highlight_measure(self, measure) -> None:
+        """Takt visuell hervorheben mit blauem Hintergrund."""
+        self.clear_measure_highlight()
+        from PySide6.QtWidgets import QGraphicsRectItem
+        from PySide6.QtGui import QBrush
+        from musiai.util.Constants import STAFF_LINE_SPACING
+        for renderer in self.measure_renderers:
+            if renderer.measure is measure:
+                sh = 2 * STAFF_LINE_SPACING + 6
+                rect = QGraphicsRectItem(
+                    renderer.x_offset, renderer.center_y - sh,
+                    renderer.width, sh * 2
+                )
+                rect.setBrush(QBrush(QColor(0, 100, 255, 25)))
+                rect.setPen(QPen(QColor(0, 100, 255, 80), 1.5))
+                rect.setZValue(-1)
+                self.addItem(rect)
+                self._measure_highlight = rect
+                return
+
+    def clear_measure_highlight(self) -> None:
+        if hasattr(self, '_measure_highlight') and self._measure_highlight:
+            self.removeItem(self._measure_highlight)
+            self._measure_highlight = None
+
     def get_note_item_at(self, scene_pos) -> NoteItem | None:
         """NoteItem unter einer Scene-Position finden."""
         for item in self.items(scene_pos):

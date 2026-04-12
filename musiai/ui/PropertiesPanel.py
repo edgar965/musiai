@@ -21,6 +21,7 @@ class PropertiesPanel(QDockWidget):
     glide_type_changed = Signal(str)
     time_sig_changed = Signal(int, int)
     tempo_changed = Signal(float)
+    measure_duration_changed = Signal(float)  # deviation 0.7-1.3
 
     def __init__(self):
         super().__init__("Eigenschaften")
@@ -129,6 +130,22 @@ class PropertiesPanel(QDockWidget):
         self._tempo_name.setStyleSheet("color: #2a7a2a; font-weight: bold;")
         tempo_lay.addRow("Bezeichnung:", self._tempo_name)
         layout.addWidget(tempo_group)
+
+        # Taktlänge-Abweichung
+        dur_group = QGroupBox("Taktlänge")
+        dur_lay = QFormLayout(dur_group)
+        self._measure_dur_slider = QSlider(Qt.Orientation.Horizontal)
+        self._measure_dur_slider.setRange(70, 130)
+        self._measure_dur_slider.setValue(100)
+        self._measure_dur_slider.valueChanged.connect(self._on_measure_dur_changed)
+        self._measure_dur_label = QLabel("100% (Standard)")
+        self._measure_dur_label.setStyleSheet("font-weight: bold;")
+        dur_lay.addRow(self._measure_dur_label, self._measure_dur_slider)
+        self._measure_dur_info = QLabel("Schwarz = Standard\nGelb = kürzer, Blau = länger")
+        self._measure_dur_info.setStyleSheet("color: #888; font-size: 9px;")
+        dur_lay.addRow(self._measure_dur_info)
+        layout.addWidget(dur_group)
+
         return page
 
     def _build_clef_page(self) -> QWidget:
@@ -161,7 +178,8 @@ class PropertiesPanel(QDockWidget):
         self._stack.setCurrentIndex(1)
         self._updating = False
 
-    def show_time_signature(self, ts: TimeSignature, tempo: float = 120) -> None:
+    def show_time_signature(self, ts: TimeSignature, tempo: float = 120,
+                            duration_deviation: float = 1.0) -> None:
         self._updating = True
         self._type_label.setText(f"Takt: {ts}")
         self._ts_num.setValue(ts.numerator)
@@ -170,6 +188,10 @@ class PropertiesPanel(QDockWidget):
         self._tempo_spin.setValue(int(tempo))
         from musiai.notation.TempoMarking import TempoMarking
         self._tempo_name.setText(TempoMarking.from_bpm(tempo))
+        # Taktlänge
+        pct = int(duration_deviation * 100)
+        self._measure_dur_slider.setValue(pct)
+        self._update_measure_dur_label(pct)
         self._stack.setCurrentIndex(2)
         self._updating = False
 
@@ -227,3 +249,20 @@ class PropertiesPanel(QDockWidget):
         from musiai.notation.TempoMarking import TempoMarking
         self._tempo_name.setText(TempoMarking.from_bpm(float(value)))
         self.tempo_changed.emit(float(value))
+
+    def _on_measure_dur_changed(self, value: int) -> None:
+        if self._updating:
+            return
+        self._update_measure_dur_label(value)
+        self.measure_duration_changed.emit(value / 100.0)
+
+    def _update_measure_dur_label(self, pct: int) -> None:
+        if pct < 95:
+            self._measure_dur_label.setText(f"{pct}% (kürzer)")
+            self._measure_dur_label.setStyleSheet("font-weight: bold; color: #b08800;")
+        elif pct > 105:
+            self._measure_dur_label.setText(f"{pct}% (länger)")
+            self._measure_dur_label.setStyleSheet("font-weight: bold; color: #2050b0;")
+        else:
+            self._measure_dur_label.setText(f"{pct}% (Standard)")
+            self._measure_dur_label.setStyleSheet("font-weight: bold; color: #333;")

@@ -34,15 +34,17 @@ class NoteItem(QGraphicsEllipseItem):
         self.update_from_note()
 
     def _update_stem(self) -> None:
-        """Hals: ab 3. Linie (B4=71) nach unten, darunter nach oben."""
-        # Standard-Regel: Noten auf/über der Mittellinie (3. Linie = B4)
-        # bekommen den Hals nach unten, darunter nach oben
-        if self.note.pitch >= 71:  # B4 = 3. Linie von oben
-            # Hals nach unten (links vom Kopf)
-            self._stem.setLine(-NOTE_RADIUS + 1, 0, -NOTE_RADIUS + 1, STEM_LENGTH)
-        else:
+        """Notenhals-Richtung nach Standard-Regel:
+
+        Noten UNTER der 3. Notenlinie (Mittellinie, B4=71): Hals nach OBEN
+        Noten AUF oder ÜBER der 3. Notenlinie: Hals nach UNTEN
+        """
+        if self.note.pitch < 71:  # Unter B4 (3. Linie)
             # Hals nach oben (rechts vom Kopf)
             self._stem.setLine(NOTE_RADIUS - 1, 0, NOTE_RADIUS - 1, -STEM_LENGTH)
+        else:
+            # Hals nach unten (links vom Kopf)
+            self._stem.setLine(-NOTE_RADIUS + 1, 0, -NOTE_RADIUS + 1, STEM_LENGTH)
 
     def update_from_note(self) -> None:
         """Farbe aus Note-Daten aktualisieren."""
@@ -59,14 +61,18 @@ class NoteItem(QGraphicsEllipseItem):
     def set_selected_visual(self, selected: bool) -> None:
         self._selected = selected
         if selected:
-            self.setPen(QPen(QColor(255, 255, 255), 2))
+            self.setPen(QPen(QColor(0, 120, 255), 2.5))
         else:
             self.setPen(QPen(Qt.PenStyle.NoPen))
 
     def hoverEnterEvent(self, event):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        if not self._selected:
+            self.setPen(QPen(QColor(100, 180, 255, 150), 1.5))
         super().hoverEnterEvent(event)
 
     def hoverLeaveEvent(self, event):
         self.unsetCursor()
+        if not self._selected:
+            self.setPen(QPen(Qt.PenStyle.NoPen))
         super().hoverLeaveEvent(event)

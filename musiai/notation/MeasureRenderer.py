@@ -39,20 +39,47 @@ class MeasureRenderer:
 
     @property
     def width(self) -> float:
-        return self.measure.duration_beats * PIXELS_PER_BEAT + self.header_width
+        return self.measure.effective_duration_beats * PIXELS_PER_BEAT + self.header_width
+
+    def _staff_line_color(self) -> QColor:
+        """Notenlinien-Farbe basierend auf Takt-Dauer-Abweichung.
+
+        Standard (1.0): Dunkelschwarz
+        Kürzer (<1.0): Richtung Gelb
+        Länger (>1.0): Richtung Blau
+        """
+        dev = self.measure.duration_deviation
+        if abs(dev - 1.0) < 0.01:
+            return QColor(40, 40, 50)  # Dunkelschwarz = Standard
+
+        if dev < 1.0:
+            # Kürzer → Gelb-Töne
+            t = min((1.0 - dev) / 0.3, 1.0)
+            r = int(40 + 160 * t)
+            g = int(40 + 140 * t)
+            b = int(50 - 30 * t)
+            return QColor(r, g, b)
+        else:
+            # Länger → Blau-Töne
+            t = min((dev - 1.0) / 0.3, 1.0)
+            r = int(40 - 20 * t)
+            g = int(40 + 40 * t)
+            b = int(50 + 180 * t)
+            return QColor(r, g, b)
 
     def render(self, scene: QGraphicsScene) -> None:
         sh = 2 * STAFF_LINE_SPACING  # staff_half
+        line_color = self._staff_line_color()
 
-        # Notenlinien
+        # Notenlinien (eingefärbt nach Taktlänge)
         lines = StaffRenderer.draw_staff_lines(
-            scene, self.x_offset, self.width, self.center_y
+            scene, self.x_offset, self.width, self.center_y, line_color
         )
         self._items.extend(lines)
 
         # Taktstrich links
         self._add_line(scene, self.x_offset, self.center_y - sh,
-                       self.x_offset, self.center_y + sh, 1.5)
+                       self.x_offset, self.center_y + sh, 1.5, line_color)
 
         if self.show_clef:
             self._draw_clef(scene, sh)

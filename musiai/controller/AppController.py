@@ -106,6 +106,7 @@ class AppController:
         )
         props.duration_changed.connect(self.edit_controller.change_duration_deviation)
         props.glide_type_changed.connect(self._on_glide_type_changed)
+        props.measure_duration_changed.connect(self._on_measure_duration_changed)
 
         # --- Delete ---
         self.main_window._delete_action.triggered.connect(
@@ -194,14 +195,24 @@ class AppController:
 
     def _on_measure_clicked(self, measure) -> None:
         """Klick in Takt-Bereich → Takt selektieren, Properties zeigen."""
+        self.notation_scene.highlight_measure(measure)
         self.edit_controller.select_measure(measure)
         tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
         self.main_window.properties_panel.show_time_signature(
-            measure.time_signature, tempo
+            measure.time_signature, tempo, measure.duration_deviation
         )
         self.signal_bus.status_message.emit(
             f"Takt {measure.number} ausgewählt ({len(measure.notes)} Noten)"
         )
+
+    def _on_measure_duration_changed(self, deviation: float) -> None:
+        """Taktlänge geändert → Model updaten und neu rendern."""
+        measure = self.edit_controller.selected_measure
+        if not measure:
+            return
+        measure.duration_deviation = deviation
+        self.notation_scene.refresh()
+        logger.debug(f"Takt {measure.number} Dauer → {deviation:.0%}")
 
     def _on_note_changed(self, note) -> None:
         """Note wurde geändert → Panel updaten falls selektiert."""

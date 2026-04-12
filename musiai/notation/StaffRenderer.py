@@ -17,10 +17,11 @@ class StaffRenderer:
         x_start: float,
         width: float,
         center_y: float,
+        color: QColor | None = None,
     ) -> list[QGraphicsLineItem]:
         """Zeichnet 5 Notenlinien zentriert um center_y."""
         lines = []
-        pen = QPen(QColor(*COLOR_STAFF_LINE), 1)
+        pen = QPen(color or QColor(*COLOR_STAFF_LINE), 1)
         half = (STAFF_LINE_COUNT - 1) / 2.0
 
         for i in range(STAFF_LINE_COUNT):

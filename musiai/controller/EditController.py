@@ -195,7 +195,7 @@ class EditController:
         logger.info(f"{len(self._clipboard_notes)} Noten eingefügt in Takt {target_measure.number}")
 
     def _paste_measures(self) -> None:
-        """Takte einfügen nach dem ausgewählten Takt."""
+        """Takte einfügen VOR dem ausgewählten Takt."""
         if not self._clipboard_measures or not self.scene.piece:
             return
 
@@ -209,7 +209,7 @@ class EditController:
         if self._selected_measure:
             for i, m in enumerate(part.measures):
                 if m is self._selected_measure:
-                    insert_idx = i + 1
+                    insert_idx = i  # VOR dem selektierten
                     break
 
         for measure_dict in self._clipboard_measures:
