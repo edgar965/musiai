@@ -1,0 +1,24 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36121.58
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "MusiAI", "MusiAI.pyproj", "{DA8FAE38-4F5A-4D0A-B4E5-6A3C8A1B2D3E}"
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "MusiAI.Tests", "tests\MusiAI.Tests.pyproj", "{AB9FAE38-5F6A-5E1B-C5F6-7B4D9B2C3E4F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DA8FAE38-4F5A-4D0A-B4E5-6A3C8A1B2D3E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DA8FAE38-4F5A-4D0A-B4E5-6A3C8A1B2D3E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB9FAE38-5F6A-5E1B-C5F6-7B4D9B2C3E4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB9FAE38-5F6A-5E1B-C5F6-7B4D9B2C3E4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN"
+  "http://www.musicxml.org/dtds/partwise.dtd">
+<!--
+  MusicXML Beispiel: Expressives Klavierstück
+  ============================================
+  Zeigt: Dynamik, Mikrotöne, Tempo-Änderungen, Artikulation
+  Kann geöffnet werden mit: MuseScore, Finale, Dorico, Sibelius
+-->
+<score-partwise version="4.0">
+  <work>
+    <work-title>MusiAI - Expressives Beispiel</work-title>
+  </work>
+  <identification>
+    <creator type="composer">MusiAI Recherche</creator>
+  </identification>
+
+  <part-list>
+    <score-part id="P1">
+      <part-name>Klavier</part-name>
+    </score-part>
+  </part-list>
+
+  <part id="P1">
+
+    <!-- === TAKT 1: Leise beginnen, crescendo === -->
+    <measure number="1">
+      <attributes>
+        <divisions>4</divisions>          <!-- 4 Einheiten pro Viertelnote -->
+        <key><fifths>0</fifths></key>     <!-- C-Dur -->
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+
+      <!-- Tempo: 72 BPM (langsam, expressiv) -->
+      <direction placement="above">
+        <direction-type><metronome>
+          <beat-unit>quarter</beat-unit>
+          <per-minute>72</per-minute>
+        </metronome></direction-type>
+        <sound tempo="72"/>
+      </direction>
+
+      <!-- Dynamik: piano (leise) -->
+      <direction placement="below">
+        <direction-type><dynamics><p/></dynamics></direction-type>
+        <sound dynamics="40"/>            <!-- 40 von 127 -->
+      </direction>
+
+      <!-- Note 1: C4, leise, legato -->
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+        <notations>
+          <slur type="start"/>            <!-- Bindebogen Anfang -->
+          <articulations><tenuto/></articulations>
+        </notations>
+      </note>
+
+      <!-- Note 2: E4, etwas lauter -->
+      <note>
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+        <dynamics>
+          <other-dynamics>mp</other-dynamics>
+        </dynamics>
+      </note>
+
+      <!-- Note 3: G4, Viertelton höher (Mikrotöne!) -->
+      <note>
+        <pitch>
+          <step>G</step>
+          <alter>0.5</alter>              <!-- +50 Cent = Viertelton hoch! -->
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+        <accidental>quarter-sharp</accidental>
+      </note>
+
+      <!-- Note 4: C5, forte -->
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+        <notations>
+          <slur type="stop"/>             <!-- Bindebogen Ende -->
+          <articulations><accent/></articulations>
+        </notations>
+      </note>
+
+      <!-- Crescendo über den ganzen Takt -->
+      <direction>
+        <direction-type><wedge type="crescendo"/></direction-type>
+      </direction>
+    </measure>
+
+    <!-- === TAKT 2: Laut, dann ritardando === -->
+    <measure number="2">
+
+      <!-- Dynamik: fortissimo -->
+      <direction placement="below">
+        <direction-type><dynamics><ff/></dynamics></direction-type>
+        <sound dynamics="112"/>           <!-- 112 von 127 -->
+      </direction>
+
+      <!-- Akkord: C-E-G gleichzeitig, sehr laut -->
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>8</duration>
+        <type>half</type>
+        <notations>
+          <articulations><accent/></articulations>
+        </notations>
+      </note>
+      <note>
+        <chord/>                          <!-- Gleichzeitig mit vorheriger Note -->
+        <pitch><step>E</step><octave>4</octave></pitch>
+        <duration>8</duration>
+        <type>half</type>
+      </note>
+      <note>
+        <chord/>
+        <pitch><step>G</step><octave>4</octave></pitch>
+        <duration>8</duration>
+        <type>half</type>
+      </note>
+
+      <!-- Tempo verlangsamen: ritardando auf 52 BPM -->
+      <direction placement="above">
+        <direction-type><words>rit.</words></direction-type>
+        <sound tempo="52"/>
+      </direction>
+
+      <!-- Leise ausklingen -->
+      <direction placement="below">
+        <direction-type><dynamics><pp/></dynamics></direction-type>
+        <sound dynamics="20"/>
+      </direction>
+
+      <note>
+        <pitch><step>C</step><octave>5</octave></pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+      </note>
+
+      <!-- Fermate (Pause mit Halt) -->
+      <note>
+        <rest/>
+        <duration>4</duration>
+        <type>quarter</type>
+        <notations><fermata type="upright"/></notations>
+      </note>
+    </measure>
+
+  </part>
+</score-partwise>

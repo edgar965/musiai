@@ -1,0 +1,16 @@
+pythonENV/
+__pycache__/
+*.pyc
+*.pyo
+logs/
+media/projects/*.musiai
+media/music/test_*.mid
+*.egg-info/
+dist/
+build/
+.vs/
+*.suo
+*.user
+~$*
+~WRL*
+*.tmp

@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>MusiAI - Expressive Notation Konzept</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    padding: 30px;
+    line-height: 1.6;
+  }
+
+  h1 { color: #fff; font-size: 28px; margin-bottom: 5px; }
+  h2 { color: #8ab4f8; font-size: 20px; margin: 30px 0 15px; border-bottom: 1px solid #333; padding-bottom: 8px; }
+  h3 { color: #bb86fc; font-size: 16px; margin: 20px 0 10px; }
+  p, li { color: #b0b0b0; margin-bottom: 8px; }
+  .subtitle { color: #888; font-size: 14px; margin-bottom: 30px; }
+
+  /* ========== NOTATION DISPLAY ========== */
+  .notation-container {
+    background: #1a1a24;
+    border-radius: 12px;
+    padding: 25px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+
+  .staff {
+    position: relative;
+    height: 200px;
+    margin: 40px 20px 60px;
+  }
+
+  .staff-lines {
+    position: absolute;
+    top: 40px;
+    left: 0;
+    right: 0;
+    height: 80px;
+  }
+
+  .staff-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #444;
+  }
+
+  .staff-line:nth-child(1) { top: 0; }
+  .staff-line:nth-child(2) { top: 20px; }
+  .staff-line:nth-child(3) { top: 40px; }
+  .staff-line:nth-child(4) { top: 60px; }
+  .staff-line:nth-child(5) { top: 80px; }
+
+  .note-group {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .note-group:hover { transform: scale(1.1); }
+  .note-group:hover .note-tooltip { opacity: 1; transform: translateY(0); }
+
+  .note-head {
+    width: 18px;
+    height: 14px;
+    border-radius: 50%;
+    transform: rotate(-15deg);
+    position: relative;
+    z-index: 2;
+  }
+
+  .note-stem {
+    width: 2px;
+    height: 40px;
+    position: absolute;
+    top: -33px;
+    left: 15px;
+  }
+
+  /* Lautstärke-Farben */
+  .vel-pp  { background: #2d5aa0; box-shadow: 0 0 8px #2d5aa055; }
+  .vel-p   { background: #4a90d9; box-shadow: 0 0 8px #4a90d955; }
+  .vel-mp  { background: #5bb974; box-shadow: 0 0 10px #5bb97455; }
+  .vel-mf  { background: #b8cc44; box-shadow: 0 0 10px #b8cc4455; }
+  .vel-f   { background: #f0a030; box-shadow: 0 0 12px #f0a03055; }
+  .vel-ff  { background: #e84040; box-shadow: 0 0 15px #e8404055; }
+
+  .stem-pp  { background: #2d5aa0; }
+  .stem-p   { background: #4a90d9; }
+  .stem-mp  { background: #5bb974; }
+  .stem-mf  { background: #b8cc44; }
+  .stem-f   { background: #f0a030; }
+  .stem-ff  { background: #e84040; }
+
+  /* Micro-Pitch Pfeil */
+  .pitch-arrow {
+    font-size: 10px;
+    position: absolute;
+    top: -48px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-weight: bold;
+  }
+  .pitch-up { color: #ff6b9d; }
+  .pitch-down { color: #64b5f6; }
+  .pitch-neutral { color: #555; }
+
+  /* Dauer-Balken unter der Note */
+  .duration-bar {
+    height: 4px;
+    border-radius: 2px;
+    margin-top: 8px;
+    position: relative;
+  }
+  .duration-bar .extra {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    border-radius: 0 2px 2px 0;
+    opacity: 0.5;
+  }
+
+  /* Tooltip */
+  .note-tooltip {
+    position: absolute;
+    bottom: -75px;
+    left: 50%;
+    transform: translateX(-50%) translateY(5px);
+    background: #2a2a3a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: all 0.2s;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .note-tooltip .val { color: #fff; font-weight: bold; }
+
+  /* ========== LEGENDE ========== */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 15px 0;
+    padding: 15px;
+    background: #151520;
+    border-radius: 8px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .legend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+  }
+
+  /* ========== PIANO ROLL ========== */
+  .pianoroll {
+    background: #12121a;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    overflow-x: auto;
+  }
+
+  .pr-grid {
+    display: grid;
+    grid-template-columns: 60px repeat(16, 1fr);
+    gap: 1px;
+    min-width: 700px;
+  }
+
+  .pr-label {
+    background: #1a1a28;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: #888;
+    display: flex;
+    align-items: center;
+    height: 28px;
+    border-right: 2px solid #333;
+  }
+  .pr-label.black-key { background: #111118; color: #666; }
+
+  .pr-cell {
+    background: #1a1a24;
+    height: 28px;
+    border-right: 1px solid #1f1f2a;
+    position: relative;
+  }
+  .pr-cell.beat { border-right: 1px solid #2a2a3a; }
+  .pr-cell.bar  { border-right: 2px solid #3a3a4a; }
+
+  .pr-note {
+    position: absolute;
+    top: 2px;
+    height: 24px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: rgba(255,255,255,0.8);
+    font-weight: bold;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .pr-note:hover { filter: brightness(1.3); }
+
+  /* ========== TIMELINE ========== */
+  .timeline {
+    background: #12121a;
+    border-radius: 12px;
+    padding: 25px;
+    margin: 20px 0;
+  }
+
+  .tl-track {
+    margin: 15px 0;
+  }
+
+  .tl-track-header {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .tl-bar {
+    height: 40px;
+    background: #1a1a28;
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tl-note {
+    position: absolute;
+    top: 4px;
+    height: 32px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.9);
+    font-weight: 500;
+  }
+
+  .tl-cents {
+    position: absolute;
+    top: -2px;
+    right: 3px;
+    font-size: 8px;
+    font-weight: bold;
+    opacity: 0.8;
+  }
+
+  /* ========== CONTROLLER LANES ========== */
+  .ctrl-lane {
+    background: #1a1a28;
+    border-radius: 6px;
+    height: 60px;
+    position: relative;
+    margin: 5px 0;
+    overflow: hidden;
+  }
+
+  .ctrl-bar {
+    position: absolute;
+    bottom: 0;
+    width: 20px;
+    border-radius: 3px 3px 0 0;
+    transition: height 0.3s;
+  }
+
+  .ctrl-label {
+    position: absolute;
+    top: 3px;
+    left: 8px;
+    font-size: 10px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .ctrl-line {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: #333;
+    z-index: 0;
+  }
+
+  .ctrl-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+  }
+
+  /* ========== WORKFLOW ========== */
+  .workflow {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin: 20px 0;
+  }
+
+  .wf-step {
+    background: #1a1a28;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 20px;
+    flex: 1;
+    min-width: 200px;
+    transition: border-color 0.3s;
+  }
+  .wf-step:hover { border-color: #8ab4f8; }
+
+  .wf-num {
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    text-align: center;
+    background: #8ab4f8;
+    color: #000;
+    border-radius: 50%;
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .wf-title {
+    color: #fff;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .wf-desc {
+    font-size: 13px;
+    color: #888;
+  }
+
+  /* ========== COMPARISON TABLE ========== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 13px;
+  }
+  th {
+    background: #1a1a28;
+    color: #8ab4f8;
+    padding: 10px 15px;
+    text-align: left;
+    border-bottom: 2px solid #333;
+  }
+  td {
+    padding: 8px 15px;
+    border-bottom: 1px solid #222;
+    color: #b0b0b0;
+  }
+  tr:hover td { background: #1a1a2400; }
+  .yes { color: #5bb974; }
+  .no { color: #e84040; }
+  .partial { color: #f0a030; }
+
+  /* ========== CONCEPT UI ========== */
+  .concept-ui {
+    background: #111118;
+    border: 1px solid #333;
+    border-radius: 12px;
+    overflow: hidden;
+    margin: 20px 0;
+  }
+
+  .cui-toolbar {
+    background: #1a1a28;
+    padding: 10px 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border-bottom: 1px solid #333;
+  }
+
+  .cui-btn {
+    background: #2a2a3a;
+    border: 1px solid #444;
+    color: #ccc;
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .cui-btn.active { background: #8ab4f8; color: #000; border-color: #8ab4f8; }
+
+  .cui-body {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1px;
+  }
+
+  .cui-section {
+    padding: 15px 20px;
+    border-bottom: 1px solid #222;
+  }
+
+  .cui-section-title {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 10px;
+  }
+
+  .midi-hw {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    padding: 10px;
+    background: #1a1a28;
+    border-radius: 8px;
+    margin: 10px 0;
+  }
+  .midi-hw-icon {
+    font-size: 24px;
+    width: 40px;
+    text-align: center;
+  }
+  .midi-hw-label { font-size: 12px; color: #888; }
+  .midi-hw-value { font-size: 14px; color: #fff; font-weight: bold; }
+  .midi-hw-mapping { font-size: 11px; color: #bb86fc; }
+
+  /* Fader visualization */
+  .fader-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    height: 80px;
+    padding: 10px;
+  }
+  .fader {
+    width: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .fader-track {
+    width: 6px;
+    height: 60px;
+    background: #333;
+    border-radius: 3px;
+    position: relative;
+  }
+  .fader-fill {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    border-radius: 3px;
+  }
+  .fader-knob {
+    position: absolute;
+    width: 16px;
+    height: 6px;
+    background: #fff;
+    border-radius: 3px;
+    left: -5px;
+  }
+  .fader-label {
+    font-size: 9px;
+    color: #666;
+  }
+  .fader-val {
+    font-size: 10px;
+    color: #aaa;
+    font-weight: bold;
+  }
+
+  .section-divider {
+    border: none;
+    border-top: 1px solid #222;
+    margin: 40px 0;
+  }
+
+  .highlight-box {
+    background: linear-gradient(135deg, #1a1a3a, #1a2a1a);
+    border: 1px solid #3a4a3a;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+  }
+  .tag-midi { background: #2d5aa033; color: #4a90d9; }
+  .tag-audio { background: #5bb97433; color: #5bb974; }
+  .tag-notation { background: #bb86fc33; color: #bb86fc; }
+</style>
+</head>
+<body>
+
+<h1>MusiAI - Expressive Notation & Control</h1>
+<p class="subtitle">Konzept: Noten visuell lesen mit Lautstärke, Micro-Timing und Micro-Pitch</p>
+
+<!-- ==================== SECTION 1: WORKFLOW ==================== -->
+<h2>1. Workflow-Konzept</h2>
+
+<div class="workflow">
+  <div class="wf-step">
+    <div class="wf-num">1</div>
+    <div class="wf-title">Takte vorgeben</div>
+    <div class="wf-desc">
+      Taktart, Tempo, Tonart definieren.<br>
+      Strukturelle Abschnitte setzen.<br>
+      <span class="tag tag-notation">Notation</span>
+    </div>
+  </div>
+  <div class="wf-step">
+    <div class="wf-num">2</div>
+    <div class="wf-title">Noten eingeben</div>
+    <div class="wf-desc">
+      MIDI-Keyboard spielen,<br>
+      MusicXML importieren,<br>
+      oder aus Audio erkennen.<br>
+      <span class="tag tag-midi">MIDI</span> <span class="tag tag-audio">Audio</span>
+    </div>
+  </div>
+  <div class="wf-step">
+    <div class="wf-num">3</div>
+    <div class="wf-title">Expression aufnehmen</div>
+    <div class="wf-desc">
+      Beim Abspielen:<br>
+      Fader/Knob = Lautstärke pro Note<br>
+      Pitch Wheel = Cent-Verschiebung<br>
+      <span class="tag tag-midi">MIDI CC</span>
+    </div>
+  </div>
+  <div class="wf-step">
+    <div class="wf-num">4</div>
+    <div class="wf-title">Visuell lesen & editieren</div>
+    <div class="wf-desc">
+      Farbige Notation zeigt alles.<br>
+      Direkt bearbeiten per Klick.<br>
+      <span class="tag tag-notation">Visuell</span>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 2: NOTATION VIEW ==================== -->
+<h2>2. Farbige Notation - So liest du die Expression</h2>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot vel-pp"></div> pp (sehr leise)</div>
+  <div class="legend-item"><div class="legend-dot vel-p"></div> p (leise)</div>
+  <div class="legend-item"><div class="legend-dot vel-mp"></div> mp (mittelleise)</div>
+  <div class="legend-item"><div class="legend-dot vel-mf"></div> mf (mittellaut)</div>
+  <div class="legend-item"><div class="legend-dot vel-f"></div> f (laut)</div>
+  <div class="legend-item"><div class="legend-dot vel-ff"></div> ff (sehr laut)</div>
+  <div class="legend-item" style="margin-left: 20px; border-left: 1px solid #444; padding-left: 20px;">
+    <span class="pitch-up" style="font-size:14px">&#9650; +4ct</span> Tonhöhe hoch
+  </div>
+  <div class="legend-item">
+    <span class="pitch-down" style="font-size:14px">&#9660; -10ct</span> Tonhöhe runter
+  </div>
+  <div class="legend-item" style="margin-left: 20px; border-left: 1px solid #444; padding-left: 20px;">
+    Breite = Dauer
+  </div>
+</div>
+
+<div class="notation-container">
+  <p style="font-size: 12px; color: #666; margin-bottom: 5px;">Takt 1 &nbsp;&middot;&nbsp; 4/4 &nbsp;&middot;&nbsp; &#9833; = 100 BPM &nbsp;&middot;&nbsp; <em>Hover auf Noten für Details</em></p>
+
+  <div class="staff">
+    <div class="staff-lines">
+      <div class="staff-line"></div>
+      <div class="staff-line"></div>
+      <div class="staff-line"></div>
+      <div class="staff-line"></div>
+      <div class="staff-line"></div>
+    </div>
+
+    <!-- Note 1: C4, mf, exakt -->
+    <div class="note-group" style="left: 60px; top: 80px;">
+      <div class="pitch-arrow pitch-neutral">0ct</div>
+      <div class="note-head vel-mf"></div>
+      <div class="note-stem stem-mf"></div>
+      <div class="duration-bar vel-mf" style="width: 80px;"></div>
+      <div class="note-tooltip">
+        <strong>C4</strong><br>
+        Velocity: <span class="val">80</span>/127 (mf)<br>
+        Pitch: <span class="val">±0 Cent</span><br>
+        Dauer: <span class="val">100%</span> (exakt)
+      </div>
+    </div>
+
+    <!-- Note 2: E4, f, +4 cent, 1% länger -->
+    <div class="note-group" style="left: 200px; top: 60px;">
+      <div class="pitch-arrow pitch-up">&#9650; +4ct</div>
+      <div class="note-head vel-f"></div>
+      <div class="note-stem stem-f"></div>
+      <div class="duration-bar vel-f" style="width: 84px;">
+        <div class="extra" style="width: 4px; background: #f0a03088;"></div>
+      </div>
+      <div class="note-tooltip">
+        <strong>E4</strong> <span style="color:#ff6b9d">+4 Cent</span><br>
+        Velocity: <span class="val">100</span>/127 (f)<br>
+        Pitch: <span class="val">+4 Cent</span> (leicht hoch)<br>
+        Dauer: <span class="val">101%</span> (+1% länger)
+      </div>
+    </div>
+
+    <!-- Note 3: G4, p, -10 cent, 3% kürzer -->
+    <div class="note-group" style="left: 340px; top: 48px;">
+      <div class="pitch-arrow pitch-down">&#9660; -10ct</div>
+      <div class="note-head vel-p"></div>
+      <div class="note-stem stem-p"></div>
+      <div class="duration-bar vel-p" style="width: 72px;"></div>
+      <div class="note-tooltip">
+        <strong>G4</strong> <span style="color:#64b5f6">-10 Cent</span><br>
+        Velocity: <span class="val">50</span>/127 (p)<br>
+        Pitch: <span class="val">-10 Cent</span> (leicht tief)<br>
+        Dauer: <span class="val">97%</span> (-3% kürzer)
+      </div>
+    </div>
+
+    <!-- Note 4: C5, ff, +15 cent, 5% länger -->
+    <div class="note-group" style="left: 470px; top: 28px;">
+      <div class="pitch-arrow pitch-up">&#9650; +15ct</div>
+      <div class="note-head vel-ff"></div>
+      <div class="note-stem stem-ff"></div>
+      <div class="duration-bar vel-ff" style="width: 92px;">
+        <div class="extra" style="width: 12px; background: #e8404088;"></div>
+      </div>
+      <div class="note-tooltip">
+        <strong>C5</strong> <span style="color:#ff6b9d">+15 Cent</span><br>
+        Velocity: <span class="val">112</span>/127 (ff)<br>
+        Pitch: <span class="val">+15 Cent</span> (überhöht)<br>
+        Dauer: <span class="val">105%</span> (+5% länger)
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 3: PIANO ROLL ==================== -->
+<h2>3. Piano Roll View - Alles auf einen Blick</h2>
+
+<div class="pianoroll">
+  <p style="font-size: 11px; color: #555; margin-bottom: 15px;">
+    Farbe = Lautstärke &nbsp;|&nbsp; Breite = Dauer &nbsp;|&nbsp; Vertikale Position = exakte Tonhöhe (inkl. Cent)
+  </p>
+
+  <div class="pr-grid">
+    <!-- Header row -->
+    <div class="pr-label" style="color:#555; font-size:10px;">Beat</div>
+    <div class="pr-cell bar" style="font-size:10px; color:#555; padding:4px;">1</div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell beat"></div>
+    <div class="pr-cell" style="font-size:10px; color:#555; padding:4px;">2</div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell beat"></div>
+    <div class="pr-cell" style="font-size:10px; color:#555; padding:4px;">3</div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell beat"></div>
+    <div class="pr-cell" style="font-size:10px; color:#555; padding:4px;">4</div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell"></div>
+    <div class="pr-cell bar"></div>
+
+    <!-- C5 row -->
+    <div class="pr-label">C5</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell" style="position:relative;">
+      <div class="pr-note vel-ff" style="left:0; width: calc(420% + 8px); background: linear-gradient(90deg, #e84040, #e84040cc);">
+        C5 +15ct &nbsp; <span style="opacity:0.7">ff</span>
+      </div>
+    </div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- B4 row -->
+    <div class="pr-label black-key">B4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- A4 row -->
+    <div class="pr-label">A4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- G4 row -->
+    <div class="pr-label">G4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell" style="position:relative;">
+      <div class="pr-note vel-p" style="left:0; width: calc(370%); background: linear-gradient(90deg, #4a90d9, #4a90d9aa);">
+        G4 -10ct &nbsp; <span style="opacity:0.7">p</span>
+      </div>
+    </div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- F#4 row -->
+    <div class="pr-label black-key">F#4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- F4 row -->
+    <div class="pr-label">F4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- E4 row -->
+    <div class="pr-label">E4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell" style="position:relative;">
+      <div class="pr-note vel-f" style="left:0; width: calc(404%); background: linear-gradient(90deg, #f0a030, #f0a030aa);">
+        E4 +4ct &nbsp; <span style="opacity:0.7">f</span>
+      </div>
+    </div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- Eb4 row -->
+    <div class="pr-label black-key">Eb4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- D4 row -->
+    <div class="pr-label">D4</div>
+    <div class="pr-cell bar"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+
+    <!-- C4 row -->
+    <div class="pr-label">C4</div>
+    <div class="pr-cell bar" style="position:relative;">
+      <div class="pr-note vel-mf" style="left:0; width: calc(400%); background: linear-gradient(90deg, #b8cc44, #b8cc44aa);">
+        C4 &nbsp; <span style="opacity:0.7">mf</span>
+      </div>
+    </div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell beat"></div>
+    <div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell"></div><div class="pr-cell bar"></div>
+  </div>
+
+  <!-- Velocity Lane -->
+  <div style="margin-top: 15px;">
+    <div class="ctrl-lane">
+      <div class="ctrl-label">Velocity (Lautstärke)</div>
+      <div class="ctrl-bar" style="left: calc(6.25% * 1); height: 63%; background: #b8cc44;" title="C4: mf (80)"></div>
+      <div class="ctrl-bar" style="left: calc(6.25% * 5); height: 79%; background: #f0a030;" title="E4: f (100)"></div>
+      <div class="ctrl-bar" style="left: calc(6.25% * 9); height: 39%; background: #4a90d9;" title="G4: p (50)"></div>
+      <div class="ctrl-bar" style="left: calc(6.25% * 13); height: 88%; background: #e84040;" title="C5: ff (112)"></div>
+    </div>
+  </div>
+
+  <!-- Pitch Deviation Lane -->
+  <div style="margin-top: 5px;">
+    <div class="ctrl-lane">
+      <div class="ctrl-label">Pitch Offset (Cent)</div>
+      <div class="ctrl-line"></div>
+      <div class="ctrl-dot" style="left: calc(6.25% * 1 + 10px); top: 50%; background: #666;" title="C4: 0 ct"></div>
+      <div class="ctrl-dot" style="left: calc(6.25% * 5 + 10px); top: 42%; background: #ff6b9d;" title="E4: +4 ct"></div>
+      <div class="ctrl-dot" style="left: calc(6.25% * 9 + 10px); top: 62%; background: #64b5f6;" title="G4: -10 ct"></div>
+      <div class="ctrl-dot" style="left: calc(6.25% * 13 + 10px); top: 32%; background: #ff6b9d;" title="C5: +15 ct"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 4: MIDI CONTROLLER MAPPING ==================== -->
+<h2>4. MIDI-Controller Mapping beim Abspielen</h2>
+
+<p>Idee: Während das Stück abspielt, steuerst du mit deinem MIDI-Keyboard die Expression in Echtzeit:</p>
+
+<div class="concept-ui">
+  <div class="cui-toolbar">
+    <div class="cui-btn active">&#9654; Play</div>
+    <div class="cui-btn">&#9724; Stop</div>
+    <div class="cui-btn">&#9679; Record Expression</div>
+    <div class="cui-btn" style="margin-left: auto; font-size: 11px; color: #888;">Takt 1 &nbsp;|&nbsp; Beat 2.3 &nbsp;|&nbsp; 100 BPM</div>
+  </div>
+
+  <div class="cui-body">
+    <!-- MIDI Input Assignment -->
+    <div class="cui-section">
+      <div class="cui-section-title">MIDI Controller Zuweisung</div>
+
+      <div class="midi-hw">
+        <div class="midi-hw-icon">&#127929;</div>
+        <div>
+          <div class="midi-hw-label">Fader / Knob 1</div>
+          <div class="midi-hw-value">CC 1 (Modulation) &rarr; Velocity der aktuellen Note</div>
+          <div class="midi-hw-mapping">Fader hoch = lauter, runter = leiser. Wird auf die nächste Note angewendet.</div>
+        </div>
+      </div>
+
+      <div class="midi-hw">
+        <div class="midi-hw-icon">&#127897;</div>
+        <div>
+          <div class="midi-hw-label">Pitch Wheel</div>
+          <div class="midi-hw-value">Pitch Bend &rarr; Cent-Verschiebung (±50 Cent)</div>
+          <div class="midi-hw-mapping">Rad nach oben = Note höher (in Cent), nach unten = tiefer. Live aufgenommen.</div>
+        </div>
+      </div>
+
+      <div class="midi-hw">
+        <div class="midi-hw-icon">&#9201;</div>
+        <div>
+          <div class="midi-hw-label">Fader / Knob 2</div>
+          <div class="midi-hw-value">CC 11 (Expression) &rarr; Dauer-Stretch (±10%)</div>
+          <div class="midi-hw-mapping">Mitte = 100%, rechts = bis 110% länger, links = bis 90% kürzer.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Fader Visualization -->
+    <div class="cui-section">
+      <div class="cui-section-title">Live-Ansicht beim Abspielen (aktueller Zustand)</div>
+      <div class="fader-row">
+        <div class="fader">
+          <div class="fader-val" style="color: #f0a030;">100</div>
+          <div class="fader-track">
+            <div class="fader-fill vel-f" style="height: 79%;"></div>
+            <div class="fader-knob" style="bottom: 76%;"></div>
+          </div>
+          <div class="fader-label">Velocity</div>
+        </div>
+        <div class="fader">
+          <div class="fader-val" style="color: #ff6b9d;">+4ct</div>
+          <div class="fader-track">
+            <div class="fader-fill" style="height: 54%; background: #ff6b9d;"></div>
+            <div class="fader-knob" style="bottom: 51%;"></div>
+          </div>
+          <div class="fader-label">Pitch</div>
+        </div>
+        <div class="fader">
+          <div class="fader-val" style="color: #bb86fc;">101%</div>
+          <div class="fader-track">
+            <div class="fader-fill" style="height: 55%; background: #bb86fc;"></div>
+            <div class="fader-knob" style="bottom: 52%;"></div>
+          </div>
+          <div class="fader-label">Dauer</div>
+        </div>
+
+        <div style="margin-left: 30px; padding: 10px; background: #1a1a28; border-radius: 8px; flex: 1;">
+          <div style="font-size: 11px; color: #666; margin-bottom: 5px;">Aktuelle Note:</div>
+          <div style="font-size: 18px; color: #f0a030; font-weight: bold;">E4</div>
+          <div style="font-size: 12px; color: #888;">
+            Velocity: <span style="color:#f0a030">100</span> &nbsp;
+            Pitch: <span style="color:#ff6b9d">+4ct</span> &nbsp;
+            Dauer: <span style="color:#bb86fc">101%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SECTION 5: COMPARISON ==================== -->
+<h2>5. Existierende Software - Was kommt am nächsten?</h2>
+
+<table>
+  <tr>
+    <th>Software</th>
+    <th>Notation</th>
+    <th>Micro-Pitch</th>
+    <th>Micro-Timing</th>
+    <th>Live MIDI Control</th>
+    <th>Audio-Erkennung</th>
+    <th>Kosten</th>
+  </tr>
+  <tr>
+    <td><strong>Bitwig Studio</strong></td>
+    <td class="partial">Piano Roll</td>
+    <td class="yes">Ja (MPE, per-note)</td>
+    <td class="yes">Ja (frei verschiebbar)</td>
+    <td class="yes">Ja (MIDI Learn)</td>
+    <td class="no">Nein</td>
+    <td>ab 99&euro;</td>
+  </tr>
+  <tr>
+    <td><strong>Reaper</strong></td>
+    <td class="partial">Piano Roll</td>
+    <td class="yes">Ja (Pitch Offset)</td>
+    <td class="yes">Ja (Tick-genau)</td>
+    <td class="yes">Ja</td>
+    <td class="no">Nein</td>
+    <td>60$ (Discount)</td>
+  </tr>
+  <tr>
+    <td><strong>Ableton Live</strong></td>
+    <td class="partial">Piano Roll</td>
+    <td class="yes">Ja (MPE)</td>
+    <td class="yes">Ja</td>
+    <td class="yes">Ja (hervorragend)</td>
+    <td class="partial">Teilweise (Audio to MIDI)</td>
+    <td>ab 99&euro;</td>
+  </tr>
+  <tr>
+    <td><strong>Dorico</strong></td>
+    <td class="yes">Volle Notation</td>
+    <td class="yes">Ja (Mikrotonalität)</td>
+    <td class="partial">Begrenzt</td>
+    <td class="partial">Begrenzt</td>
+    <td class="no">Nein</td>
+    <td>ab 99&euro;</td>
+  </tr>
+  <tr>
+    <td><strong>MuseScore</strong></td>
+    <td class="yes">Volle Notation</td>
+    <td class="partial">Nur Vierteltöne</td>
+    <td class="no">Nein</td>
+    <td class="no">Nein</td>
+    <td class="no">Nein</td>
+    <td>Kostenlos</td>
+  </tr>
+  <tr>
+    <td style="color: #8ab4f8; font-weight: bold;">MusiAI (Konzept)</td>
+    <td class="yes">Farbige Notation</td>
+    <td class="yes">Cent-genau</td>
+    <td class="yes">Prozent-genau</td>
+    <td class="yes">Live MIDI Mapping</td>
+    <td class="yes">Audio-to-Note</td>
+    <td>?</td>
+  </tr>
+</table>
+
+<div class="highlight-box">
+  <h3 style="color: #8ab4f8; margin-bottom: 10px;">Fazit: Die Lücke</h3>
+  <p>
+    <strong>Kein existierendes Programm kombiniert alles:</strong>
+    Richtige Notennotation + Farben für Dynamik + Micro-Pitch + Micro-Timing + Live MIDI-Controller + Audio-Erkennung.
+  </p>
+  <p style="margin-top: 10px;">
+    <strong>DAWs</strong> (Bitwig, Reaper, Ableton) haben die beste Expression-Kontrolle, aber zeigen nur Piano Roll, keine Notation.<br>
+    <strong>Notationsprogramme</strong> (Dorico, MuseScore) zeigen schöne Noten, haben aber kaum Micro-Expression.<br>
+  </p>
+  <p style="margin-top: 10px; color: #8ab4f8;">
+    &rarr; <strong>MusiAI</strong> könnte genau diese Lücke füllen: Notation + Expression + Live Control in einem.
+  </p>
+</div>
+
+<!-- ==================== SECTION 6: DATA FORMAT ==================== -->
+<h2>6. Internes Datenformat-Konzept (MusiAI JSON)</h2>
+
+<p>Statt MusicXML könnte MusiAI ein eigenes JSON-Format nutzen, das alles direkt lesbar speichert:</p>
+
+<div class="notation-container">
+<pre style="color: #b0b0b0; font-size: 13px; line-height: 1.8; overflow-x: auto;">
+{
+  <span style="color:#8ab4f8">"tempo"</span>: 100,
+  <span style="color:#8ab4f8">"divisions"</span>: 480,
+  <span style="color:#8ab4f8">"time_signature"</span>: [4, 4],
+
+  <span style="color:#8ab4f8">"notes"</span>: [
+    {
+      <span style="color:#5bb974">"pitch"</span>:       <span style="color:#f0a030">"C4"</span>,
+      <span style="color:#5bb974">"cents"</span>:       <span style="color:#bb86fc">0</span>,          <span style="color:#666">// exakt</span>
+      <span style="color:#5bb974">"velocity"</span>:    <span style="color:#bb86fc">80</span>,         <span style="color:#666">// mf</span>
+      <span style="color:#5bb974">"duration_pct"</span>: <span style="color:#bb86fc">100</span>,       <span style="color:#666">// exakte Viertelnote</span>
+      <span style="color:#5bb974">"start_beat"</span>:  <span style="color:#bb86fc">1.0</span>
+    },
+    {
+      <span style="color:#5bb974">"pitch"</span>:       <span style="color:#f0a030">"E4"</span>,
+      <span style="color:#5bb974">"cents"</span>:       <span style="color:#bb86fc">+4</span>,         <span style="color:#666">// 4 Cent höher</span>
+      <span style="color:#5bb974">"velocity"</span>:    <span style="color:#bb86fc">100</span>,        <span style="color:#666">// f</span>
+      <span style="color:#5bb974">"duration_pct"</span>: <span style="color:#bb86fc">101</span>,       <span style="color:#666">// 1% länger</span>
+      <span style="color:#5bb974">"start_beat"</span>:  <span style="color:#bb86fc">2.0</span>
+    },
+    {
+      <span style="color:#5bb974">"pitch"</span>:       <span style="color:#f0a030">"G4"</span>,
+      <span style="color:#5bb974">"cents"</span>:       <span style="color:#bb86fc">-10</span>,        <span style="color:#666">// 10 Cent tiefer (blue note)</span>
+      <span style="color:#5bb974">"velocity"</span>:    <span style="color:#bb86fc">50</span>,         <span style="color:#666">// p</span>
+      <span style="color:#5bb974">"duration_pct"</span>: <span style="color:#bb86fc">97</span>,        <span style="color:#666">// 3% kürzer</span>
+      <span style="color:#5bb974">"start_beat"</span>:  <span style="color:#bb86fc">3.0</span>
+    },
+    {
+      <span style="color:#5bb974">"pitch"</span>:       <span style="color:#f0a030">"C5"</span>,
+      <span style="color:#5bb974">"cents"</span>:       <span style="color:#bb86fc">+15</span>,        <span style="color:#666">// 15 Cent höher (expressiv)</span>
+      <span style="color:#5bb974">"velocity"</span>:    <span style="color:#bb86fc">112</span>,        <span style="color:#666">// ff</span>
+      <span style="color:#5bb974">"duration_pct"</span>: <span style="color:#bb86fc">105</span>,       <span style="color:#666">// 5% länger (betont)</span>
+      <span style="color:#5bb974">"start_beat"</span>:  <span style="color:#bb86fc">4.0</span>
+    }
+  ]
+}
+</pre>
+</div>
+
+<p style="color: #888; font-size: 13px; margin-top: 20px; text-align: center;">
+  MusiAI Recherche &middot; Konzeptdokument &middot; April 2026
+</p>
+
+</body>
+</html>

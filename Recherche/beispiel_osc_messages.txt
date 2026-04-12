@@ -1,0 +1,112 @@
+========================================================
+  OSC (Open Sound Control) - Beispiel-Messages
+========================================================
+
+OSC ist ein Netzwerk-Protokoll (kein Dateiformat).
+Messages werden live über UDP/TCP gesendet.
+Genutzt in: SuperCollider, Max/MSP, PureData, TouchOSC
+
+Format: /adresse  typ-tags  werte
+
+
+--- Grundlegende Noten ---
+
+/note/on    60   0.87   440.0
+│           │    │      └── Frequenz in Hz (exakt, nicht nur Noten-Nummer!)
+│           │    └───────── Velocity als Float (0.0 - 1.0, stufenlos!)
+│           └────────────── MIDI-Note 60 = C4
+└────────────────────────── Freie Adressierung (kein festes Schema)
+
+/note/off   60   0.3
+                  └── Release-Velocity als Float
+
+
+--- Mikrotöne (beliebig genau!) ---
+
+/note/on    60   0.75   441.5     C4, etwas über A=440 gestimmt
+/note/on    60   0.60   466.16    C4 als Bb4 (Frequenz statt Notennr.)
+/note/on    60   0.50   432.0     A=432Hz Stimmung
+/note/on    60   0.90   554.37    Genau zwischen C#5 und D5
+
+Vorteil: Keine 128-Noten-Begrenzung!
+Man kann jede beliebige Frequenz senden.
+
+
+--- Per-Note Expression ---
+
+/voice/1/pitch      440.5       Stimme 1: Tonhöhe
+/voice/1/velocity   0.873       Stimme 1: Anschlag
+/voice/1/pressure   0.234       Stimme 1: Aftertouch
+/voice/1/timbre     0.667       Stimme 1: Klangfarbe
+
+/voice/2/pitch      554.37      Stimme 2: komplett unabhängig!
+/voice/2/velocity   0.451
+/voice/2/pressure   0.890
+/voice/2/timbre     0.123
+
+→ Jede Stimme hat eigene, stufenlose Parameter
+
+
+--- Tempo & Transport ---
+
+/tempo          72.5            BPM als Float (nicht nur ganzzahlig!)
+/tempo          72.537          Noch genauer möglich
+/transport/play                 Start
+/transport/stop                 Stop
+/transport/position  2.3.120    Takt 2, Beat 3, Tick 120
+
+
+--- Kontinuierliche Controller ---
+
+/cc/modulation    0.5432        Stufenlos (MIDI: nur 128 Stufen)
+/cc/expression    0.8761
+/cc/sustain       1.0           Pedal an
+/cc/sustain       0.45          Halb-Pedal! (MIDI: nur an/aus)
+
+
+--- Beispiel: Live-Performance-Stream ---
+
+Zeitstempel    Message
+──────────────────────────────────────────────────
+0.000s         /tempo 72.0
+0.000s         /voice/1/pitch 261.63          C4 beginnt
+0.000s         /voice/1/velocity 0.35         leise
+0.050s         /voice/1/pressure 0.38         leichter Druck
+0.100s         /voice/1/pressure 0.42         Druck nimmt zu
+0.150s         /voice/1/pitch 262.10          minimale Tonhöhenänderung
+0.200s         /voice/1/pressure 0.55         crescendo durch Druck
+0.500s         /voice/1/velocity 0.00         Note endet
+0.500s         /voice/2/pitch 329.63          E4 beginnt
+0.500s         /voice/2/velocity 0.60         lauter
+0.750s         /tempo 70.5                    leichtes ritardando
+1.000s         /tempo 68.2                    weiter verlangsamen
+
+→ Alle 50ms ein Update = extrem feine Auflösung
+→ Jeder Wert ist ein Float = keine hörbaren Stufen
+
+
+========================================================
+  Vergleich: Die gleiche Phrase in allen Formaten
+========================================================
+
+Aufgabe: C4 leise spielen, Tonhöhe leicht nach oben biegen
+
+MIDI 1.0:
+  90 3C 30              Note On C4, Velocity 48
+  E0 00 48              Pitch Bend +8 (global!)
+  80 3C 40              Note Off
+
+MIDI 2.0 (UMP):
+  40 90 3C 00 2F FF 00 00    Note On C4, Velocity 12287 (fein!)
+  40 60 3C 00 00 00 88 00    Per-Note Pitch Bend für C4
+  40 80 3C 00 00 00 00 00    Note Off
+
+MusicXML:
+  <note>
+    <pitch><step>C</step><alter>0.12</alter><octave>4</octave></pitch>
+    <sound dynamics="38"/>
+  </note>
+
+OSC:
+  /voice/1/pitch 263.4        (C4 + 12 Cent)
+  /voice/1/velocity 0.375

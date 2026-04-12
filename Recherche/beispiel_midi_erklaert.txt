@@ -1,0 +1,136 @@
+========================================================
+  MIDI 1.0 & 2.0 - Byte-für-Byte erklärt
+========================================================
+
+MIDI ist ein Binärformat. Hier zeigen wir die Hex-Bytes
+und erklären jeden einzelnen Wert.
+
+
+--- MIDI 1.0: Grundlegende Messages ---
+
+1) NOTE ON - Note anschlagen
+   Hex:  90 3C 7F
+         │  │  └── Velocity: 7F = 127 (Maximum, sehr laut)
+         │  └───── Note: 3C = 60 = Mittleres C (C4)
+         └──────── Status: 9=Note On, 0=Kanal 1
+
+   Gleiche Note, aber leise:
+   Hex:  90 3C 30
+         │  │  └── Velocity: 30 = 48 (leise, ~37% der max. Lautstärke)
+         │  └───── Note: 3C = 60 = C4
+         └──────── Note On, Kanal 1
+
+2) NOTE OFF - Note loslassen
+   Hex:  80 3C 40
+         │  │  └── Release Velocity: 40 = 64 (wie schnell losgelassen)
+         │  └───── Note: 3C = 60 = C4
+         └──────── Status: 8=Note Off, 0=Kanal 1
+
+3) PITCH BEND - Tonhöhe verbiegen (z.B. Gitarren-Bending)
+   Hex:  E0 00 60
+         │  │  └── MSB: 60 = etwas über Mitte (40=kein Bend)
+         │  └───── LSB: 00 = Feineinstellung
+         └──────── Status: E=Pitch Bend, 0=Kanal 1
+
+   ACHTUNG: Gilt für ALLE Noten auf Kanal 1!
+   Auflösung: 14-bit = 16.384 Stufen (besser als Velocity)
+
+   Beispiele:
+   E0 00 40  = kein Bend (Mitte)
+   E0 00 7F  = maximaler Bend nach oben
+   E0 00 00  = maximaler Bend nach unten
+
+4) CONTROL CHANGE - Expression, Sustain etc.
+   Hex:  B0 0B 64
+         │  │  └── Wert: 64 = 100 (Expression-Level)
+         │  └───── Controller: 0B = 11 = Expression
+         └──────── Status: B=Control Change, 0=Kanal 1
+
+   Wichtige Controller-Nummern:
+   01 = Modulation Wheel
+   07 = Volume (Gesamtlautstärke)
+   0B = Expression (musikalische Dynamik)
+   40 = Sustain Pedal (00=aus, 7F=an)
+   47 = Resonanz/Timbre
+
+5) TEMPO (Meta-Event in MIDI-Dateien)
+   Hex:  FF 51 03 07 A1 20
+         │  │  │  └─────── Mikrosekunden pro Viertelnote
+         │  │  └────────── 3 Bytes folgen
+         │  └───────────── 51 = Tempo-Event
+         └──────────────── FF = Meta-Event
+
+   07 A1 20 = 500.000 µs = 0,5 Sekunden pro Beat = 120 BPM
+
+   Weitere Beispiele:
+   FF 51 03 09 27 C0  = 600.000 µs = 100 BPM (langsam)
+   FF 51 03 05 16 15  = 333.333 µs = 180 BPM (schnell)
+   FF 51 03 0F 42 40  = 1.000.000 µs = 60 BPM (sehr langsam)
+
+
+--- MIDI 2.0 (UMP): Höhere Auflösung ---
+
+Universal MIDI Packets sind 32 oder 64 Bit breit.
+
+1) NOTE ON mit 16-bit Velocity
+   MIDI 1.0:  90 3C 7F                    (Velocity 0-127)
+   MIDI 2.0:  40 90 3C 00  FF FF 00 00    (Velocity 0-65535!)
+
+   Aufschlüsselung:
+   40       = Message Type 4 (MIDI 2.0 Channel Voice), Group 0
+   90       = Note On, Kanal 1
+   3C       = Note C4
+   00       = Attribute Type
+   FF FF    = Velocity: 65535 (Maximum, 512x feiner als MIDI 1.0!)
+   00 00    = Attribute Data
+
+   Vergleich der Auflösung:
+   MIDI 1.0: pp=30, p=50, mp=64, mf=80, f=100, ff=120 (nur 6 Stufen dazwischen!)
+   MIDI 2.0: pp=15000, p=25000, mp=32768, mf=42000, f=52000, ff=62000
+             → Tausende Abstufungen für natürliche Dynamik!
+
+2) PER-NOTE PITCH BEND (Neu in MIDI 2.0!)
+   Hex:  40 60 3C 00  00 00 90 00
+
+   40       = Message Type 4, Group 0
+   60       = Per-Note Pitch Bend, Kanal 1
+   3C       = Nur für Note C4!
+   00       = Reserved
+   00 00 90 00 = Pitch Bend Wert (32-bit!)
+
+   Das bedeutet: Man kann C4 leicht nach oben biegen,
+   während D4 gleichzeitig unverändert bleibt!
+   → Perfekt für Mikrotöne und expressives Spiel
+
+3) PER-NOTE CONTROLLER
+   Hex:  40 10 3C 07  00 00 40 00
+
+   Nur Note C4 bekommt einen eigenen Expression-Wert!
+   → Jede Note eines Akkords kann individuell lauter/leiser werden
+
+
+--- MPE (MIDI Polyphonic Expression, innerhalb MIDI 1.0) ---
+
+MPE ist ein Trick: Jede Note bekommt ihren eigenen Kanal!
+
+Beispiel: Zwei Noten mit unabhängigem Pitch Bend
+
+   Kanal 2: Note On    91 3C 64     (C4 auf Kanal 2)
+   Kanal 2: Pitch Bend E1 00 50     (C4 leicht hoch)
+
+   Kanal 3: Note On    92 40 50     (E4 auf Kanal 3)
+   Kanal 3: Pitch Bend E2 00 30     (E4 leicht runter)
+
+   → C4 und E4 haben unabhängige Pitch Bends!
+   → Funktioniert mit jeder MIDI 1.0-Hardware
+
+
+========================================================
+  Zusammenfassung: Velocity-Auflösung im Vergleich
+========================================================
+
+  Format       Bits   Stufen      Praxis
+  ─────────────────────────────────────────────
+  MIDI 1.0      7     128         Spürbare Stufen bei leisen Passagen
+  MIDI 2.0     16     65.536      Quasi-stufenlos, wie echtes Klavier
+  OSC        32 float 4 Mrd+      Wissenschaftliche Genauigkeit

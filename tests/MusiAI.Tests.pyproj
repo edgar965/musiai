@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>AB9FAE38-5F6A-5E1B-C5F6-7B4D9B2C3E4F</ProjectGuid>
+    <ProjectHome>..</ProjectHome>
+    <StartupFile>tests\test_runner_ui.py</StartupFile>
+    <SearchPath>..\</SearchPath>
+    <WorkingDirectory>..</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <Name>MusiAI.Tests</Name>
+    <RootNamespace>MusiAI.Tests</RootNamespace>
+    <InterpreterId>MSBuild|pythonENV|$(MSBuildProjectFullPath)</InterpreterId>
+    <TestFramework>unittest</TestFramework>
+    <UnitTestPattern>test_*.py</UnitTestPattern>
+    <UnitTestRootDirectory>.</UnitTestRootDirectory>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugSymbols>true</DebugSymbols>
+    <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="test_model.py" />
+    <Compile Include="test_notation.py" />
+    <Compile Include="test_midi.py" />
+    <Compile Include="test_audio.py" />
+    <Compile Include="test_musicxml.py" />
+    <Compile Include="test_ui_workflows.py" />
+    <Compile Include="test_integration.py" />
+    <Compile Include="run_tests.py" />
+    <Compile Include="test_runner_ui.py" />
+    <Compile Include="__init__.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Interpreter Include="..\pythonENV\">
+      <Id>pythonENV</Id>
+      <Version>3.14</Version>
+      <Description>MusiAI Python 3.14 (venv)</Description>
+      <InterpreterPath>Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+      <Architecture>X64</Architecture>
+    </Interpreter>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>
