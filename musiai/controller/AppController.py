@@ -496,6 +496,8 @@ class AppController:
             part.add_measure(Measure(i + 1, ts))
 
         piece.add_part(part)
+        # Playback-Engine aktualisieren (Audio-Track registrieren)
+        self.playback_engine.set_piece(piece)
         self.notation_scene.refresh()
         self.signal_bus.status_message.emit(
             f"Audio-Stimme '{part.name}' geladen ({track.duration_seconds:.1f}s)"
@@ -535,12 +537,27 @@ class AppController:
         from musiai.model.TimeSignature import TimeSignature
         import numpy as np
 
-        # Alle Blöcke zusammenfügen
+        # Audio zusammenfügen (max 30s für Performance)
         all_samples = np.concatenate([b.samples for b in part.audio_track.blocks])
         sr = part.audio_track.sr
+        max_samples = sr * 30  # Max 30 Sekunden
+        if len(all_samples) > max_samples:
+            all_samples = all_samples[:max_samples]
+            logger.info(f"Audio auf 30s begrenzt für Erkennung")
 
-        detector = PitchDetector(tempo_bpm=piece.initial_tempo)
-        notes_data = detector.detect(all_samples, sr)
+        # pyin braucht sr=22050 für gute Performance
+        import librosa
+        if sr != 22050:
+            all_samples = librosa.resample(all_samples, orig_sr=sr, target_sr=22050)
+            sr = 22050
+
+        try:
+            detector = PitchDetector(tempo_bpm=piece.initial_tempo)
+            notes_data = detector.detect(all_samples, sr)
+        except Exception as e:
+            logger.error(f"Pitch Detection fehlgeschlagen: {e}", exc_info=True)
+            self.signal_bus.status_message.emit(f"Erkennung fehlgeschlagen: {e}")
+            return
 
         if not notes_data:
             self.signal_bus.status_message.emit("Keine Noten erkannt")

@@ -59,44 +59,48 @@ class NotationScene(QGraphicsScene):
             # Stimm-Label links (klickbar)
             self._draw_part_label(part, part_idx, center_y)
 
-            # Standard-Velocity aus erster Note ermitteln
-            first_vel = 80
-            if part.measures and part.measures[0].notes:
-                first_vel = part.measures[0].notes[0].expression.velocity
+            is_audio = part.audio_track and part.audio_track.blocks
 
-            # Tempo pro Takt bestimmen
-            current_tempo = self.piece.initial_tempo
-
-            for i, measure in enumerate(part.measures):
-                # Per-Takt-Tempo (falls Tempowechsel)
-                if measure.tempo:
-                    current_tempo = measure.tempo.bpm
-
-                show_clef = (i == 0)
-                display_tempo = current_tempo if i == 0 else 0
-                vel = first_vel if i == 0 else 0
-                renderer = MeasureRenderer(
-                    measure, x_offset, center_y, show_clef,
-                    display_tempo, vel, current_tempo
-                )
-                renderer.render(self)
-                self.measure_renderers.append(renderer)
-                x_offset += renderer.width
-
-            # Schlusstaktstrich
-            pen = QPen(QColor(100, 100, 120), 3)
-            staff_half = 24
-            self.addLine(x_offset, center_y - staff_half,
-                        x_offset, center_y + staff_half, pen)
-
-            total_width = max(total_width, x_offset)
-
-            # Waveform zeichnen falls Audio-Spur vorhanden
-            if part.audio_track and part.audio_track.blocks:
-                self._draw_waveform(part, center_y + staff_half + 10,
+            if is_audio:
+                # Audio-Stimme: nur Waveform, keine Notenlinien
+                self._draw_waveform(part, center_y,
                                     self.piece.initial_tempo)
+                # Breite aus Audio-Dauer berechnen
+                ppb = PIXELS_PER_BEAT
+                dur_sec = part.audio_track.duration_seconds
+                dur_beats = dur_sec * (self.piece.initial_tempo / 60.0)
+                x_offset += dur_beats * ppb
+                total_width = max(total_width, x_offset + self.MARGIN_LEFT)
+                center_y += 100  # Weniger Platz als Notensystem
+            else:
+                # Noten-Stimme: Notenlinien + Takte
+                first_vel = 80
+                if part.measures and part.measures[0].notes:
+                    first_vel = part.measures[0].notes[0].expression.velocity
 
-            center_y += 150
+                current_tempo = self.piece.initial_tempo
+
+                for i, measure in enumerate(part.measures):
+                    if measure.tempo:
+                        current_tempo = measure.tempo.bpm
+                    show_clef = (i == 0)
+                    display_tempo = current_tempo if i == 0 else 0
+                    vel = first_vel if i == 0 else 0
+                    renderer = MeasureRenderer(
+                        measure, x_offset, center_y, show_clef,
+                        display_tempo, vel, current_tempo
+                    )
+                    renderer.render(self)
+                    self.measure_renderers.append(renderer)
+                    x_offset += renderer.width
+
+                # Schlusstaktstrich
+                pen = QPen(QColor(100, 100, 120), 3)
+                staff_half = 24
+                self.addLine(x_offset, center_y - staff_half,
+                            x_offset, center_y + staff_half, pen)
+                total_width = max(total_width, x_offset)
+                center_y += 150
 
         # Playhead + Cursor Bereich setzen
         self.playhead.set_y_range(self.MARGIN_TOP, center_y)

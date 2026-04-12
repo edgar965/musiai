@@ -501,7 +501,9 @@ class TestNotationSceneAudio(unittest.TestCase):
     """NotationScene rendert Audio-Stimmen korrekt."""
 
     def test_render_with_audio_part(self):
+        """Audio-Part rendert Waveform, keine MeasureRenderer."""
         from musiai.notation.NotationScene import NotationScene
+        from musiai.notation.WaveformItem import WaveformItem
         from musiai.model.AudioTrack import AudioTrack, AudioBlock
 
         piece = Piece("Audio Test")
@@ -519,7 +521,10 @@ class TestNotationSceneAudio(unittest.TestCase):
 
         scene = NotationScene()
         scene.set_piece(piece)
-        self.assertGreater(len(scene.measure_renderers), 0)
+        # Audio-Part hat keine MeasureRenderer, aber WaveformItems
+        self.assertEqual(len(scene.measure_renderers), 0)
+        waveforms = [i for i in scene.items() if isinstance(i, WaveformItem)]
+        self.assertGreater(len(waveforms), 0)
 
 
 if __name__ == "__main__":
