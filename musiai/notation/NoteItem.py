@@ -34,13 +34,15 @@ class NoteItem(QGraphicsEllipseItem):
         self.update_from_note()
 
     def _update_stem(self) -> None:
-        """Hals zeichnen: nach oben wenn Note unter Mittellinie, sonst nach unten."""
-        if self.note.pitch >= MIDI_MIDDLE_C:
-            # Hals nach oben (rechts vom Kopf)
-            self._stem.setLine(NOTE_RADIUS - 1, 0, NOTE_RADIUS - 1, -STEM_LENGTH)
-        else:
+        """Hals: ab 3. Linie (B4=71) nach unten, darunter nach oben."""
+        # Standard-Regel: Noten auf/über der Mittellinie (3. Linie = B4)
+        # bekommen den Hals nach unten, darunter nach oben
+        if self.note.pitch >= 71:  # B4 = 3. Linie von oben
             # Hals nach unten (links vom Kopf)
             self._stem.setLine(-NOTE_RADIUS + 1, 0, -NOTE_RADIUS + 1, STEM_LENGTH)
+        else:
+            # Hals nach oben (rechts vom Kopf)
+            self._stem.setLine(NOTE_RADIUS - 1, 0, NOTE_RADIUS - 1, -STEM_LENGTH)
 
     def update_from_note(self) -> None:
         """Farbe aus Note-Daten aktualisieren."""
