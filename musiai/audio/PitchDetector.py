@@ -14,9 +14,12 @@ class PitchDetector:
     Quantisierung auf Beat-Raster.
     """
 
-    def __init__(self, tempo_bpm: float = 120.0):
+    def __init__(self, tempo_bpm: float = 120.0,
+                 beats_per_measure: float = 4.0):
         self.tempo_bpm = tempo_bpm
-        self.quantize_grid = 0.25  # Viertel-Beat (Sechzehntelnote)
+        self.beats_per_measure = beats_per_measure
+        self.quantize_grid = 0.25  # Sechzehntelnote
+        self.min_duration_beats = 0.25  # Mindestdauer
 
     def detect(self, samples: np.ndarray, sr: int) -> list[dict]:
         """Audio → Liste von Noten-Dicts.
@@ -27,7 +30,6 @@ class PitchDetector:
         """
         import librosa
 
-        # Pitch tracking mit pyin
         f0, voiced_flag, voiced_prob = librosa.pyin(
             samples, fmin=librosa.note_to_hz('C2'),
             fmax=librosa.note_to_hz('C7'), sr=sr,
@@ -38,7 +40,7 @@ class PitchDetector:
         beats_per_sec = self.tempo_bpm / 60.0
 
         # Frames zu Noten gruppieren
-        notes = []
+        raw_notes = []
         current_midi = None
         current_start = None
         current_cents = []
@@ -51,9 +53,8 @@ class PitchDetector:
                 cent_off = (midi_float - midi_int) * 100
 
                 if current_midi is None or abs(midi_int - current_midi) > 1:
-                    # Neue Note
                     if current_midi is not None:
-                        notes.append(self._make_note(
+                        raw_notes.append(self._make_note(
                             current_midi, current_start, t, current_cents,
                             beats_per_sec
                         ))
@@ -63,23 +64,23 @@ class PitchDetector:
                 else:
                     current_cents.append(cent_off)
             else:
-                # Stille → aktuelle Note beenden
                 if current_midi is not None:
-                    notes.append(self._make_note(
+                    raw_notes.append(self._make_note(
                         current_midi, current_start, t, current_cents,
                         beats_per_sec
                     ))
                     current_midi = None
                     current_cents = []
 
-        # Letzte Note
         if current_midi is not None and current_start is not None:
             end_t = times[-1] if len(times) > 0 else current_start + 0.5
-            notes.append(self._make_note(
+            raw_notes.append(self._make_note(
                 current_midi, current_start, end_t, current_cents,
                 beats_per_sec
             ))
 
+        # Nachbearbeitung
+        notes = self._cleanup_notes(raw_notes)
         logger.info(f"Erkannt: {len(notes)} Noten aus {len(samples)/sr:.1f}s Audio")
         return notes
 
@@ -92,11 +93,12 @@ class PitchDetector:
         start_beat = self._quantize(start_beat)
         dur_beat = self._quantize(max(self.quantize_grid, dur_beat))
 
-        # Mittlerer Cent-Offset
         avg_cent = float(np.mean(cents)) if cents else 0.0
         avg_cent = round(avg_cent, 1)
+        # Cent nur behalten wenn deutlich (>5ct)
+        if abs(avg_cent) < 5:
+            avg_cent = 0.0
 
-        # Velocity schätzen (einfach: 80 als Default)
         return {
             "pitch": int(midi),
             "start_beat": float(start_beat),
@@ -105,6 +107,46 @@ class PitchDetector:
             "cent_offset": avg_cent,
         }
 
+    def _cleanup_notes(self, notes: list[dict]) -> list[dict]:
+        """Noten bereinigen: filtern, Taktgrenzen, Überlappungen."""
+        if not notes:
+            return []
+
+        # 1. Zu kurze Noten entfernen
+        notes = [n for n in notes if n["duration_beats"] >= self.min_duration_beats]
+
+        # 2. Nach Start sortieren
+        notes.sort(key=lambda n: n["start_beat"])
+
+        # 3. Überlappungen entfernen: Note darf nicht über nächste Note hinausgehen
+        for i in range(len(notes) - 1):
+            end = notes[i]["start_beat"] + notes[i]["duration_beats"]
+            next_start = notes[i + 1]["start_beat"]
+            if end > next_start:
+                notes[i]["duration_beats"] = max(
+                    self.quantize_grid, next_start - notes[i]["start_beat"]
+                )
+
+        # 4. Noten an Taktgrenzen kürzen
+        bpm = self.beats_per_measure
+        for n in notes:
+            measure_start = int(n["start_beat"] / bpm) * bpm
+            measure_end = measure_start + bpm
+            local_start = n["start_beat"] - measure_start
+            max_dur = bpm - local_start
+            if n["duration_beats"] > max_dur:
+                n["duration_beats"] = self._quantize(max(self.quantize_grid, max_dur))
+
+        # 5. Duplikate entfernen (gleicher Pitch + gleicher Start)
+        seen = set()
+        unique = []
+        for n in notes:
+            key = (n["pitch"], n["start_beat"])
+            if key not in seen:
+                seen.add(key)
+                unique.append(n)
+
+        return unique
+
     def _quantize(self, beat: float) -> float:
-        """Auf Beat-Raster quantisieren."""
         return round(beat / self.quantize_grid) * self.quantize_grid

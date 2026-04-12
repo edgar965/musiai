@@ -529,6 +529,12 @@ class AppController:
 
         self.signal_bus.status_message.emit("Erkenne Noten... (kann dauern)")
 
+        # Sanduhr-Cursor setzen
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()  # UI sofort aktualisieren
+
         from musiai.audio.PitchDetector import PitchDetector
         from musiai.model.Part import Part
         from musiai.model.Measure import Measure
@@ -555,11 +561,13 @@ class AppController:
             detector = PitchDetector(tempo_bpm=piece.initial_tempo)
             notes_data = detector.detect(all_samples, sr)
         except Exception as e:
+            QApplication.restoreOverrideCursor()
             logger.error(f"Pitch Detection fehlgeschlagen: {e}", exc_info=True)
             self.signal_bus.status_message.emit(f"Erkennung fehlgeschlagen: {e}")
             return
 
         if not notes_data:
+            QApplication.restoreOverrideCursor()
             self.signal_bus.status_message.emit("Keine Noten erkannt")
             return
 
@@ -592,6 +600,7 @@ class AppController:
 
         piece.add_part(new_part)
         self.notation_scene.refresh()
+        QApplication.restoreOverrideCursor()
         self.signal_bus.status_message.emit(
             f"{len(notes_data)} Noten erkannt → Stimme '{new_part.name}'"
         )
@@ -616,6 +625,9 @@ class AppController:
             return
         part = piece.parts[part_idx]
         part.muted = not part.muted
+        # Audio-Spur muten/unmuten
+        if part.audio_track:
+            self.playback_engine.audio_player.set_muted(part.muted)
         self.notation_scene.refresh()
         status = "stumm" if part.muted else "aktiv"
         self.signal_bus.status_message.emit(f"Stimme '{part.name}': {status}")
@@ -639,6 +651,8 @@ class AppController:
             return
         part = piece.parts[part_idx]
         part.muted = muted
+        if part.audio_track:
+            self.playback_engine.audio_player.set_muted(muted)
         self.notation_scene.refresh()
 
     def _on_part_name_changed(self, part_idx: int, name: str) -> None:
