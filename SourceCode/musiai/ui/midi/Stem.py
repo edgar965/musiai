@@ -87,8 +87,13 @@ class Stem:
             self._draw_horiz_bar_stem(painter, pen, x, ytop, top_staff,
                                       ls, nh, nw)
         else:
-            self._draw_curvy_stem(painter, pen, x, ytop, top_staff,
-                                  ls, nh, nw)
+            use_bravura = config.get('use_bravura', False) if isinstance(config, dict) else False
+            if use_bravura:
+                self._draw_bravura_flag(painter, x, ytop, top_staff,
+                                        ls, nh, nw)
+            else:
+                self._draw_curvy_stem(painter, pen, x, ytop, top_staff,
+                                      ls, nh, nw)
 
     def _draw_vertical_line(self, painter, pen, x, ytop, top_staff,
                             ls, nh, nw):
@@ -168,6 +173,44 @@ class Stem:
                      xs + ls * 2, ys - nh * 2,
                      xs + ls, ys - nh * 2 - ls // 2)
         painter.drawPath(path)
+
+    def _draw_bravura_flag(self, painter, x, ytop, top_staff,
+                           ls, nh, nw):
+        """Draw flag glyph using Bravura SMuFL font."""
+        from PySide6.QtGui import QFont, QPen, QColor
+        from musiai.ui.midi import BravuraGlyphs as BG
+
+        flaggable = {ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET,
+                     ND.SIXTEENTH, ND.THIRTYSECOND}
+        if self.duration not in flaggable:
+            return
+
+        if self.side == LEFT_SIDE:
+            xstart = x + ls // 4 + 1
+        else:
+            xstart = x + ls // 4 + nw
+
+        size = max(8, int(nh * 2.0))
+        font = QFont(BG.FONT_NAME, size)
+        painter.setFont(font)
+        painter.setPen(QPen(QColor(0, 0, 0)))
+
+        if self.direction == UP:
+            ystem = ytop + top_staff.dist(self.end) * nh // 2
+            if self.duration in (ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET):
+                painter.drawText(xstart, ystem + nh // 2, BG.FLAG_8TH_UP)
+            elif self.duration == ND.SIXTEENTH:
+                painter.drawText(xstart, ystem + nh // 2, BG.FLAG_16TH_UP)
+            elif self.duration == ND.THIRTYSECOND:
+                painter.drawText(xstart, ystem + nh // 2, BG.FLAG_32ND_UP)
+        elif self.direction == DOWN:
+            ystem = ytop + top_staff.dist(self.end) * nh // 2 + nh
+            if self.duration in (ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET):
+                painter.drawText(xstart, ystem, BG.FLAG_8TH_DOWN)
+            elif self.duration == ND.SIXTEENTH:
+                painter.drawText(xstart, ystem, BG.FLAG_16TH_DOWN)
+            elif self.duration == ND.THIRTYSECOND:
+                painter.drawText(xstart, ystem, BG.FLAG_32ND_DOWN)
 
     def _draw_horiz_bar_stem(self, painter, pen, x, ytop, top_staff,
                              ls, nh, nw):

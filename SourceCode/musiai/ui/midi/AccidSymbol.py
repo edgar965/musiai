@@ -59,12 +59,31 @@ class AccidSymbol(MusicSymbol):
         ynote = ytop + WhiteNote.top(self.clef).dist(self.whitenote) * nh // 2
 
         ax = x + offset
-        if self.accid == SHARP:
+
+        use_bravura = config.get('use_bravura', False) if isinstance(config, dict) else False
+        if use_bravura:
+            self._draw_bravura(painter, ax, ynote, nh)
+        elif self.accid == SHARP:
             self._draw_sharp(painter, ax, ynote, nh, ls, lw)
         elif self.accid == FLAT:
             self._draw_flat(painter, ax, ynote, nh, ls, lw)
         elif self.accid == NATURAL:
             self._draw_natural(painter, ax, ynote, nh, ls, lw)
+
+    def _draw_bravura(self, painter, x, ynote, nh):
+        """Draw accidental using Bravura SMuFL glyph."""
+        from PySide6.QtGui import QFont, QPen, QColor
+        from musiai.ui.midi import BravuraGlyphs as BG
+
+        glyph_map = {SHARP: BG.SHARP, FLAT: BG.FLAT, NATURAL: BG.NATURAL}
+        glyph = glyph_map.get(self.accid)
+        if glyph is None:
+            return
+
+        size = max(6, int(nh * 1.5))
+        painter.setFont(QFont(BG.FONT_NAME, size))
+        painter.setPen(QPen(QColor(0, 0, 0)))
+        painter.drawText(x, ynote + nh // 2, glyph)
 
     def _draw_sharp(self, painter, x, ynote, nh, ls, lw):
         """Two vertical + two angled horizontal lines."""

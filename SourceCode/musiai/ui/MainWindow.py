@@ -68,7 +68,6 @@ class MainWindow(QMainWindow):
         self._render_mode_combo.addItem("MusicXML", "musicxml")
         self._render_mode_combo.addItem("MIDI Sheet", "midisheet")
         self._render_mode_combo.addItem("MIDI Sheet (Bravura)", "midisheet_bravura")
-        self._render_mode_combo.addItem("MIDI Sheet (Stimmen)", "midisheet_seq")
         self._render_mode_combo.addItem("SVG (Verovio)", "svg")
         self._render_mode_combo.addItem("Piano Roll", "pianoroll")
         self._render_mode_combo.setFixedWidth(180)

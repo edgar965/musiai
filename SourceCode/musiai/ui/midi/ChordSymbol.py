@@ -389,7 +389,7 @@ class ChordSymbol(MusicSymbol):
 
         # Draw accidentals
         ax = x + offset
-        accid_width = self._draw_accid(painter, ax, ytop)
+        accid_width = self._draw_accid(painter, ax, ytop, config)
 
         # Draw notes
         nx_base = ax + accid_width
@@ -407,11 +407,11 @@ class ChordSymbol(MusicSymbol):
         if self.stem2:
             self.stem2.draw(painter, nx_base, ytop, stem_cfg, topstaff)
 
-    def _draw_accid(self, painter, x, ytop) -> int:
+    def _draw_accid(self, painter, x, ytop, config=None) -> int:
         """Draw accidentals, return total x width used."""
         xpos = 0
         prev = None
-        cfg = {}  # AccidSymbol uses SheetConfig statics
+        cfg = config if isinstance(config, dict) else {}
         for sym in self.accidsymbols:
             if prev is not None and sym.note.dist(prev.note) < 6:
                 xpos += sym.width

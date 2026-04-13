@@ -27,6 +27,11 @@ class RestSymbol(MusicSymbol):
         offset = self.width - self.min_width + nh // 2
         rx = x + offset
 
+        use_bravura = config.get('use_bravura', False) if isinstance(config, dict) else False
+        if use_bravura:
+            self._draw_bravura(painter, rx, ytop, nh)
+            return
+
         if self.duration == ND.WHOLE:
             self._draw_whole(painter, rx, ytop, nh, nw)
         elif self.duration == ND.HALF:
@@ -35,6 +40,27 @@ class RestSymbol(MusicSymbol):
             self._draw_quarter(painter, rx, ytop, nh, nw, ls)
         elif self.duration == ND.EIGHTH:
             self._draw_eighth(painter, rx, ytop, nh, nw, ls)
+
+    def _draw_bravura(self, painter, x, ytop, nh):
+        """Draw rest using Bravura SMuFL glyph."""
+        from PySide6.QtGui import QFont, QPen, QColor
+        from musiai.ui.midi import BravuraGlyphs as BG
+
+        glyph_map = {
+            ND.WHOLE: BG.REST_WHOLE,
+            ND.HALF: BG.REST_HALF,
+            ND.QUARTER: BG.REST_QUARTER,
+            ND.EIGHTH: BG.REST_8TH,
+        }
+        glyph = glyph_map.get(self.duration)
+        if glyph is None:
+            return
+
+        size = max(8, int(nh * 2.0))
+        painter.setFont(QFont(BG.FONT_NAME, size))
+        painter.setPen(QPen(QColor(0, 0, 0)))
+        # Position rest vertically centered on the staff
+        painter.drawText(x, ytop + nh * 2, glyph)
 
     def _draw_whole(self, painter, x, ytop, nh, nw):
         """Rectangle below middle line."""
