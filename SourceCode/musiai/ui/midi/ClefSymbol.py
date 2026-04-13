@@ -61,32 +61,45 @@ class ClefSymbol(MusicSymbol):
     def draw(self, painter, x: int, ytop: int, config: dict) -> None:
         from PySide6.QtGui import QFont, QColor, QPen
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
 
         _ensure_font()
 
         nh = SC.NoteHeight
-        staff_h = SC.StaffHeight
+        ls = SC.LineSpace
+        lw = SC.LineWidth
         offset = self.width - self.min_width
         dx = x + offset
 
         painter.setPen(QPen(QColor(0, 0, 0)))
 
+        # Font size: the notehead font size gives 1 staff space per sc pixels.
+        # Clef uses the same font size as noteheads for consistent scaling.
+        fs = SMuFLMetadata.notehead_font_size(ls)
+        sc = SMuFLMetadata.font_scale(fs)
+
         if self.clef == TREBLE:
             if self.small:
-                size = max(10, int(staff_h * 0.55))
-                y = ytop + nh
+                size = max(10, int(ls * 2.8))
             else:
-                size = max(14, int(staff_h * 0.75))
-                y = ytop + int(nh * 3.0)
+                size = fs  # Same size as noteheads
             font = QFont("Bravura", size)
             painter.setFont(font)
-            painter.drawText(dx, y, self.TREBLE_GLYPH)
+            # gClef origin is at the G line (2nd line from bottom = line 4
+            # counting from top in 0-based, or 3rd line in 0-based).
+            # Staff line positions: ytop + line*(lw+ls) for line 0..4
+            # Line 3 (G4, 2nd from bottom) = ytop + 3*(lw+ls) - lw
+            # The glyph baseline sits at the G line.
+            y_g_line = ytop - lw + 3 * (lw + ls)
+            painter.drawText(dx, y_g_line, self.TREBLE_GLYPH)
         else:
             if self.small:
-                size = max(8, int(staff_h * 0.4))
+                size = max(8, int(ls * 2.8))
             else:
-                size = max(10, int(staff_h * 0.55))
-            y = ytop + int(nh * 1.2)
+                size = fs
             font = QFont("Bravura", size)
             painter.setFont(font)
-            painter.drawText(dx, y, self.BASS_GLYPH)
+            # fClef origin is at the F line (4th line = line 1 from top).
+            # Line 1 = ytop + 1*(lw+ls) - lw
+            y_f_line = ytop - lw + 1 * (lw + ls)
+            painter.drawText(dx, y_f_line, self.BASS_GLYPH)

@@ -449,13 +449,14 @@ class ChordSymbol(MusicSymbol):
                     painter, note, xnote, ynote, nh, nw, ls, lw,
                     color_mode=color_mode)
 
-            # Dotted notes — SMuFL-aware positioning
+            # Dotted notes -- SMuFL-aware positioning
             if note.duration in (ND.DOTTED_HALF, ND.DOTTED_QUARTER,
                                  ND.DOTTED_EIGHTH):
                 if use_bravura:
                     from musiai.ui.midi.BravuraGlyphs import DOT, FONT_NAME
                     from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
-                    dot_size = max(14, int(ls * 3.5))
+                    dot_size = SMuFLMetadata.notehead_font_size(ls)
+                    dot_sc = SMuFLMetadata.font_scale(dot_size)
                     painter.setFont(QFont(FONT_NAME, dot_size))
                     if color_mode:
                         from musiai.notation.ColorScheme import ColorScheme
@@ -464,13 +465,13 @@ class ChordSymbol(MusicSymbol):
                     else:
                         painter.setPen(QPen(QColor(0, 0, 0)))
 
-                    # Dot x: notehead width + small gap (SMuFL dotSpacing)
+                    # Dot x: notehead width + small gap
                     ne_bbox = SMuFLMetadata.get_bbox('noteheadBlack')
                     ne = ne_bbox.get('bBoxNE', [1.18, 0.5])
-                    notehead_width = ne[0] * ls
+                    notehead_width = ne[0] * dot_sc
                     dot_gap = SMuFLMetadata.get_engraving_default(
                         'augmentationDotNoteHeadXOffset', 0.3)
-                    dot_x = int(xnote + notehead_width + dot_gap * ls)
+                    dot_x = int(xnote + notehead_width + dot_gap * dot_sc)
 
                     # Dot y: if note is ON a staff line, shift up to space
                     staff_pos = topstaff.dist(note.whitenote)
@@ -493,7 +494,8 @@ class ChordSymbol(MusicSymbol):
 
             # Ledger lines
             self._draw_ledger_lines(painter, note.whitenote, xnote, nw,
-                                    ytop, topstaff, nh, ls, lw)
+                                    ytop, topstaff, nh, ls, lw,
+                                    use_bravura=use_bravura)
 
     @staticmethod
     def _draw_note_bravura(painter, note, xnote, ynote, nh, nw, ls,
@@ -501,7 +503,10 @@ class ChordSymbol(MusicSymbol):
         """Notenkopf mit Bravura SMuFL Glyph, positioned via metadata."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
-        size = max(14, int(ls * 3.5))
+        from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+
+        size = SMuFLMetadata.notehead_font_size(ls)
+        sc = SMuFLMetadata.font_scale(size)
         painter.setFont(QFont(BG.FONT_NAME, size))
         if color_mode:
             from musiai.notation.ColorScheme import ColorScheme
@@ -519,20 +524,17 @@ class ChordSymbol(MusicSymbol):
             glyph = BG.NOTEHEAD_FILLED
             glyph_name = 'noteheadBlack'
 
-        # Use SMuFL bounding box for precise vertical centering
-        try:
-            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
-            bbox = SMuFLMetadata.get_bbox(glyph_name)
-            ne = bbox.get('bBoxNE', [0, 0])
-            sw = bbox.get('bBoxSW', [0, 0])
-            # SMuFL y-axis: positive = up; Qt y-axis: positive = down
-            # Baseline is at y=0 in SMuFL; bBoxSW[1] is negative for
-            # glyphs extending below baseline, bBoxNE[1] positive above.
-            # Center the glyph vertically on the staff line at ynote.
-            glyph_center_y = (ne[1] + sw[1]) / 2.0
-            y_draw = ynote + nh // 2 + int(glyph_center_y * ls)
-        except Exception:
-            y_draw = ynote + nh // 2
+        # Use SMuFL bounding box for precise vertical centering.
+        # SMuFL y-axis: positive = up; Qt y-axis: positive = down.
+        # For noteheadBlack: bBoxNE=(1.18, 0.5), bBoxSW=(0, -0.5)
+        # center_y = 0.0 (perfectly centered on baseline).
+        # drawText baseline = ynote + nh//2 places glyph center on the
+        # staff position.  Adjust by glyph center offset * font_scale.
+        bbox = SMuFLMetadata.get_bbox(glyph_name)
+        ne = bbox.get('bBoxNE', [0, 0])
+        sw = bbox.get('bBoxSW', [0, 0])
+        glyph_center_y = (ne[1] + sw[1]) / 2.0
+        y_draw = ynote + nh // 2 + int(glyph_center_y * sc)
 
         painter.drawText(xnote, y_draw, glyph)
 
@@ -567,27 +569,46 @@ class ChordSymbol(MusicSymbol):
         painter.restore()
 
     def _draw_ledger_lines(self, painter, whitenote, xnote, nw,
-                           ytop, topstaff, nh, ls, lw):
+                           ytop, topstaff, nh, ls, lw,
+                           use_bravura=False):
         from PySide6.QtGui import QPen, QColor
-        pen = QPen(QColor(0, 0, 0), 1)
+        from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+
+        # Ledger line extension from SMuFL
+        if use_bravura:
+            fs = SMuFLMetadata.notehead_font_size(ls)
+            sc = SMuFLMetadata.font_scale(fs)
+            ext = SMuFLMetadata.get_engraving_default(
+                'legerLineExtension', 0.4)
+            ledger_ext = int(ext * sc)
+            nh_w = SMuFLMetadata.get_bbox('noteheadBlack').get(
+                'bBoxNE', [1.18, 0.5])[0]
+            head_w = int(nh_w * sc)
+        else:
+            ledger_ext = ls // 4
+            head_w = nw
+
+        ledger_thick = max(1, int(SMuFLMetadata.get_engraving_default(
+            'legerLineThickness', 0.16) * sc)) if use_bravura else 1
+        pen = QPen(QColor(0, 0, 0), ledger_thick)
         painter.setPen(pen)
 
-        # Above staff — snap y to pixel grid
+        # Above staff
         top = topstaff.add(1)
         dist = whitenote.dist(top)
         y = ytop - lw
         if dist >= 2:
             for i in range(2, dist + 1, 2):
                 y -= nh
-                painter.drawLine(xnote - ls // 4, int(y),
-                                 xnote + nw + ls // 4, int(y))
+                painter.drawLine(xnote - ledger_ext, int(y),
+                                 xnote + head_w + ledger_ext, int(y))
 
-        # Below staff — snap y to pixel grid
+        # Below staff
         bottom = top.add(-8)
         y = ytop + (ls + lw) * 4 - 1
         dist = bottom.dist(whitenote)
         if dist >= 2:
             for i in range(2, dist + 1, 2):
                 y += nh
-                painter.drawLine(xnote - ls // 4, int(y),
-                                 xnote + nw + ls // 4, int(y))
+                painter.drawLine(xnote - ledger_ext, int(y),
+                                 xnote + head_w + ledger_ext, int(y))

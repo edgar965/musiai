@@ -640,8 +640,8 @@ class MidiSheetRenderer:
         pixmap.fill(QColor(255, 255, 255))
 
         painter = QPainter(pixmap)
-        # Disable antialiasing for lines/stems so they stay crisp on grid
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        # Enable antialiasing for smooth curves (ties, slurs) at 2x resolution
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 

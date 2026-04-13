@@ -21,8 +21,21 @@ class BarSymbol(MusicSymbol):
         nw = SC.NoteWidth
         ls = SC.LineSpace
         lw = SC.LineWidth
-        pen = QPen(QColor(0, 0, 0), 1)
+
+        use_bravura = (config.get('use_bravura', False)
+                       if isinstance(config, dict) else False)
+        if use_bravura:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            fs = SMuFLMetadata.notehead_font_size(ls)
+            sc = SMuFLMetadata.font_scale(fs)
+            bar_thick = SMuFLMetadata.get_engraving_default(
+                'thinBarlineThickness', 0.16)
+            bar_w = max(1, int(bar_thick * sc + 0.5))
+        else:
+            bar_w = 1
+        pen = QPen(QColor(0, 0, 0), bar_w)
         painter.setPen(pen)
         bx = x + nw // 2
-        yend = ytop + ls * 4 + lw * 4
-        painter.drawLine(bx, ytop, bx, yend)
+        ystart = ytop - lw
+        yend = ytop - lw + 4 * (lw + ls)
+        painter.drawLine(bx, ystart, bx, yend)

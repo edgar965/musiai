@@ -166,8 +166,19 @@ class Staff:
         # Draw tie curves between tied note pairs
         self._draw_ties(painter, ytop, x_symbols_start)
 
-        # Draw 5 horizontal staff lines — snap to pixel grid for sharpness
-        pen = QPen(QColor(0, 0, 0), max(1, lw))
+        # Draw 5 horizontal staff lines -- snap to pixel grid
+        use_bravura = config.get('use_bravura', False) if isinstance(
+            config, dict) else False
+        if use_bravura:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            staff_line_thick = SMuFLMetadata.get_engraving_default(
+                'staffLineThickness', 0.13)
+            fs = SMuFLMetadata.notehead_font_size(ls)
+            sc = SMuFLMetadata.font_scale(fs)
+            sl_w = max(1, int(staff_line_thick * sc + 0.5))
+        else:
+            sl_w = max(1, lw)
+        pen = QPen(QColor(0, 0, 0), sl_w)
         painter.setPen(pen)
         for line in range(5):
             y = int(ytop - lw + line * (lw + ls))
@@ -183,10 +194,21 @@ class Staff:
     def _draw_end_lines(self, painter, ytop, y_offset):
         from PySide6.QtGui import QPen, QColor
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
         nh = SC.NoteHeight
         lw = SC.LineWidth
+        ls = SC.LineSpace
 
-        pen = QPen(QColor(0, 0, 0), 1)
+        # Barline thickness from SMuFL
+        try:
+            fs = SMuFLMetadata.notehead_font_size(ls)
+            sc = SMuFLMetadata.font_scale(fs)
+            bar_thick = SMuFLMetadata.get_engraving_default(
+                'thinBarlineThickness', 0.16)
+            bar_w = max(1, int(bar_thick * sc + 0.5))
+        except Exception:
+            bar_w = 1
+        pen = QPen(QColor(0, 0, 0), bar_w)
         painter.setPen(pen)
 
         if self.track_num == 0:
@@ -217,15 +239,18 @@ class Staff:
 
         if use_bravura:
             from musiai.ui.midi import BravuraGlyphs as BG
-            size = max(12, int(ls * 2.8))
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            # Time sig digits should be at notehead font size
+            size = SMuFLMetadata.notehead_font_size(ls)
             font = QFont(BG.FONT_NAME, size)
             painter.setFont(font)
             painter.setPen(QPen(QColor(0, 0, 0)))
 
-            # Numerator: centered on 2nd staff line from top
-            y_num = ytop + nh
-            # Denominator: centered on 4th staff line from top
-            y_den = ytop + nh + 2 * (lw + ls)
+            # SMuFL time sig digits: baseline at bottom of the digit.
+            # Numerator fills top 2 spaces (lines 0-2), baseline at line 2
+            # Denominator fills bottom 2 spaces (lines 2-4), baseline at line 4
+            y_num = ytop - lw + 2 * (lw + ls)
+            y_den = ytop - lw + 4 * (lw + ls)
 
             num_glyph = ''.join(BG.TIME_DIGITS[int(d)] for d in num_str)
             den_glyph = ''.join(BG.TIME_DIGITS[int(d)] for d in den_str)
@@ -255,6 +280,7 @@ class Staff:
         from musiai.ui.midi.Stem import UP
 
         nh = SC.NoteHeight
+        ls = SC.LineSpace
 
         # Build x-position list for each symbol
         x_positions = []
@@ -263,7 +289,17 @@ class Staff:
             x_positions.append(x)
             x += s.width
 
-        pen = QPen(QColor(0, 0, 0), 1.2)
+        # Tie thickness from SMuFL engraving defaults
+        from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+        try:
+            fs = SMuFLMetadata.notehead_font_size(ls)
+            sc_val = SMuFLMetadata.font_scale(fs)
+            mid_thick = SMuFLMetadata.get_engraving_default(
+                'tieMidpointThickness', 0.22)
+            tie_w = max(1.0, mid_thick * sc_val)
+        except Exception:
+            tie_w = 1.2
+        pen = QPen(QColor(0, 0, 0), tie_w)
         painter.setPen(pen)
         painter.setBrush(QColor(0, 0, 0, 0))
 
@@ -286,18 +322,21 @@ class Staff:
                     x2 = x_positions[j] + nh // 2
 
                     # Curve below if stem up, above if stem down
+                    # Use ls*3 for a smooth, visible arc (Verovio-like)
                     if sym.stem1 and sym.stem1.direction == UP:
                         curve_y = y_note + nh
-                        ctrl_offset = nh * 2
+                        ctrl_offset = ls * 3
                     else:
                         curve_y = y_note - nh // 2
-                        ctrl_offset = -nh * 2
+                        ctrl_offset = -ls * 3
 
-                    mid_x = (x1 + x2) / 2
+                    # Two control points offset by 1/3 and 2/3 for
+                    # a smooth parabolic arc instead of a peak
+                    third = (x2 - x1) / 3.0
                     path = QPainterPath()
                     path.moveTo(x1, curve_y)
-                    path.cubicTo(mid_x, curve_y + ctrl_offset,
-                                 mid_x, curve_y + ctrl_offset,
+                    path.cubicTo(x1 + third, curve_y + ctrl_offset,
+                                 x2 - third, curve_y + ctrl_offset,
                                  x2, curve_y)
                     painter.drawPath(path)
                     break

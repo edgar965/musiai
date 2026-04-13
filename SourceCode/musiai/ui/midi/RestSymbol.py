@@ -42,29 +42,52 @@ class RestSymbol(MusicSymbol):
             self._draw_eighth(painter, rx, ytop, nh, nw, ls)
 
     def _draw_bravura(self, painter, x, ytop, nh):
-        """Draw rest using Bravura SMuFL glyph."""
+        """Draw rest using Bravura SMuFL glyph with metadata positioning."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
+        from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
 
         glyph_map = {
-            ND.WHOLE: BG.REST_WHOLE,
-            ND.HALF: BG.REST_HALF,
-            ND.QUARTER: BG.REST_QUARTER,
-            ND.EIGHTH: BG.REST_8TH,
-            ND.SIXTEENTH: BG.REST_16TH,
-            ND.THIRTYSECOND: BG.REST_32ND,
-            ND.DOTTED_EIGHTH: BG.REST_8TH,  # Achtel-Pause + Punkt
+            ND.WHOLE: (BG.REST_WHOLE, 'restWhole'),
+            ND.HALF: (BG.REST_HALF, 'restHalf'),
+            ND.QUARTER: (BG.REST_QUARTER, 'restQuarter'),
+            ND.EIGHTH: (BG.REST_8TH, 'rest8th'),
+            ND.SIXTEENTH: (BG.REST_16TH, 'rest16th'),
+            ND.THIRTYSECOND: (BG.REST_32ND, 'rest32nd'),
+            ND.DOTTED_EIGHTH: (BG.REST_8TH, 'rest8th'),
         }
-        glyph = glyph_map.get(self.duration)
-        if glyph is None:
+        entry = glyph_map.get(self.duration)
+        if entry is None:
             return
+        glyph, smufl_name = entry
 
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
-        size = max(14, int(SC.LineSpace * 3.5))
+        ls = SC.LineSpace
+        lw = SC.LineWidth
+        size = SMuFLMetadata.notehead_font_size(ls)
+        sc = SMuFLMetadata.font_scale(size)
         painter.setFont(QFont(BG.FONT_NAME, size))
         painter.setPen(QPen(QColor(0, 0, 0)))
-        # Position rest vertically centered on the staff
-        painter.drawText(x, ytop + nh * 2, glyph)
+
+        # SMuFL rest positions: the glyph origin (baseline) sits at the
+        # middle staff line (line 2, 0-indexed from top).
+        # Staff middle = ytop - lw + 2*(lw+ls)
+        y_mid = ytop - lw + 2 * (lw + ls)
+
+        # Whole rest hangs from line 1, half rest sits on line 2.
+        # Their SMuFL origins are defined relative to the staff:
+        # - restWhole: baseline at top of the rest, hangs below line 1
+        # - restHalf: baseline at bottom, sits on line 2
+        if self.duration == ND.WHOLE:
+            # Whole rest hangs below line 1 (2nd line from top)
+            y_line1 = ytop - lw + 1 * (lw + ls)
+            painter.drawText(x, y_line1, glyph)
+        elif self.duration == ND.HALF:
+            # Half rest sits on line 2 (middle line)
+            painter.drawText(x, y_mid, glyph)
+        else:
+            # Quarter, 8th, 16th, 32nd: centered around middle line
+            painter.drawText(x, y_mid, glyph)
 
     def _draw_whole(self, painter, x, ytop, nh, nw):
         """Rectangle below middle line."""
