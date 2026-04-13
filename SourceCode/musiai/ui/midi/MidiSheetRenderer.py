@@ -547,7 +547,8 @@ class MidiSheetRenderer:
     def _render_staff(self, staff: Staff, cfg: dict) -> QPixmap:
         """Render a staff onto a QPixmap."""
         width = SheetConfig.PageWidth
-        height = max(staff.height, 100)
+        # Extra Platz für Noten über/unter dem System + Taktnummern
+        height = max(staff.height + 20, 120)
         pixmap = QPixmap(width, height)
         pixmap.fill(QColor(255, 255, 255))
         painter = QPainter(pixmap)
