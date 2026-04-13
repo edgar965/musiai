@@ -623,14 +623,25 @@ class MidiSheetRenderer:
             text_item.setPos(105, y_offset - 28)
 
     def _render_staff(self, staff: Staff, cfg: dict) -> QPixmap:
-        """Render a staff onto a QPixmap."""
+        """Render a staff onto a QPixmap at 2x resolution for sharpness."""
+        scale = 2  # Retina-like rendering
         width = SheetConfig.PageWidth
-        # Extra Platz für Noten über/unter dem System + Taktnummern
         height = max(staff.height + 20, 120)
-        pixmap = QPixmap(width, height)
+
+        # Render at 2x resolution
+        pixmap = QPixmap(width * scale, height * scale)
         pixmap.fill(QColor(255, 255, 255))
         painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.scale(scale, scale)
         staff.draw(painter, 0, cfg)
         painter.end()
-        return pixmap
+
+        # Scale back to 1x display size with smooth filtering
+        return pixmap.scaled(
+            width, height,
+            aspectMode=Qt.AspectRatioMode.IgnoreAspectRatio,
+            mode=Qt.TransformationMode.SmoothTransformation,
+        )
