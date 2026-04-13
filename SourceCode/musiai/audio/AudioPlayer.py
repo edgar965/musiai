@@ -90,3 +90,13 @@ class AudioPlayer:
     def shutdown(self) -> None:
         self.stop()
         self._tracks.clear()
+        # pygame.mixer muss beendet werden damit der SDL-Audio-Thread stoppt.
+        # Ohne dies bleibt ein Non-Daemon-Thread am Leben und debugpy/PTVS
+        # erkennt den Prozess als "noch aktiv".
+        try:
+            import pygame.mixer
+            if pygame.mixer.get_init():
+                pygame.mixer.quit()
+                logger.info("pygame.mixer beendet")
+        except Exception:
+            pass

@@ -82,21 +82,15 @@ class MainWindow(QMainWindow):
             self.render_mode_changed.emit(mode)
 
     def closeEvent(self, event) -> None:
-        """Fenster geschlossen → Prozess sofort beenden."""
+        """Fenster geschlossen → normale Qt-Shutdown-Kette auslösen.
+
+        Wichtig: KEIN os._exit() hier! Das verhindert dass debugpy
+        (PTVS/Visual Studio) das DAP-terminated-Event senden kann,
+        wodurch VS ewig im Debug-Modus hängenbleibt.
+        aboutToQuit → controller.shutdown() räumt Audio auf.
+        main.py _shutdown_native_audio() erledigt den Rest.
+        """
         event.accept()
-
-        # Schnelles Aufräumen
-        for mod_name in ("pygame.mixer", "pygame.midi", "pygame"):
-            try:
-                mod = __import__(mod_name)
-                if hasattr(mod, "quit"):
-                    mod.quit()
-            except Exception:
-                pass
-
-        # Sofort beenden mit os._exit — umgeht alle Threads
-        import os
-        os._exit(0)
 
     @property
     def notation_view(self):
