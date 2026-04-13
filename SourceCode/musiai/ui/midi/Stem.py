@@ -112,13 +112,17 @@ class Stem:
             pen.setWidth(stem_w)
             painter.setPen(pen)
 
-        if use_smufl:
+        # Stem x: use actual Bravura glyph width for precise attachment
+        use_bravura = config.get('use_bravura', False) if isinstance(config, dict) else False
+        if use_bravura and use_smufl:
+            # Empirical: Bravura notehead at font_size=ls*3.5 has width ≈ 1.34*ls
+            glyph_w = int(ls * 1.34)
             if self.direction == UP:
-                se = SMuFLMetadata.stem_up_se()
-                xstart = x + ls // 4 + int(se[0] * ls)
+                # Stem attaches at RIGHT edge of notehead
+                xstart = x + ls // 4 + glyph_w
             else:
-                nw_pt = SMuFLMetadata.stem_down_nw()
-                xstart = x + ls // 4 + int(nw_pt[0] * ls)
+                # Stem attaches at LEFT edge of notehead
+                xstart = x + ls // 4
         else:
             if self.side == LEFT_SIDE:
                 xstart = x + ls // 4 + 1
@@ -301,24 +305,22 @@ class Stem:
         Here, x is the absolute position of this chord's note area.
         width_to_pair is the pixel distance between the two chord positions.
         xstart2 is the stem x offset within the paired chord.
-        xend = x + width_to_pair + xstart2 to get the absolute position.
+        xend = x + width_to_pair + xstart2 for absolute position.
         """
         from PySide6.QtCore import Qt
         pen.setWidth(nh // 2)
         pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
 
-        use_smufl = self._has_smufl_metadata()
-        if use_smufl:
-            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+        use_bravura_beam = config.get('use_bravura', False) if isinstance(config, dict) else False
+        if use_bravura_beam:
+            glyph_w = int(ls * 1.34)  # empirical Bravura notehead width
             if self.direction == UP:
-                se = SMuFLMetadata.stem_up_se()
-                xstart = x + ls // 4 + int(se[0] * ls)
-                xstart2 = ls // 4 + int(se[0] * ls)
+                xstart = x + ls // 4 + glyph_w
+                xstart2 = ls // 4 + glyph_w
             else:
-                nw_pt = SMuFLMetadata.stem_down_nw()
-                xstart = x + ls // 4 + int(nw_pt[0] * ls)
-                xstart2 = ls // 4 + int(nw_pt[0] * ls)
+                xstart = x + ls // 4
+                xstart2 = ls // 4
         else:
             if self.side == LEFT_SIDE:
                 xstart = x + ls // 4 + 1

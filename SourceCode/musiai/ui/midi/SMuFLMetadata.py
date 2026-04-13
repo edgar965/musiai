@@ -99,3 +99,39 @@ class SMuFLMetadata:
         ne = bbox.get('bBoxNE', [0, 0])
         sw = bbox.get('bBoxSW', [0, 0])
         return (ne[0] - sw[0], ne[1] - sw[1])
+
+    # ------------------------------------------------------------------
+    # Font scale: convert SMuFL staff-space coordinates to pixels
+    # ------------------------------------------------------------------
+    _font_scale_cache: dict = {}
+
+    @classmethod
+    def font_scale(cls, font_size_pt: int) -> float:
+        """Pixels per staff space for a given Bravura font point size.
+
+        SMuFL defines 1 staff space relative to the font em-square.
+        The actual pixel size depends on the point size used for
+        rendering.  We measure the noteheadBlack glyph once and cache
+        the ratio: actual_pixel_width / smufl_width.
+        """
+        if font_size_pt in cls._font_scale_cache:
+            return cls._font_scale_cache[font_size_pt]
+        try:
+            from PySide6.QtGui import QFont, QFontMetricsF
+            font = QFont("Bravura", font_size_pt)
+            fm = QFontMetricsF(font)
+            br = fm.tightBoundingRect("\uE0A4")  # noteheadBlack
+            smufl_w = 1.18  # noteheadBlack bbox width in staff spaces
+            if br.width() > 0:
+                scale = br.width() / smufl_w
+            else:
+                scale = float(font_size_pt) / 4.0
+        except Exception:
+            scale = float(font_size_pt) / 4.0
+        cls._font_scale_cache[font_size_pt] = scale
+        return scale
+
+    @classmethod
+    def notehead_font_size(cls, ls: int) -> int:
+        """Standard Bravura font size for noteheads at a given line space."""
+        return max(14, int(ls * 3.5))
