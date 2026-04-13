@@ -82,30 +82,19 @@ class MainWindow(QMainWindow):
             self.render_mode_changed.emit(mode)
 
     def closeEvent(self, event) -> None:
-        """Fenster geschlossen → Prozess sofort beenden (auch im VS Debugger)."""
+        """Fenster geschlossen → Prozess sofort beenden."""
         event.accept()
 
-        # Pygame aufräumen
-        for mod in ("pygame.mixer", "pygame.midi", "pygame"):
+        # Schnelles Aufräumen
+        for mod_name in ("pygame.mixer", "pygame.midi", "pygame"):
             try:
-                m = __import__(mod)
-                if hasattr(m, "quit"):
-                    m.quit()
+                mod = __import__(mod_name)
+                if hasattr(mod, "quit"):
+                    mod.quit()
             except Exception:
                 pass
 
-        # Win32 TerminateProcess — kann kein Debugger abfangen
-        import sys
-        if sys.platform == "win32":
-            try:
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                handle = kernel32.GetCurrentProcess()
-                kernel32.TerminateProcess(handle, 0)
-            except Exception:
-                pass
-
-        # Fallback
+        # Sofort beenden mit os._exit — umgeht alle Threads
         import os
         os._exit(0)
 

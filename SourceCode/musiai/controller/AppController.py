@@ -283,6 +283,9 @@ class AppController:
             if doc_tab:
                 doc_tab.notation_scene.set_render_mode(mode)
                 doc_tab.notation_scene.refresh()
+                # View zum Anfang scrollen
+                doc_tab.notation_view.centerOn(0, 0)
+        self.signal_bus.status_message.emit(f"Anzeige: {mode}")
         logger.info(f"Render-Modus gewechselt: {mode}")
 
     def _active_edit_controller(self):
@@ -1003,16 +1006,22 @@ class AppController:
     def _load_default_file(self) -> None:
         import os
 
-        default_xml = os.path.abspath("../media/music/musicXML/_Echte/_Bellini_Chopin - Casta diva.mxl")
-        if os.path.exists(default_xml):
+        default_file = os.path.abspath("../media/music/midi/Brahms_Valse_15.mid")
+        if os.path.exists(default_file):
             try:
-                from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
-                piece = MusicXmlImporter().import_file(default_xml)
+                if default_file.endswith((".mid", ".midi")):
+                    from musiai.midi.MidiImporter import MidiImporter
+                    piece = MidiImporter().import_file(default_file)
+                    file_type = "midi"
+                else:
+                    from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
+                    piece = MusicXmlImporter().import_file(default_file)
+                    file_type = "musicxml"
                 self.project.add_piece(piece)
-                self._open_piece_in_tab(piece, default_xml, "musicxml")
-                logger.info(f"Standard-Datei geladen: {default_xml}")
+                self._open_piece_in_tab(piece, default_file, file_type)
+                logger.info(f"Standard-Datei geladen: {default_file}")
             except Exception as e:
-                logger.warning(f"MusicXML laden fehlgeschlagen: {e}")
+                logger.warning(f"Standard-Datei laden fehlgeschlagen: {e}")
 
         # Audio-Stimme nur laden wenn explizit gewünscht (nicht automatisch)
 

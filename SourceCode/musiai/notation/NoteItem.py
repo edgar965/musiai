@@ -10,7 +10,7 @@ from musiai.util.Constants import NOTE_RADIUS
 
 logger = logging.getLogger("musiai.notation.NoteItem")
 
-STEM_LENGTH = 30
+STEM_LENGTH = 24
 
 
 class NoteItem(QGraphicsEllipseItem):
@@ -18,7 +18,8 @@ class NoteItem(QGraphicsEllipseItem):
 
     def __init__(self, note: Note, x: float, y: float, center_y: float = 0):
         r = NOTE_RADIUS
-        super().__init__(-r, -r + 1, r * 2, (r - 1) * 2)
+        # Ovaler Notenkopf: breiter als hoch (wie echte Noten)
+        super().__init__(-r, -r * 0.7, r * 2, r * 1.4)
         self.note = note
         self._center_y = center_y
         self.setPos(x, y)
