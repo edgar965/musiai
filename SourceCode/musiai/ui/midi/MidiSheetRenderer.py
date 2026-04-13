@@ -88,19 +88,25 @@ class MidiSheetRenderer:
     def _render_interleaved(self, scene, all_staffs, parts_data, cfg,
                             y_offset, system_width):
         """Treble+Bass zusammen pro Zeile (Partitur-Ansicht)."""
-        # Finde die maximale Anzahl Staffs pro Track
+        from PySide6.QtGui import QPen
         max_rows = max(len(staffs) for _, staffs in all_staffs)
 
-        # Part-Labels einmal oben
-        for track_idx, _ in all_staffs:
-            pd = parts_data[track_idx]
-            label = scene.addText(pd['part_name'])
-            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            label.setDefaultTextColor(QColor(30, 30, 80))
-            label.setPos(4, y_offset + track_idx * 60)
-
-        # Zeile für Zeile: alle Tracks nebeneinander
         for row in range(max_rows):
+            system_top = y_offset
+
+            # Part-Labels nur in erster Zeile
+            if row == 0:
+                for track_idx, _ in all_staffs:
+                    pd = parts_data[track_idx]
+                    label = scene.addText(pd['part_name'])
+                    label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+                    label.setDefaultTextColor(QColor(30, 30, 80))
+                    label.setPos(4, y_offset)
+                    y_offset += 14
+
+                y_offset = system_top
+
+            # Alle Tracks dieser Zeile direkt untereinander (eng)
             for track_idx, staffs in all_staffs:
                 if row >= len(staffs):
                     continue
@@ -108,8 +114,16 @@ class MidiSheetRenderer:
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
-                y_offset += staff.height
-            y_offset += 20  # Abstand zwischen Systemen
+                y_offset += staff.height - 5  # Eng zusammen
+
+            # Klammer links (verbindet die Staves)
+            if len(all_staffs) > 1:
+                pen = QPen(QColor(40, 40, 50), 2)
+                bracket = scene.addLine(
+                    98, system_top + 30, 98, y_offset - 10, pen)
+                bracket.setZValue(5)
+
+            y_offset += 30  # Großer Abstand zum nächsten System
 
         return y_offset
 
