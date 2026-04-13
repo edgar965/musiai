@@ -1,7 +1,9 @@
 """Hauptfenster der Anwendung."""
 
 import logging
-from PySide6.QtWidgets import QMainWindow, QMenu, QComboBox, QWidget, QHBoxLayout
+from PySide6.QtWidgets import (
+    QMainWindow, QMenu, QComboBox, QWidget, QHBoxLayout, QLabel, QToolBar,
+)
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import Qt, Signal
 from musiai.ui.TabWidget import TabWidget
@@ -15,7 +17,7 @@ logger = logging.getLogger("musiai.ui.MainWindow")
 class MainWindow(QMainWindow):
     """MusiAI Hauptfenster."""
 
-    render_mode_changed = Signal(str)  # "musicxml", "svg", "pianoroll"
+    render_mode_changed = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -42,14 +44,24 @@ class MainWindow(QMainWindow):
         # Menüleiste
         self._setup_menus()
 
-        # Render-Modus ComboBox (rechts in der Menüleiste)
-        self._setup_render_mode_combo()
+        # Render-Modus Toolbar (oben rechts, immer sichtbar)
+        self._setup_render_toolbar()
 
         logger.debug("MainWindow erstellt")
 
-    def _setup_render_mode_combo(self) -> None:
-        """ComboBox für Render-Modus in der StatusBar (immer sichtbar)."""
-        from PySide6.QtWidgets import QLabel
+    def _setup_render_toolbar(self) -> None:
+        """Eigene Toolbar mit Anzeige-ComboBox oben rechts."""
+        tb = QToolBar("Anzeige")
+        tb.setMovable(False)
+        tb.setFloatable(False)
+        tb.setStyleSheet(
+            "QToolBar { border: none; spacing: 4px; padding: 2px; }"
+        )
+
+        lbl = QLabel(" Anzeige: ")
+        lbl.setStyleSheet("color: #555; font-size: 12px;")
+        tb.addWidget(lbl)
+
         self._render_mode_combo = QComboBox()
         self._render_mode_combo.addItem("MusicXML", "musicxml")
         self._render_mode_combo.addItem("MIDI Sheet", "midisheet")
@@ -60,17 +72,9 @@ class MainWindow(QMainWindow):
         self._render_mode_combo.currentIndexChanged.connect(
             self._on_render_mode_changed
         )
+        tb.addWidget(self._render_mode_combo)
 
-        # Im Ansicht-Menü und als Corner-Widget der Menüleiste
-        from PySide6.QtWidgets import QLabel
-        corner = QWidget()
-        cl = QHBoxLayout(corner)
-        cl.setContentsMargins(0, 0, 8, 0)
-        lbl = QLabel("Anzeige:")
-        lbl.setStyleSheet("color: #555; font-size: 12px;")
-        cl.addWidget(lbl)
-        cl.addWidget(self._render_mode_combo)
-        self.menuBar().setCornerWidget(corner, Qt.Corner.TopRightCorner)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
 
     def _on_render_mode_changed(self, index: int) -> None:
         mode = self._render_mode_combo.itemData(index)
@@ -78,10 +82,27 @@ class MainWindow(QMainWindow):
             self.render_mode_changed.emit(mode)
 
     def closeEvent(self, event) -> None:
-        """Fenster geschlossen → App beenden."""
-        from PySide6.QtWidgets import QApplication
+        """Fenster geschlossen → sofort beenden."""
         event.accept()
-        QApplication.instance().quit()
+        # Alle pygame/MIDI Threads sofort killen
+        try:
+            import pygame.mixer
+            pygame.mixer.quit()
+        except Exception:
+            pass
+        try:
+            import pygame.midi
+            pygame.midi.quit()
+        except Exception:
+            pass
+        try:
+            import pygame
+            pygame.quit()
+        except Exception:
+            pass
+        # Prozess sofort beenden (kein Warten auf Threads)
+        import os
+        os._exit(0)
 
     @property
     def notation_view(self):
@@ -104,14 +125,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction("PDF importieren...", self.toolbar.import_pdf_clicked.emit)
         file_menu.addSeparator()
 
-        # Musik Datei speichern
         self._save_music_action = file_menu.addAction("Musik speichern")
         self._save_music_action.setShortcut(QKeySequence.StandardKey.Save)
         self._save_music_as_action = file_menu.addAction("Musik speichern unter...")
         self._save_music_as_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
         file_menu.addSeparator()
 
-        # Projekt
         file_menu.addAction("Projekt speichern", self.toolbar.save_project_clicked.emit)
         file_menu.addAction("Projekt laden", self.toolbar.load_project_clicked.emit, QKeySequence.StandardKey.Open)
         file_menu.addSeparator()
@@ -119,11 +138,10 @@ class MainWindow(QMainWindow):
         file_menu.addAction("PDF exportieren...", self.toolbar.export_pdf_clicked.emit)
         file_menu.addSeparator()
 
-        # Tab schließen
         self._close_tab_action = file_menu.addAction("Tab schließen")
         self._close_tab_action.setShortcut(QKeySequence("Ctrl+W"))
 
-        # Bearbeiten-Menü
+        # Bearbeiten
         edit_menu = menu_bar.addMenu("&Bearbeiten")
         self._delete_action = edit_menu.addAction("Note löschen")
         self._delete_action.setShortcut(QKeySequence.StandardKey.Delete)
@@ -131,12 +149,12 @@ class MainWindow(QMainWindow):
         self._new_voice_action = edit_menu.addAction("Neue Stimme")
         self._new_audio_action = edit_menu.addAction("Neue Stimme — Aufnahme...")
 
-        # Ansicht-Menü
+        # Ansicht
         view_menu = menu_bar.addMenu("&Ansicht")
         view_menu.addAction("Zoom +", self.toolbar.zoom_in_clicked.emit, "Ctrl+=")
         view_menu.addAction("Zoom -", self.toolbar.zoom_out_clicked.emit, "Ctrl+-")
 
-        # Audio-Menü
+        # Audio
         audio_menu = menu_bar.addMenu("&Audio")
         self._backend_gm_action = audio_menu.addAction("Windows GM Synth")
         self._backend_gm_action.setCheckable(True)
@@ -146,16 +164,16 @@ class MainWindow(QMainWindow):
         audio_menu.addSeparator()
         audio_menu.addAction("MIDI Device", self.toolbar.midi_device_clicked.emit)
 
-        # Transport-Menü
+        # Transport
         transport_menu = menu_bar.addMenu("&Transport")
         self._play_pause_action = transport_menu.addAction("Play / Pause")
         self._play_pause_action.setShortcut("Space")
         transport_menu.addAction("Stop", self.toolbar.stop_clicked.emit, "Escape")
 
-        # Tools-Menü
+        # Tools
         tools_menu = menu_bar.addMenu("&Tools")
         self._settings_action = tools_menu.addAction("Einstellungen...")
 
-        # Hilfe-Menü
+        # Hilfe
         help_menu = menu_bar.addMenu("&Hilfe")
         help_menu.addAction("Info", self._show_about)

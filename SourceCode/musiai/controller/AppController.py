@@ -1024,30 +1024,14 @@ class AppController:
         logger.info("MusiAI gestartet")
 
     def shutdown(self) -> None:
-        # Transport-Timer sofort stoppen
-        self.playback_engine.transport._timer.stop()
-        self.playback_engine.shutdown()
-        self.midi_keyboard.shutdown()
-
-        # pygame komplett beenden (verhindert hängende Threads)
+        """Aufräumen — wird von aboutToQuit aufgerufen."""
         try:
-            import pygame.mixer
-            pygame.mixer.quit()
+            self.playback_engine.transport._timer.stop()
+            self.playback_engine.shutdown()
         except Exception:
             pass
         try:
-            import pygame.midi
-            pygame.midi.quit()
+            self.midi_keyboard.shutdown()
         except Exception:
             pass
-        try:
-            import pygame
-            pygame.quit()
-        except Exception:
-            pass
-
         logger.info("MusiAI beendet")
-
-        # Prozess-Exit erzwingen falls noch Threads hängen
-        import os
-        os._exit(0)
