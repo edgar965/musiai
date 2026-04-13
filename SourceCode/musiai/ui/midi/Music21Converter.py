@@ -7,7 +7,7 @@ from musiai.ui.midi.BarSymbol import BarSymbol
 from musiai.ui.midi.RestSymbol import RestSymbol
 from musiai.ui.midi.ClefSymbol import TREBLE, BASS
 from musiai.ui.midi import NoteDuration as ND
-from musiai.ui.midi.AccidSymbol import SHARP, FLAT, NONE as ACCID_NONE
+from musiai.ui.midi.AccidSymbol import AccidSymbol, SHARP, FLAT, NONE as ACCID_NONE
 
 logger = logging.getLogger("musiai.ui.midi.Music21Converter")
 
@@ -28,6 +28,9 @@ class Music21Converter:
                 'time_num': int,
                 'time_den': int,
                 'measure_len': int,   # in ticks
+                'key_sharps': int,
+                'key_accids': [AccidSymbol, ...],
+                'tempo_bpm': float | None,
                 'part_name': str,
             }
         """
@@ -36,9 +39,13 @@ class Music21Converter:
         score = m21_parse(file_path)
         results = []
 
+        # Extract tempo from score level
+        tempo_bpm = self._detect_tempo(score)
+
         for part in score.parts:
             part_data = self._convert_part(part)
             if part_data is not None:
+                part_data['tempo_bpm'] = tempo_bpm
                 results.append(part_data)
 
         return results
@@ -55,6 +62,8 @@ class Music21Converter:
         clef = self._detect_clef(part)
         time_num, time_den = self._detect_time_sig(part)
         measure_len = int(time_num * (4 / time_den) * TPB)
+        key_sharps = self._detect_key_sig(part)
+        key_accids = self._create_key_accid_symbols(key_sharps, clef)
         # Part-Name: music21 liefert manchmal None
         part_name = part.partName
         if not part_name or part_name.strip() == "":
@@ -83,6 +92,8 @@ class Music21Converter:
             'time_num': time_num,
             'time_den': time_den,
             'measure_len': measure_len,
+            'key_sharps': key_sharps,
+            'key_accids': key_accids,
             'part_name': part_name,
         }
 
@@ -108,30 +119,43 @@ class Music21Converter:
 
         for tick in sorted(time_groups):
             group = time_groups[tick]
-            note_data_list = []
-            max_end = tick
 
+            # Collect pitches and total beat duration from all elements
+            pitches = []
+            dur_beats = 0.0
             for el in group:
-                dur_beats = float(el.duration.quarterLength)
-                end_tick = tick + int(dur_beats * TPB)
-                max_end = max(max_end, end_tick)
-
+                el_dur = float(el.duration.quarterLength)
+                dur_beats = max(dur_beats, el_dur)
                 if self._is_chord(el):
-                    for p in el.pitches:
-                        nd = self._pitch_to_notedata(p, dur_beats)
-                        if nd is not None:
-                            note_data_list.append(nd)
+                    pitches.extend(el.pitches)
                 elif self._is_note(el):
-                    nd = self._pitch_to_notedata(el.pitch, dur_beats)
+                    pitches.append(el.pitch)
+
+            if not pitches:
+                continue
+
+            # Split complex durations into tied standard parts
+            beat_parts = ND.split_complex(dur_beats)
+
+            current_tick = tick
+            for part_beats in beat_parts:
+                part_ticks = int(part_beats * TPB)
+                end_tick = current_tick + part_ticks
+
+                note_data_list = []
+                for p in pitches:
+                    nd = self._pitch_to_notedata(p, part_beats)
                     if nd is not None:
                         note_data_list.append(nd)
 
-            if note_data_list:
-                # Sort by pitch, fix left_side for adjacent notes
-                note_data_list.sort(key=lambda nd: nd.number)
-                self._fix_left_sides(note_data_list)
-                chord = ChordSymbol(note_data_list, clef, tick, max_end)
-                chords.append(chord)
+                if note_data_list:
+                    note_data_list.sort(key=lambda nd: nd.number)
+                    self._fix_left_sides(note_data_list)
+                    chord = ChordSymbol(
+                        note_data_list, clef, current_tick, end_tick)
+                    chords.append(chord)
+
+                current_tick = end_tick
 
         return chords
 
@@ -189,6 +213,81 @@ class Music21Converter:
             ts = ts_list[0]
             return ts.numerator, ts.denominator
         return 4, 4
+
+    @staticmethod
+    def _detect_key_sig(part) -> int:
+        """Extract key signature sharps count (negative = flats)."""
+        ks_list = list(part.recurse().getElementsByClass('KeySignature'))
+        if ks_list:
+            return ks_list[0].sharps
+        return 0
+
+    @staticmethod
+    def _detect_tempo(score) -> float | None:
+        """Extract tempo (BPM) from the score."""
+        tempos = list(score.recurse().getElementsByClass('MetronomeMark'))
+        if tempos:
+            return tempos[0].number
+        return None
+
+    @staticmethod
+    def _create_key_accid_symbols(key_sharps: int, clef: int) -> list:
+        """Create AccidSymbol objects for the key signature.
+
+        key_sharps > 0: sharps in order F C G D A E B
+        key_sharps < 0: flats  in order B E A D G C F
+        """
+        # WhiteNote letters: A=0, B=1, C=2, D=3, E=4, F=5, G=6
+        # Treble clef sharp order: F5 C5 G5 D5 A4 E5 B4
+        # Treble clef flat order:  B4 E5 A4 D5 G4 C5 F4
+        # Bass clef: same letters, 2 octaves lower
+        if clef == TREBLE:
+            sharp_notes = [
+                WhiteNote(5, 5),  # F5
+                WhiteNote(2, 5),  # C5
+                WhiteNote(6, 5),  # G5
+                WhiteNote(3, 5),  # D5
+                WhiteNote(0, 5),  # A5 (drawn on A4 line visually)
+                WhiteNote(4, 5),  # E5
+                WhiteNote(1, 5),  # B5 (drawn on B4 line visually)
+            ]
+            flat_notes = [
+                WhiteNote(1, 4),  # B4
+                WhiteNote(4, 5),  # E5
+                WhiteNote(0, 4),  # A4
+                WhiteNote(3, 5),  # D5
+                WhiteNote(6, 4),  # G4
+                WhiteNote(2, 5),  # C5
+                WhiteNote(5, 4),  # F4
+            ]
+        else:
+            sharp_notes = [
+                WhiteNote(5, 3),  # F3
+                WhiteNote(2, 3),  # C3
+                WhiteNote(6, 3),  # G3
+                WhiteNote(3, 3),  # D3
+                WhiteNote(0, 3),  # A3
+                WhiteNote(4, 3),  # E3
+                WhiteNote(1, 3),  # B3
+            ]
+            flat_notes = [
+                WhiteNote(1, 2),  # B2
+                WhiteNote(4, 3),  # E3
+                WhiteNote(0, 2),  # A2
+                WhiteNote(3, 3),  # D3
+                WhiteNote(6, 2),  # G2
+                WhiteNote(2, 3),  # C3
+                WhiteNote(5, 2),  # F2
+            ]
+
+        accids = []
+        if key_sharps > 0:
+            for i in range(min(key_sharps, 7)):
+                accids.append(AccidSymbol(SHARP, sharp_notes[i], clef))
+        elif key_sharps < 0:
+            for i in range(min(-key_sharps, 7)):
+                accids.append(AccidSymbol(FLAT, flat_notes[i], clef))
+        return accids
 
     # ------------------------------------------------------------------
     # Type checks (avoid isinstance with music21 classes at module level)

@@ -16,7 +16,8 @@ class Staff:
     def __init__(self, symbols: list[MusicSymbol],
                  key_accids: list = None,
                  measure_len: int = 0,
-                 track_num: int = 0, total_tracks: int = 1):
+                 track_num: int = 0, total_tracks: int = 1,
+                 time_num: int = 0, time_den: int = 0):
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
 
         self.symbols = symbols
@@ -25,9 +26,17 @@ class Staff:
         self.show_measures = True
         self.measure_length = measure_len
 
+        # Time signature
+        self.time_num = time_num
+        self.time_den = time_den
+
         # Key signature accidentals
         self.key_accids = key_accids or []
         self.keysig_width = SC.key_signature_width(self.key_accids)
+
+        # Add time signature width to keysig_width
+        if self.time_num > 0 and self.time_den > 0:
+            self.keysig_width += SC.NoteWidth * 2
 
         # Find clef from first ChordSymbol
         self.clef = self._find_clef(symbols)
@@ -142,6 +151,11 @@ class Staff:
         for a in self.key_accids:
             a.draw(painter, x_current, ytop, config)
             x_current += a.width
+
+        # Draw time signature
+        if self.time_num > 0 and self.time_den > 0:
+            x_current = self._draw_time_signature(
+                painter, x_current, ytop, config)
 
         # Draw symbols (notes, rests, bars)
         for s in self.symbols:
