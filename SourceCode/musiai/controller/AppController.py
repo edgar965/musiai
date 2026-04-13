@@ -211,6 +211,9 @@ class AppController:
         # --- Einstellungen ---
         self.main_window._settings_action.triggered.connect(self._show_settings)
 
+        # --- Render-Modus ---
+        self.main_window.render_mode_changed.connect(self._on_render_mode_changed)
+
         # --- Audio Backend ---
         self.main_window._backend_gm_action.triggered.connect(
             lambda: self._switch_backend("windows_gm")
@@ -271,6 +274,16 @@ class AppController:
     # ------------------------------------------------------------------
     # Delegierende Methoden (leiten an aktiven Tab weiter)
     # ------------------------------------------------------------------
+
+    def _on_render_mode_changed(self, mode: str) -> None:
+        """Render-Modus fuer alle offenen Tabs aendern."""
+        tab_widget = self.main_window.tab_widget
+        for i in range(tab_widget.tab_count()):
+            doc_tab = tab_widget.document_tab_at(i)
+            if doc_tab:
+                doc_tab.notation_scene.set_render_mode(mode)
+                doc_tab.notation_scene.refresh()
+        logger.info(f"Render-Modus gewechselt: {mode}")
 
     def _active_edit_controller(self):
         return self._active_tab.edit_controller if self._active_tab else None

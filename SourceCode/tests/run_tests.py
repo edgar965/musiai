@@ -34,14 +34,41 @@ if sys.platform == "win32":
     os.close(_stderr_fd)
 
 
-def run_all():
-    """Entdeckt und führt alle Tests im tests/ Verzeichnis aus."""
+def _discover_standard(loader, test_dir, top_dir):
+    """Entdeckt Tests in allen Unterordnern außer longrunner/."""
+    suite = unittest.TestSuite()
+    for entry in sorted(os.listdir(test_dir)):
+        sub = os.path.join(test_dir, entry)
+        if entry == "longrunner" or entry.startswith("__"):
+            continue
+        if os.path.isdir(sub):
+            suite.addTests(loader.discover(
+                sub, pattern="test_*.py", top_level_dir=top_dir))
+        elif entry.startswith("test_") and entry.endswith(".py"):
+            suite.addTests(loader.discover(
+                test_dir, pattern=entry, top_level_dir=top_dir))
+    return suite
+
+
+def run_all(include_longrunner: bool = False):
+    """Entdeckt und führt Tests aus.
+
+    Args:
+        include_longrunner: Wenn True, werden auch langsame Tests
+            aus tests/longrunner/ einbezogen.
+    """
     loader = unittest.TestLoader()
-    suite = loader.discover(
-        start_dir=os.path.dirname(__file__),
-        pattern="test_*.py",
-        top_level_dir=os.path.join(os.path.dirname(__file__), ".."),
-    )
+    test_dir = os.path.dirname(__file__)
+    top_dir = os.path.join(test_dir, "..")
+
+    if include_longrunner:
+        suite = loader.discover(
+            start_dir=test_dir,
+            pattern="test_*.py",
+            top_level_dir=top_dir,
+        )
+    else:
+        suite = _discover_standard(loader, test_dir, top_dir)
 
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(suite)
@@ -49,5 +76,6 @@ def run_all():
 
 
 if __name__ == "__main__":
-    result = run_all()
+    include_all = "--all" in sys.argv
+    result = run_all(include_longrunner=include_all)
     sys.exit(0 if result.wasSuccessful() else 1)

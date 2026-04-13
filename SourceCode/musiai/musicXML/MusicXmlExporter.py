@@ -74,6 +74,55 @@ class MusicXmlExporter:
 
         logger.info(f"MusicXML exportiert: {path}")
 
+    def export_string(self, piece: Piece) -> str:
+        """Piece als MusicXML-String zurückgeben (für Verovio)."""
+        logger.info("Exportiere MusicXML als String")
+
+        root = ET.Element("score-partwise", version="4.0")
+        work = ET.SubElement(root, "work")
+        ET.SubElement(work, "work-title").text = piece.title
+
+        part_list = ET.SubElement(root, "part-list")
+        for i, part in enumerate(piece.parts):
+            sp = ET.SubElement(part_list, "score-part", id=f"P{i+1}")
+            ET.SubElement(sp, "part-name").text = part.name
+
+        for i, part in enumerate(piece.parts):
+            part_elem = ET.SubElement(root, "part", id=f"P{i+1}")
+            for m_idx, measure in enumerate(part.measures):
+                measure_elem = ET.SubElement(
+                    part_elem, "measure", number=str(measure.number)
+                )
+                if m_idx == 0:
+                    attrs = ET.SubElement(measure_elem, "attributes")
+                    ET.SubElement(attrs, "divisions").text = str(self.DIVISIONS)
+                    key = ET.SubElement(attrs, "key")
+                    ET.SubElement(key, "fifths").text = "0"
+                    time = ET.SubElement(attrs, "time")
+                    ET.SubElement(time, "beats").text = str(
+                        measure.time_signature.numerator
+                    )
+                    ET.SubElement(time, "beat-type").text = str(
+                        measure.time_signature.denominator
+                    )
+                    clef = ET.SubElement(attrs, "clef")
+                    ET.SubElement(clef, "sign").text = "G"
+                    ET.SubElement(clef, "line").text = "2"
+                if measure.tempo or (m_idx == 0 and piece.tempos):
+                    tempo_bpm = (
+                        measure.tempo.bpm if measure.tempo else piece.initial_tempo
+                    )
+                    direction = ET.SubElement(measure_elem, "direction")
+                    ET.SubElement(direction, "sound", tempo=str(tempo_bpm))
+                for note in measure.notes:
+                    self._write_note(measure_elem, note)
+
+        xml_str = ET.tostring(root, encoding="unicode")
+        pretty = minidom.parseString(xml_str).toprettyxml(
+            indent="  ", encoding="UTF-8"
+        )
+        return pretty.decode("UTF-8")
+
     def _write_note(self, measure_elem: ET.Element, note: Note) -> None:
         """Eine Note als MusicXML schreiben."""
         note_elem = ET.SubElement(measure_elem, "note")

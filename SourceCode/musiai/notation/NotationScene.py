@@ -28,6 +28,11 @@ class NotationScene(QGraphicsScene):
     PART_SPACING = 120
     SYSTEM_GAP = 50
 
+    # Render-Modi
+    MODE_MUSICXML = "musicxml"
+    MODE_SVG = "svg"
+    MODE_PIANOROLL = "pianoroll"
+
     def __init__(self):
         super().__init__()
         self.setBackgroundBrush(QColor(*COLOR_BACKGROUND))
@@ -35,10 +40,24 @@ class NotationScene(QGraphicsScene):
         self.measure_renderers: list[MeasureRenderer] = []
         self._primary_renderers: list[MeasureRenderer] = []
         self._system_width = self.DEFAULT_SYSTEM_WIDTH
+        self._render_mode = self.MODE_MUSICXML
         self.playhead = PlayheadItem()
         self.addItem(self.playhead)
         self.cursor = CursorItem()
         self.addItem(self.cursor)
+
+    def set_render_mode(self, mode: str) -> None:
+        """Render-Modus setzen: 'musicxml', 'svg' oder 'pianoroll'."""
+        if mode not in (self.MODE_MUSICXML, self.MODE_SVG, self.MODE_PIANOROLL):
+            logger.warning(f"Unbekannter Render-Modus: {mode}")
+            return
+        if mode != self._render_mode:
+            self._render_mode = mode
+            logger.info(f"Render-Modus gewechselt: {mode}")
+
+    @property
+    def render_mode(self) -> str:
+        return self._render_mode
 
     def set_piece(self, piece: Piece) -> None:
         logger.info(f"Rendere Piece: '{piece.title}'")
@@ -64,6 +83,14 @@ class NotationScene(QGraphicsScene):
         self.addItem(self.cursor)
 
         if not self.piece or not self.piece.parts:
+            return
+
+        # Dispatch nach Render-Modus
+        if self._render_mode == self.MODE_SVG:
+            self._refresh_svg()
+            return
+        if self._render_mode == self.MODE_PIANOROLL:
+            self._refresh_pianoroll()
             return
 
         note_parts = [p for p in self.piece.parts
@@ -336,6 +363,22 @@ class NotationScene(QGraphicsScene):
             except RuntimeError:
                 pass
             self._measure_highlight = None
+
+    # ------------------------------------------------------------------
+    # Alternative Renderer
+    # ------------------------------------------------------------------
+
+    def _refresh_svg(self) -> None:
+        """Verovio SVG Rendering."""
+        from musiai.notation.VerovioRenderer import VerovioRenderer
+        renderer = VerovioRenderer()
+        renderer.render_piece(self.piece, self, self._system_width)
+
+    def _refresh_pianoroll(self) -> None:
+        """Piano-Roll Rendering."""
+        from musiai.notation.PianoRollRenderer import PianoRollRenderer
+        renderer = PianoRollRenderer()
+        renderer.render_piece(self.piece, self, self._system_width)
 
     # ------------------------------------------------------------------
     # NoteItem queries

@@ -1,9 +1,9 @@
 """Hauptfenster der Anwendung."""
 
 import logging
-from PySide6.QtWidgets import QMainWindow, QMenu
+from PySide6.QtWidgets import QMainWindow, QMenu, QComboBox, QWidget, QHBoxLayout
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from musiai.ui.TabWidget import TabWidget
 from musiai.ui.Toolbar import Toolbar
 from musiai.ui.StatusBar import StatusBar
@@ -14,6 +14,8 @@ logger = logging.getLogger("musiai.ui.MainWindow")
 
 class MainWindow(QMainWindow):
     """MusiAI Hauptfenster."""
+
+    render_mode_changed = Signal(str)  # "musicxml", "svg", "pianoroll"
 
     def __init__(self):
         super().__init__()
@@ -40,7 +42,34 @@ class MainWindow(QMainWindow):
         # Menüleiste
         self._setup_menus()
 
+        # Render-Modus ComboBox (rechts in der Menüleiste)
+        self._setup_render_mode_combo()
+
         logger.debug("MainWindow erstellt")
+
+    def _setup_render_mode_combo(self) -> None:
+        """ComboBox fuer Render-Modus rechts in der Menüleiste."""
+        self._render_mode_combo = QComboBox()
+        self._render_mode_combo.addItem("MusicXML", "musicxml")
+        self._render_mode_combo.addItem("SVG (Verovio)", "svg")
+        self._render_mode_combo.addItem("Piano Roll", "pianoroll")
+        self._render_mode_combo.setFixedWidth(140)
+        self._render_mode_combo.setToolTip("Darstellungsmodus wechseln")
+        self._render_mode_combo.currentIndexChanged.connect(
+            self._on_render_mode_changed
+        )
+
+        # Spacer + ComboBox als Corner-Widget der Menüleiste
+        corner = QWidget()
+        layout = QHBoxLayout(corner)
+        layout.setContentsMargins(0, 0, 6, 0)
+        layout.addWidget(self._render_mode_combo)
+        self.menuBar().setCornerWidget(corner, Qt.Corner.TopRightCorner)
+
+    def _on_render_mode_changed(self, index: int) -> None:
+        mode = self._render_mode_combo.itemData(index)
+        if mode:
+            self.render_mode_changed.emit(mode)
 
     @property
     def notation_view(self):

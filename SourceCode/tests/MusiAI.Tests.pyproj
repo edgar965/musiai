@@ -32,9 +32,11 @@
     <!-- audio -->
     <Compile Include="tests\audio\__init__.py" />
     <Compile Include="tests\audio\test_audio.py" />
-    <Compile Include="tests\audio\test_audio_features.py" />
-    <Compile Include="tests\audio\test_audio_playback.py" />
-    <Compile Include="tests\audio\test_detection_pipelines.py" />
+    <!-- longrunner (slow tests, >3s) -->
+    <Compile Include="tests\longrunner\__init__.py" />
+    <Compile Include="tests\longrunner\test_audio_features.py" />
+    <Compile Include="tests\longrunner\test_audio_playback.py" />
+    <Compile Include="tests\longrunner\test_detection_pipelines.py" />
     <!-- ui -->
     <Compile Include="tests\ui\__init__.py" />
     <Compile Include="tests\ui\test_notation.py" />
@@ -50,6 +52,7 @@
     <Folder Include="tests\" />
     <Folder Include="tests\data\" />
     <Folder Include="tests\audio\" />
+    <Folder Include="tests\longrunner\" />
     <Folder Include="tests\ui\" />
     <Folder Include="tests\integration\" />
   </ItemGroup>
