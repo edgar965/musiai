@@ -440,21 +440,20 @@ class ChordSymbol(MusicSymbol):
             painter.rotate(-45)
 
             if note.duration in (ND.WHOLE, ND.HALF, ND.DOTTED_HALF):
-                # Hollow note
+                # Hollow note: 3 stroke ellipses (like Java)
                 painter.setBrush(QBrush(Qt.GlobalColor.transparent))
+                painter.setPen(QPen(QColor(0, 0, 0), 1))
                 painter.drawEllipse(-nw // 2, -nh // 2, nw, nh - 1)
                 painter.drawEllipse(-nw // 2, -nh // 2 + 1, nw, nh - 2)
                 painter.drawEllipse(-nw // 2, -nh // 2 + 1, nw, nh - 3)
             else:
                 # Filled note
                 painter.setBrush(QBrush(QColor(0, 0, 0)))
+                painter.setPen(QPen(QColor(0, 0, 0), 1))
                 painter.drawEllipse(-nw // 2, -nh // 2, nw, nh - 1)
+                painter.setBrush(QBrush(Qt.GlobalColor.transparent))
 
-            # Outline
-            painter.setBrush(QBrush(Qt.GlobalColor.transparent))
             painter.setPen(QPen(QColor(0, 0, 0), 1))
-            painter.drawEllipse(-nw // 2, -nh // 2, nw, nh - 1)
-
             painter.restore()
 
             # Dotted notes

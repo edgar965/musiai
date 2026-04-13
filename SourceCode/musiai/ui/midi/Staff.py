@@ -136,7 +136,7 @@ class Staff:
 
         # Draw clef
         self.clefsym.draw(painter, x_current, ytop, config)
-        x_current += self.clefsym.min_width
+        x_current += self.clefsym.width
 
         # Draw key signature accidentals
         for a in self.key_accids:

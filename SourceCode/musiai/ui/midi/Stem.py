@@ -171,8 +171,17 @@ class Stem:
 
     def _draw_horiz_bar_stem(self, painter, pen, x, ytop, top_staff,
                              ls, nh, nw):
-        """Draw horizontal beam to paired stem."""
+        """Draw horizontal beam to paired stem.
+
+        In Java, drawing is relative to the chord's translated origin.
+        Here, x is the absolute position of this chord's note area.
+        width_to_pair is the pixel distance between the two chord positions.
+        xstart2 is the stem x offset within the paired chord.
+        xend = x + width_to_pair + xstart2 to get the absolute position.
+        """
+        from PySide6.QtCore import Qt
         pen.setWidth(nh // 2)
+        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
 
         if self.side == LEFT_SIDE:
@@ -189,7 +198,7 @@ class Stem:
                     ND.SIXTEENTH, ND.THIRTYSECOND}
 
         if self.direction == UP:
-            xend = self.width_to_pair + xstart2
+            xend = x + self.width_to_pair + xstart2
             ystart = ytop + top_staff.dist(self.end) * nh // 2
             yend = ytop + top_staff.dist(self.pair.end) * nh // 2
 
@@ -201,7 +210,7 @@ class Stem:
             # Dotted eighth partial beam
             if self.duration == ND.DOTTED_EIGHTH:
                 px = xend - nh
-                slope = (yend - ystart) / max(xend - xstart, 1)
+                slope = (yend - ystart) * 1.0 / max(xend - xstart, 1)
                 py = int(slope * (px - xend) + yend)
                 painter.drawLine(px, py, xend, yend)
 
@@ -212,7 +221,7 @@ class Stem:
             if self.duration == ND.THIRTYSECOND:
                 painter.drawLine(xstart, ystart, xend, yend)
         else:
-            xend = self.width_to_pair + xstart2
+            xend = x + self.width_to_pair + xstart2
             ystart = ytop + top_staff.dist(self.end) * nh // 2 + nh
             yend = ytop + top_staff.dist(self.pair.end) * nh // 2 + nh
 
@@ -223,7 +232,7 @@ class Stem:
 
             if self.duration == ND.DOTTED_EIGHTH:
                 px = xend - nh
-                slope = (yend - ystart) / max(xend - xstart, 1)
+                slope = (yend - ystart) * 1.0 / max(xend - xstart, 1)
                 py = int(slope * (px - xend) + yend)
                 painter.drawLine(px, py, xend, yend)
 

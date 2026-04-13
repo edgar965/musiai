@@ -64,6 +64,16 @@ class MidiSheetRenderer:
         widths = SymbolWidths(track_symbols)
         self._align_symbols(track_symbols, widths)
 
+        # Create beams before creating staffs
+        if parts_data:
+            pd0 = parts_data[0]
+            time_num = pd0.get('time_num', 4)
+            time_den = pd0.get('time_den', 4)
+            quarter = 480  # TPB from Music21Converter
+            measure_len = pd0.get('measure_len', quarter * 4)
+            self._create_all_beamed_chords(
+                track_symbols, time_num, time_den, quarter, measure_len)
+
         # Create staffs per track
         all_staffs = []  # list of (track_idx, list[Staff])
         for track_idx, symbols in enumerate(track_symbols):
@@ -192,10 +202,10 @@ class MidiSheetRenderer:
         time_num, time_den = self._get_time_sig(piece)
         quarter = tpb  # quarter note = tpb ticks
 
-        # Beaming deaktiviert (erzeugt kaputte Dreiecke)
-        # self._create_all_beamed_chords(
-        #     track_symbols, time_num, time_den, quarter, measure_len)
-        #         # Create staffs and render
+        # Create beams
+        self._create_all_beamed_chords(
+            track_symbols, time_num, time_den, quarter, measure_len)
+        # Create staffs and render
         for track_idx, symbols in enumerate(track_symbols):
             clef = track_clefs[track_idx]
             part = self._get_part(piece, track_idx)
