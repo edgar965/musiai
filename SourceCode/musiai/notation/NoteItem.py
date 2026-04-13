@@ -1,8 +1,11 @@
 """NoteItem - Farbiger Notenkopf mit Hals als QGraphicsItem."""
 
 import logging
-from PySide6.QtWidgets import QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem
-from PySide6.QtGui import QBrush, QPen, QColor
+from PySide6.QtWidgets import (
+    QGraphicsEllipseItem, QGraphicsItem, QGraphicsLineItem,
+    QGraphicsSimpleTextItem,
+)
+from PySide6.QtGui import QBrush, QPen, QColor, QFont
 from PySide6.QtCore import Qt
 from musiai.model.Note import Note
 from musiai.notation.ColorScheme import ColorScheme
@@ -16,12 +19,15 @@ STEM_LENGTH = 24
 class NoteItem(QGraphicsEllipseItem):
     """Visuelle Darstellung einer Note: farbiger Kopf + Hals."""
 
-    def __init__(self, note: Note, x: float, y: float, center_y: float = 0):
+    def __init__(self, note: Note, x: float, y: float, center_y: float = 0,
+                 use_bravura: bool = False):
         r = NOTE_RADIUS
         # Ovaler Notenkopf: breiter als hoch (wie echte Noten)
         super().__init__(-r, -r * 0.7, r * 2, r * 1.4)
         self.note = note
         self._center_y = center_y
+        self._use_bravura = use_bravura
+        self._bravura_glyph: QGraphicsSimpleTextItem | None = None
         self.setPos(x, y)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -29,11 +35,37 @@ class NoteItem(QGraphicsEllipseItem):
         self.setZValue(10)
         self._selected = False
 
+        if use_bravura:
+            self._init_bravura()
+
         # Notenhals
         self._stem = QGraphicsLineItem(self)
         self._stem.setZValue(9)
         self._update_stem()
         self.update_from_note()
+
+    def _init_bravura(self) -> None:
+        """Bravura-Glyphe als Kind-Item erstellen."""
+        from musiai.ui.midi.BravuraGlyphs import (
+            ensure_font, FONT_NAME, NOTEHEAD_FILLED, NOTEHEAD_HALF,
+            NOTEHEAD_WHOLE,
+        )
+        ensure_font()
+        dur = self.note.duration_beats
+        if dur >= 3.0:
+            glyph = NOTEHEAD_WHOLE
+        elif dur >= 1.5:
+            glyph = NOTEHEAD_HALF
+        else:
+            glyph = NOTEHEAD_FILLED
+        self._bravura_glyph = QGraphicsSimpleTextItem(glyph, self)
+        from musiai.util.Constants import STAFF_LINE_SPACING
+        font_size = int(STAFF_LINE_SPACING * 2.6)
+        self._bravura_glyph.setFont(QFont(FONT_NAME, font_size))
+        # Position so dass Glyphe zentriert auf dem Notenkopf sitzt
+        br = self._bravura_glyph.boundingRect()
+        self._bravura_glyph.setPos(-br.width() / 2, -br.height() / 2)
+        self._bravura_glyph.setZValue(11)
 
     def _update_stem(self) -> None:
         """Notenhals-Richtung nach Standard-Regel:
@@ -53,8 +85,14 @@ class NoteItem(QGraphicsEllipseItem):
     def update_from_note(self) -> None:
         """Farbe aus Note-Daten aktualisieren."""
         color = ColorScheme.velocity_to_color(self.note.expression.velocity)
-        self.setBrush(QBrush(color))
-        self.setPen(QPen(Qt.PenStyle.NoPen))
+        if self._use_bravura and self._bravura_glyph:
+            # Ellipse unsichtbar, Bravura-Glyphe farbig
+            self.setBrush(QBrush(Qt.GlobalColor.transparent))
+            self.setPen(QPen(Qt.PenStyle.NoPen))
+            self._bravura_glyph.setBrush(QBrush(color))
+        else:
+            self.setBrush(QBrush(color))
+            self.setPen(QPen(Qt.PenStyle.NoPen))
         # Hals immer schwarz (wie in echter Notation)
         self._stem.setPen(QPen(QColor(30, 30, 50), 1.2))
 

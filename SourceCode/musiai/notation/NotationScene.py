@@ -96,6 +96,14 @@ class NotationScene(QGraphicsScene):
         self.addItem(self.playhead)
         self.addItem(self.cursor)
 
+        # Bravura-Setting lesen (nur im MusicXML-Modus relevant)
+        from PySide6.QtCore import QSettings
+        settings = QSettings("MusiAI", "MusiAI")
+        self._use_bravura = (
+            settings.value("ui/musicxml_bravura", "false") == "true"
+            and self._render_mode == self.MODE_MUSICXML
+        )
+
         # MIDI Sheet (alle Varianten)
         if self._render_mode in (self.MODE_MIDISHEET, self.MODE_MIDISHEET_BRAVURA,
                                  self.MODE_MIDISHEET_SEQ):
@@ -176,6 +184,7 @@ class NotationScene(QGraphicsScene):
                         measure, x_offset, center_y, show_clef,
                         display_tempo, first_vel, current_tempo,
                         clef=clef, show_chords=self._show_chords,
+                        use_bravura=self._use_bravura,
                     )
                     renderer.render(self)
                     self.measure_renderers.append(renderer)

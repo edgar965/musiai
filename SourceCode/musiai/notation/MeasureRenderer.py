@@ -29,7 +29,8 @@ class MeasureRenderer:
     def __init__(self, measure: Measure, x_offset: float, center_y: float,
                  show_clef: bool = False, tempo_bpm: float = 0,
                  velocity: int = 0, effective_tempo: float = 120.0,
-                 clef: str = TREBLE, show_chords: bool = False):
+                 clef: str = TREBLE, show_chords: bool = False,
+                 use_bravura: bool = False):
         self.measure = measure
         self.x_offset = x_offset
         self.center_y = center_y
@@ -39,6 +40,7 @@ class MeasureRenderer:
         self.effective_tempo = max(20, effective_tempo)
         self.clef = clef
         self.show_chords = show_chords
+        self._use_bravura = use_bravura
         self._ref_staff_pos = ClefHelper.ref_staff_pos(clef)
         self.note_items: list[NoteItem] = []
         self._items: list[QGraphicsItem] = []
@@ -103,19 +105,39 @@ class MeasureRenderer:
 
     def _draw_clef(self, scene: QGraphicsScene, sh: float) -> None:
         """Schlüssel zeichnen (Violin- oder Bassschlüssel)."""
-        symbol = ClefHelper.clef_symbol(self.clef)
-        clef = scene.addText(symbol)
-        if self.clef == BASS:
-            clef.setFont(QFont("Segoe UI Symbol", 32))
-            clef.setPos(self.x_offset, self.center_y - sh - 10)
+        if self._use_bravura:
+            from musiai.ui.midi.BravuraGlyphs import (
+                ensure_font, FONT_NAME, TREBLE_CLEF, BASS_CLEF,
+            )
+            ensure_font()
+            glyph = BASS_CLEF if self.clef == BASS else TREBLE_CLEF
+            clef_item = QGraphicsSimpleTextItem(glyph)
+            clef_item.setFont(QFont(FONT_NAME, 32))
+            clef_item.setBrush(QBrush(QColor(30, 30, 60)))
+            # Bravura clef baseline alignment
+            if self.clef == BASS:
+                clef_item.setPos(self.x_offset + 2, self.center_y - sh - 6)
+            else:
+                clef_item.setPos(self.x_offset, self.center_y - sh - 20)
+            clef_item.setZValue(3)
+            clef_item.setData(0, "clef")
+            clef_item.setData(1, self.measure)
+            scene.addItem(clef_item)
+            self._items.append(clef_item)
         else:
-            clef.setFont(QFont("Segoe UI Symbol", 42))
-            clef.setPos(self.x_offset - 2, self.center_y - sh - 24)
-        clef.setDefaultTextColor(QColor(30, 30, 60))
-        clef.setZValue(3)
-        clef.setData(0, "clef")
-        clef.setData(1, self.measure)
-        self._items.append(clef)
+            symbol = ClefHelper.clef_symbol(self.clef)
+            clef = scene.addText(symbol)
+            if self.clef == BASS:
+                clef.setFont(QFont("Segoe UI Symbol", 32))
+                clef.setPos(self.x_offset, self.center_y - sh - 10)
+            else:
+                clef.setFont(QFont("Segoe UI Symbol", 42))
+                clef.setPos(self.x_offset - 2, self.center_y - sh - 24)
+            clef.setDefaultTextColor(QColor(30, 30, 60))
+            clef.setZValue(3)
+            clef.setData(0, "clef")
+            clef.setData(1, self.measure)
+            self._items.append(clef)
 
     def _draw_time_signature(self, scene: QGraphicsScene, sh: float) -> None:
         ts = self.measure.time_signature
@@ -223,10 +245,23 @@ class MeasureRenderer:
             # Vorzeichen (♯/♭) für schwarze Tasten
             pc = note.pitch % 12
             if pc in (1, 3, 6, 8, 10):  # C♯, D♯, F♯, G♯, A♯
-                accid = QGraphicsSimpleTextItem("♯")
-                accid.setFont(QFont("Arial", 9))
-                accid.setBrush(QBrush(QColor(40, 40, 60)))
-                accid.setPos(nx - NOTE_RADIUS - 8, ny - 6)
+                if self._use_bravura:
+                    from musiai.ui.midi.BravuraGlyphs import (
+                        ensure_font, FONT_NAME, SHARP,
+                    )
+                    from musiai.notation.ColorScheme import ColorScheme
+                    ensure_font()
+                    acc_color = ColorScheme.velocity_to_color(
+                        note.expression.velocity)
+                    accid = QGraphicsSimpleTextItem(SHARP)
+                    accid.setFont(QFont(FONT_NAME, int(STAFF_LINE_SPACING * 1.8)))
+                    accid.setBrush(QBrush(acc_color))
+                    accid.setPos(nx - NOTE_RADIUS - 14, ny - 10)
+                else:
+                    accid = QGraphicsSimpleTextItem("♯")
+                    accid.setFont(QFont("Arial", 9))
+                    accid.setBrush(QBrush(QColor(40, 40, 60)))
+                    accid.setPos(nx - NOTE_RADIUS - 8, ny - 6)
                 accid.setZValue(11)
                 scene.addItem(accid)
                 self._items.append(accid)
@@ -234,15 +269,29 @@ class MeasureRenderer:
             # Punkt für punktierte Noten
             dotted_durs = {1.5, 0.75, 3.0, 0.375}
             if any(abs(note.duration_beats - d) < 0.02 for d in dotted_durs):
-                dot = QGraphicsSimpleTextItem(".")
-                dot.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-                dot.setBrush(QBrush(QColor(40, 40, 60)))
-                dot.setPos(nx + NOTE_RADIUS + 1, ny - 8)
+                if self._use_bravura:
+                    from musiai.ui.midi.BravuraGlyphs import (
+                        ensure_font, FONT_NAME, DOT,
+                    )
+                    from musiai.notation.ColorScheme import ColorScheme
+                    ensure_font()
+                    dot_color = ColorScheme.velocity_to_color(
+                        note.expression.velocity)
+                    dot = QGraphicsSimpleTextItem(DOT)
+                    dot.setFont(QFont(FONT_NAME, int(STAFF_LINE_SPACING * 1.8)))
+                    dot.setBrush(QBrush(dot_color))
+                    dot.setPos(nx + NOTE_RADIUS + 3, ny - 8)
+                else:
+                    dot = QGraphicsSimpleTextItem(".")
+                    dot.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+                    dot.setBrush(QBrush(QColor(40, 40, 60)))
+                    dot.setPos(nx + NOTE_RADIUS + 1, ny - 8)
                 dot.setZValue(11)
                 scene.addItem(dot)
                 self._items.append(dot)
 
-            ni = NoteItem(note, nx, ny, self.center_y)
+            ni = NoteItem(note, nx, ny, self.center_y,
+                          use_bravura=self._use_bravura)
             scene.addItem(ni)
             self.note_items.append(ni)
 

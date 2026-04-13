@@ -97,6 +97,14 @@ class SettingsDialog(QDialog):
 
         settings = QSettings("MusiAI", "MusiAI")
 
+        # Bravura-Glyphen für MusicXML-Noten
+        self._musicxml_bravura = QCheckBox(
+            "Bravura-Glyphen für Noten (MusicXML-Ansicht)")
+        self._musicxml_bravura.setChecked(
+            settings.value("ui/musicxml_bravura", "false") == "true"
+        )
+        layout.addWidget(self._musicxml_bravura)
+
         # Akkorde per Default anzeigen
         self._chords_default = QCheckBox("Akkorde per Default anzeigen")
         self._chords_default.setChecked(
@@ -327,6 +335,9 @@ class SettingsDialog(QDialog):
 
     def accept(self) -> None:
         settings = QSettings("MusiAI", "MusiAI")
+        settings.setValue("ui/musicxml_bravura",
+                          "true" if self._musicxml_bravura.isChecked()
+                          else "false")
         settings.setValue("ui/chord_font_family",
                           self._chord_font_combo.currentFont().family())
         settings.setValue("ui/chord_font_size", self._chord_font_size.value())
