@@ -33,19 +33,16 @@ class ChordSymbol(MusicSymbol):
 
     @property
     def min_width(self) -> int:
-        nh = 8
-        base = 2 * nh + nh * 3 // 4
-        return base
+        return 22  # Ausreichend Platz für Notenkopf + Stem
 
     @property
     def above_staff(self) -> int:
         if not self.notes:
             return 0
         top = TOP_TREBLE if self.clef == TREBLE else TOP_BASS
-        nh = 8
         dist = top.dist(self.notes[-1].whitenote)
         if dist < 0:
-            return abs(dist) * nh // 2
+            return abs(dist) * 6  # Pixel pro halber Linie
         return 0
 
     @property
@@ -54,10 +51,9 @@ class ChordSymbol(MusicSymbol):
             return 0
         from musiai.ui.midi.WhiteNote import BOTTOM_TREBLE, BOTTOM_BASS
         bottom = BOTTOM_TREBLE if self.clef == TREBLE else BOTTOM_BASS
-        nh = 8
         dist = self.notes[0].whitenote.dist(bottom)
         if dist < 0:
-            return abs(dist) * nh // 2
+            return abs(dist) * 6
         return 0
 
     def _resolve_overlaps(self) -> None:
@@ -67,8 +63,6 @@ class ChordSymbol(MusicSymbol):
             curr = self.notes[i]
             if abs(curr.whitenote.dist(prev.whitenote)) == 1:
                 curr.left_side = not prev.left_side
-            else:
-                curr.left_side = True
 
     def _create_stem(self) -> Stem | None:
         if not self.notes:
@@ -82,67 +76,82 @@ class ChordSymbol(MusicSymbol):
 
     def _stem_direction(self, bottom: WhiteNote, top: WhiteNote) -> int:
         """Stem-Richtung: Durchschnitt vom Mittelpunkt."""
-        from musiai.ui.midi.WhiteNote import WhiteNote as WN, B
+        from musiai.ui.midi.WhiteNote import WhiteNote as WN, B, D
         if self.clef == TREBLE:
             middle = WN(B, 5)
         else:
-            from musiai.ui.midi.WhiteNote import D
             middle = WN(D, 3)
         dist = middle.dist(bottom) + middle.dist(top)
         return UP if dist >= 0 else DOWN
 
     def draw(self, painter, x: int, ytop: int, config: dict) -> None:
+        """Noten zeichnen mit korrekter Y-Position relativ zum Staff."""
         from PySide6.QtGui import QPen, QColor, QBrush
         from PySide6.QtCore import Qt
-        nh = config.get('note_height', 8)
-        nw = config.get('note_width', 10)
+        ls = config.get('line_space', 12)
+        nh = config.get('note_height', 12)
+        nw = config.get('note_width', 15)
 
-        top = TOP_TREBLE if self.clef == TREBLE else TOP_BASS
+        top_ref = TOP_TREBLE if self.clef == TREBLE else TOP_BASS
         color = config.get('note_color', QColor(200, 60, 30))
+        half_space = ls / 2.0  # Pixel pro weiße Note
 
         for nd in self.notes:
-            ny = ytop + top.dist(nd.whitenote) * nh // 2
+            # Y = ytop + distance_from_top * half_space
+            dist = top_ref.dist(nd.whitenote)
+            ny = ytop + dist * half_space
             nx = x + (0 if nd.left_side else nw)
 
-            # Notenkopf (ausgefüllte Ellipse)
-            painter.setPen(QPen(color.darker(120), 1))
+            # Notenkopf (ausgefüllte/offene Ellipse)
+            painter.setPen(QPen(color.darker(130), 1.2))
             if nd.duration in (ND.WHOLE, ND.HALF, ND.DOTTED_HALF):
                 painter.setBrush(QBrush(Qt.GlobalColor.transparent))
             else:
                 painter.setBrush(QBrush(color))
-            painter.drawEllipse(nx, ny - nh // 2, nw, nh)
+
+            # Ellipse etwas schräg (wie echter Notenkopf)
+            painter.drawEllipse(
+                int(nx), int(ny - nh * 0.4),
+                nw, int(nh * 0.8)
+            )
 
             # Hilfslinien
-            self._draw_ledger_lines(painter, nd.whitenote, nx, nw, ytop, config)
+            self._draw_ledger_lines(
+                painter, nd.whitenote, nx, nw, ytop, ls, half_space
+            )
 
-        # Stem
+        # Stem zeichnen
         if self.stem:
-            self.stem.draw(painter, x, ytop, config, top)
+            self.stem.draw(painter, x, ytop, config, top_ref)
 
     def _draw_ledger_lines(self, painter, note: WhiteNote,
-                           nx: int, nw: int, ytop: int,
-                           config: dict) -> None:
+                           nx: float, nw: int, ytop: float,
+                           ls: float, half_space: float) -> None:
+        """Hilfslinien über/unter dem System."""
         from PySide6.QtGui import QPen, QColor
-        nh = config.get('note_height', 8)
-        top = TOP_TREBLE if self.clef == TREBLE else TOP_BASS
+        top_ref = TOP_TREBLE if self.clef == TREBLE else TOP_BASS
         from musiai.ui.midi.WhiteNote import BOTTOM_TREBLE, BOTTOM_BASS
-        bottom = BOTTOM_TREBLE if self.clef == TREBLE else BOTTOM_BASS
+        bottom_ref = BOTTOM_TREBLE if self.clef == TREBLE else BOTTOM_BASS
 
         pen = QPen(QColor(60, 60, 80), 1)
         painter.setPen(pen)
+        hw = 5  # Halbbreite der Hilfslinie
 
         # Über dem System
-        if note.dist(top) > 1:
-            pos = top.add(2)
+        if note.dist(top_ref) > 0:
+            pos = top_ref.add(2)
             while pos.dist(note) <= 0:
-                ly = ytop + top.dist(pos) * nh // 2
-                painter.drawLine(nx - 4, ly, nx + nw + 4, ly)
+                ly = ytop + top_ref.dist(pos) * half_space
+                painter.drawLine(int(nx - hw), int(ly),
+                                 int(nx + nw + hw), int(ly))
                 pos = pos.add(2)
 
-        # Unter dem System
-        if bottom.dist(note) > 1:
-            pos = bottom.add(-2)
-            while note.dist(pos) <= 0:
-                ly = ytop + top.dist(pos) * nh // 2
-                painter.drawLine(nx - 4, ly, nx + nw + 4, ly)
+        # Unter dem System (bottom_ref ist 8 halbe Schritte unter top)
+        bottom_dist = top_ref.dist(bottom_ref)  # positiv
+        if top_ref.dist(note) > bottom_dist + 1:
+            pos = bottom_ref.add(-2)
+            while top_ref.dist(pos) <= top_ref.dist(note):
+                ly = ytop + top_ref.dist(pos) * half_space
+                painter.drawLine(int(nx - hw), int(ly),
+                                 int(nx + nw + hw), int(ly))
                 pos = pos.add(-2)

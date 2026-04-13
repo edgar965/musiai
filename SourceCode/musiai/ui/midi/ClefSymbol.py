@@ -16,33 +16,35 @@ class ClefSymbol(MusicSymbol):
 
     @property
     def min_width(self) -> int:
-        return 20 if self.small else 30
+        return 30 if not self.small else 20
 
     @property
     def above_staff(self) -> int:
         if self.clef == TREBLE:
-            return 16 if not self.small else 8
+            return 20 if not self.small else 10
         return 0
 
     @property
     def below_staff(self) -> int:
         if self.clef == TREBLE:
-            return 16 if not self.small else 8
+            return 15 if not self.small else 8
         return 0
 
     def draw(self, painter, x: int, ytop: int, config: dict) -> None:
         from PySide6.QtGui import QFont, QColor
-        nh = config.get('note_height', 8)
-        sh = config.get('staff_height', 32)
+        ls = config.get('line_space', 12)
+        staff_h = 4 * ls
 
+        painter.setPen(QColor(30, 30, 60))
         if self.clef == TREBLE:
-            font_size = 36 if not self.small else 24
-            painter.setFont(QFont("Segoe UI Symbol", font_size))
-            painter.setPen(QColor(30, 30, 60))
-            y_offset = -nh * 2 if not self.small else -nh
-            painter.drawText(x, ytop + y_offset, sh + nh, sh + nh * 2, 0, "𝄞")
+            size = 42 if not self.small else 28
+            painter.setFont(QFont("Segoe UI Symbol", size))
+            # Treble-Schlüssel sitzt auf der 2. Linie (G4)
+            painter.drawText(x, int(ytop - ls * 1.5), 50, int(staff_h + ls * 3),
+                             0, "𝄞")
         else:
-            font_size = 28 if not self.small else 18
-            painter.setFont(QFont("Segoe UI Symbol", font_size))
-            painter.setPen(QColor(30, 30, 60))
-            painter.drawText(x + 2, ytop, sh, sh, 0, "𝄢")
+            size = 30 if not self.small else 20
+            painter.setFont(QFont("Segoe UI Symbol", size))
+            # Bass-Schlüssel sitzt auf der 4. Linie (F3)
+            painter.drawText(x + 2, int(ytop - ls * 0.3), 50, int(staff_h + ls),
+                             0, "𝄢")
