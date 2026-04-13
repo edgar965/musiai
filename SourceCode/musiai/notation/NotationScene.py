@@ -295,9 +295,6 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def update_playhead(self, beat: float) -> None:
-        # Playhead nur in MusicXML-Modus (andere Modi haben kein beat↔x Mapping)
-        if self._render_mode != self.MODE_MUSICXML:
-            return
         x, y_center = self._beat_to_pos(beat)
         if y_center is not None:
             sh = STAFF_LINE_SPACING * 3

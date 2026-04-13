@@ -69,9 +69,9 @@ class MidiSheetRenderer:
         measure_len = parts_data[0]['measure_len']
         quarter = 480  # TPB
 
-        # Create beamed chords
-        self._create_all_beamed_chords(
-            track_symbols, time_num, time_den, quarter, measure_len)
+        # Beaming deaktiviert (erzeugt kaputte Dreiecke)
+        # self._create_all_beamed_chords(
+        #     track_symbols, time_num, time_den, quarter, measure_len)
 
         # Create staffs and render
         for track_idx, symbols in enumerate(track_symbols):
@@ -138,11 +138,10 @@ class MidiSheetRenderer:
         time_num, time_den = self._get_time_sig(piece)
         quarter = tpb  # quarter note = tpb ticks
 
-        # Create beamed chords
-        self._create_all_beamed_chords(
-            track_symbols, time_num, time_den, quarter, measure_len)
-
-        # Create staffs and render
+        # Beaming deaktiviert (erzeugt kaputte Dreiecke)
+        # self._create_all_beamed_chords(
+        #     track_symbols, time_num, time_den, quarter, measure_len)
+        #         # Create staffs and render
         for track_idx, symbols in enumerate(track_symbols):
             clef = track_clefs[track_idx]
             part = self._get_part(piece, track_idx)
