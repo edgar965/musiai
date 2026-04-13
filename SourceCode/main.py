@@ -22,7 +22,9 @@ def main():
     controller.start()
 
     exit_code = app.exec()
-    sys.exit(exit_code)
+    # Fallback: Prozess sofort beenden falls Threads noch hängen
+    import os
+    os._exit(exit_code)
 
 
 if __name__ == "__main__":

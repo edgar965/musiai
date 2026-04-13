@@ -48,22 +48,28 @@ class MainWindow(QMainWindow):
         logger.debug("MainWindow erstellt")
 
     def _setup_render_mode_combo(self) -> None:
-        """ComboBox fuer Render-Modus rechts in der Menüleiste."""
+        """ComboBox für Render-Modus in der StatusBar (immer sichtbar)."""
+        from PySide6.QtWidgets import QLabel
         self._render_mode_combo = QComboBox()
         self._render_mode_combo.addItem("MusicXML", "musicxml")
+        self._render_mode_combo.addItem("MIDI Sheet", "midisheet")
         self._render_mode_combo.addItem("SVG (Verovio)", "svg")
         self._render_mode_combo.addItem("Piano Roll", "pianoroll")
-        self._render_mode_combo.setFixedWidth(140)
+        self._render_mode_combo.setFixedWidth(150)
         self._render_mode_combo.setToolTip("Darstellungsmodus wechseln")
         self._render_mode_combo.currentIndexChanged.connect(
             self._on_render_mode_changed
         )
 
-        # Spacer + ComboBox als Corner-Widget der Menüleiste
+        # Im Ansicht-Menü und als Corner-Widget der Menüleiste
+        from PySide6.QtWidgets import QLabel
         corner = QWidget()
-        layout = QHBoxLayout(corner)
-        layout.setContentsMargins(0, 0, 6, 0)
-        layout.addWidget(self._render_mode_combo)
+        cl = QHBoxLayout(corner)
+        cl.setContentsMargins(0, 0, 8, 0)
+        lbl = QLabel("Anzeige:")
+        lbl.setStyleSheet("color: #555; font-size: 12px;")
+        cl.addWidget(lbl)
+        cl.addWidget(self._render_mode_combo)
         self.menuBar().setCornerWidget(corner, Qt.Corner.TopRightCorner)
 
     def _on_render_mode_changed(self, index: int) -> None:
@@ -72,10 +78,10 @@ class MainWindow(QMainWindow):
             self.render_mode_changed.emit(mode)
 
     def closeEvent(self, event) -> None:
-        """Fenster geschlossen → Prozess sofort beenden."""
+        """Fenster geschlossen → App beenden."""
+        from PySide6.QtWidgets import QApplication
         event.accept()
-        import os
-        os._exit(0)
+        QApplication.instance().quit()
 
     @property
     def notation_view(self):

@@ -30,6 +30,7 @@ class NotationScene(QGraphicsScene):
 
     # Render-Modi
     MODE_MUSICXML = "musicxml"
+    MODE_MIDISHEET = "midisheet"
     MODE_SVG = "svg"
     MODE_PIANOROLL = "pianoroll"
 
@@ -47,8 +48,9 @@ class NotationScene(QGraphicsScene):
         self.addItem(self.cursor)
 
     def set_render_mode(self, mode: str) -> None:
-        """Render-Modus setzen: 'musicxml', 'svg' oder 'pianoroll'."""
-        if mode not in (self.MODE_MUSICXML, self.MODE_SVG, self.MODE_PIANOROLL):
+        """Render-Modus setzen."""
+        if mode not in (self.MODE_MUSICXML, self.MODE_MIDISHEET,
+                        self.MODE_SVG, self.MODE_PIANOROLL):
             logger.warning(f"Unbekannter Render-Modus: {mode}")
             return
         if mode != self._render_mode:
@@ -91,6 +93,9 @@ class NotationScene(QGraphicsScene):
             return
         if self._render_mode == self.MODE_PIANOROLL:
             self._refresh_pianoroll()
+            return
+        if self._render_mode == self.MODE_MIDISHEET:
+            self._refresh_midisheet()
             return
 
         note_parts = [p for p in self.piece.parts
@@ -392,3 +397,18 @@ class NotationScene(QGraphicsScene):
 
     def get_all_note_items(self) -> list[NoteItem]:
         return [item for item in self.items() if isinstance(item, NoteItem)]
+
+    # ------------------------------------------------------------------
+    # MIDI Sheet Rendering
+    # ------------------------------------------------------------------
+
+    def _refresh_midisheet(self) -> None:
+        """MIDI-Notenblatt rendern (portiert von MusicExplorer)."""
+        try:
+            from musiai.ui.midi.MidiSheetRenderer import MidiSheetRenderer
+            renderer = MidiSheetRenderer()
+            renderer.render(self.piece, self, self._system_width)
+        except Exception as e:
+            logger.error(f"MIDI Sheet Fehler: {e}", exc_info=True)
+            text = self.addText(f"MIDI Sheet Fehler: {e}")
+            text.setPos(20, 40)
