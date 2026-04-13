@@ -32,10 +32,14 @@
     <!-- audio -->
     <Compile Include="tests\audio\__init__.py" />
     <Compile Include="tests\audio\test_audio.py" />
-    <!-- longrunner (slow tests, >3s) -->
+    <!-- longer (medium tests, 3-10s) -->
+    <Compile Include="tests\longer\__init__.py" />
+    <Compile Include="tests\longer\test_audio_playback.py" />
+    <Compile Include="tests\longer\test_ui_workflows.py" />
+    <Compile Include="tests\longer\test_integration.py" />
+    <!-- longrunner (slow tests, >10s) -->
     <Compile Include="tests\longrunner\__init__.py" />
     <Compile Include="tests\longrunner\test_audio_features.py" />
-    <Compile Include="tests\longrunner\test_audio_playback.py" />
     <Compile Include="tests\longrunner\test_detection_pipelines.py" />
     <!-- ui -->
     <Compile Include="tests\ui\__init__.py" />
@@ -43,18 +47,14 @@
     <Compile Include="tests\ui\test_notation_and_import.py" />
     <Compile Include="tests\ui\test_selection_copypaste.py" />
     <Compile Include="tests\ui\test_tabs_and_pdf.py" />
-    <Compile Include="tests\ui\test_ui_workflows.py" />
-    <!-- integration -->
-    <Compile Include="tests\integration\__init__.py" />
-    <Compile Include="tests\integration\test_integration.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="tests\" />
     <Folder Include="tests\data\" />
     <Folder Include="tests\audio\" />
+    <Folder Include="tests\longer\" />
     <Folder Include="tests\longrunner\" />
     <Folder Include="tests\ui\" />
-    <Folder Include="tests\integration\" />
   </ItemGroup>
   <ItemGroup>
     <Interpreter Include="..\..\pythonENV\">

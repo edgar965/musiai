@@ -71,6 +71,12 @@ class MainWindow(QMainWindow):
         if mode:
             self.render_mode_changed.emit(mode)
 
+    def closeEvent(self, event) -> None:
+        """Fenster geschlossen → Prozess sofort beenden."""
+        event.accept()
+        import os
+        os._exit(0)
+
     @property
     def notation_view(self):
         """Aktuelle NotationView (Kompatibilität)."""
