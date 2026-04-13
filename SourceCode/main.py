@@ -1,9 +1,21 @@
 """MusiAI - Entry Point."""
 
 import sys
+import logging
 from musiai.util.LoggingConfig import setup_logging
 
 logger = setup_logging()
+
+
+def _exception_hook(exc_type, exc_value, exc_tb):
+    """Alle uncaught Exceptions ins Log schreiben."""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+        return
+    logger.critical("Uncaught Exception", exc_info=(exc_type, exc_value, exc_tb))
+
+
+sys.excepthook = _exception_hook
 
 
 def main():
