@@ -1044,8 +1044,20 @@ class AppController:
         # Audio-Stimme nur laden wenn explizit gewünscht (nicht automatisch)
 
     def start(self) -> None:
+        # Akkorde-Default aus Settings laden
+        from PySide6.QtCore import QSettings
+        settings = QSettings("MusiAI", "MusiAI")
+        chords_default = settings.value("ui/chords_default", "false") == "true"
+        if chords_default:
+            self.main_window._chord_toggle.setChecked(True)
+
         self.main_window.show()
         self._load_default_file()
+
+        # Akkorde-Einstellung auf geladene Tabs anwenden
+        if chords_default and self._active_tab:
+            self._active_tab.notation_scene.set_show_chords(True)
+
         if not self._active_piece():
             self.signal_bus.status_message.emit("Bereit. MIDI oder MusicXML importieren.")
         logger.info("MusiAI gestartet")

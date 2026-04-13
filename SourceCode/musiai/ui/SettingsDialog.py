@@ -97,6 +97,13 @@ class SettingsDialog(QDialog):
 
         settings = QSettings("MusiAI", "MusiAI")
 
+        # Akkorde per Default anzeigen
+        self._chords_default = QCheckBox("Akkorde per Default anzeigen")
+        self._chords_default.setChecked(
+            settings.value("ui/chords_default", "false") == "true"
+        )
+        layout.addWidget(self._chords_default)
+
         group = QGroupBox("Font Akkorde")
         form = QFormLayout(group)
 
@@ -328,4 +335,6 @@ class SettingsDialog(QDialog):
         settings.setValue("ui/chord_font_italic",
                           "true" if self._chord_italic.isChecked() else "false")
         settings.setValue("ui/chord_font_color", self._chord_color_hex)
+        settings.setValue("ui/chords_default",
+                          "true" if self._chords_default.isChecked() else "false")
         super().accept()
