@@ -15,10 +15,22 @@ build/
 ~WRL*
 *.tmp
 
-# Large binary files
+# Large binary/data files
 media/soundfonts/*.sf2
 media/mp3/
 !media/soundfonts/VintageDreamsWaves-v2.sf2
+
+# Large MusicXML/MIDI collections (254K+ files - causes VS to hang)
+media/music/musicXML/pdmx/
+media/music/musicXML/openscore-lieder/
+media/music/musicXML/asap-dataset/
+media/music/musicXML/music21-corpus/
+media/music/musicXML/musetrainer/
+media/music/musicXML/_Echte/
+media/music/musicXML/musicxml-test-suite/
+media/music/musicXML/w3c-musicxml/
+media/music/midi/midi2/
+docs/midi2-reference/
 
 pythonENV_OLD/
 pythonENV_OLD/

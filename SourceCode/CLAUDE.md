@@ -2,30 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Structure
-
-Source code is in `SourceCode/`, data in `media/`. Always `cd SourceCode` before running commands.
-
 ## Commands
 
 ```bash
-# Run the app
-pythonENV/Scripts/python.exe main.py
+# Run the app (from SourceCode/)
+../pythonENV/Scripts/python.exe main.py
 
-# Run all tests (unittest discovery, 145 tests)
-pythonENV/Scripts/python.exe tests/run_tests.py
+# Run all tests (unittest discovery, 309 tests)
+../pythonENV/Scripts/python.exe tests/run_tests.py
 
 # Run test runner GUI
-pythonENV/Scripts/python.exe tests/test_runner_ui.py
+../pythonENV/Scripts/python.exe tests/test_runner_ui.py
 
 # Run a single test file
-pythonENV/Scripts/python.exe -m pytest tests/test_model.py
+../pythonENV/Scripts/python.exe -m pytest tests/data/test_model.py
 
 # Run a single test case
-pythonENV/Scripts/python.exe -m unittest tests.test_model.TestNote.test_name
+../pythonENV/Scripts/python.exe -m unittest tests.data.test_model.TestNote.test_name
 
 # Install dependencies (Python 3.14 venv)
-pythonENV/Scripts/pip.exe install -r requirements.txt
+../pythonENV/Scripts/pip.exe install -r requirements.txt
 ```
 
 ## Architecture
