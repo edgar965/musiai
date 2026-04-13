@@ -71,20 +71,36 @@ class AccidSymbol(MusicSymbol):
             self._draw_natural(painter, ax, ynote, nh, ls, lw)
 
     def _draw_bravura(self, painter, x, ynote, nh):
-        """Draw accidental using Bravura SMuFL glyph."""
+        """Draw accidental using Bravura SMuFL glyph with metadata positioning."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
 
         glyph_map = {SHARP: BG.SHARP, FLAT: BG.FLAT, NATURAL: BG.NATURAL}
+        smufl_names = {SHARP: 'accidentalSharp', FLAT: 'accidentalFlat',
+                       NATURAL: 'accidentalNatural'}
         glyph = glyph_map.get(self.accid)
         if glyph is None:
             return
 
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
-        size = max(12, int(SC.LineSpace * 3.0))
+        ls = SC.LineSpace
+        size = max(12, int(ls * 3.0))
         painter.setFont(QFont(BG.FONT_NAME, size))
         painter.setPen(QPen(QColor(0, 0, 0)))
-        painter.drawText(x, ynote + nh // 2, glyph)
+
+        # Use SMuFL bbox for vertical centering on the note's staff position
+        try:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            glyph_name = smufl_names.get(self.accid, '')
+            bbox = SMuFLMetadata.get_bbox(glyph_name)
+            ne = bbox.get('bBoxNE', [0, 0])
+            sw = bbox.get('bBoxSW', [0, 0])
+            glyph_center_y = (ne[1] + sw[1]) / 2.0
+            y_draw = ynote + nh // 2 + int(glyph_center_y * ls)
+        except Exception:
+            y_draw = ynote + nh // 2
+
+        painter.drawText(x, y_draw, glyph)
 
     def _draw_sharp(self, painter, x, ynote, nh, ls, lw):
         """Two vertical + two angled horizontal lines."""

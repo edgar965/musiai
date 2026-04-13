@@ -454,14 +454,20 @@ class ChordSymbol(MusicSymbol):
                                  ND.DOTTED_EIGHTH):
                 if use_bravura:
                     from musiai.ui.midi.BravuraGlyphs import DOT, FONT_NAME
-                    painter.setFont(QFont(FONT_NAME, max(6, nh)))
-                    painter.setPen(QPen(QColor(0, 0, 0)))
-                    painter.drawText(xnote + nw + ls // 3, ynote + nh // 2,
-                                     DOT)
+                    dot_size = max(10, int(ls * 2.5))
+                    painter.setFont(QFont(FONT_NAME, dot_size))
+                    if color_mode:
+                        from musiai.notation.ColorScheme import ColorScheme
+                        dc = ColorScheme.velocity_to_color(note.velocity)
+                        painter.setPen(QPen(dc))
+                    else:
+                        painter.setPen(QPen(QColor(0, 0, 0)))
+                    painter.drawText(xnote + nw + ls, ynote + nh // 2, DOT)
                 else:
                     painter.setBrush(QBrush(QColor(0, 0, 0)))
                     painter.drawEllipse(
-                        xnote + nw + ls // 3, ynote + ls // 3, 4, 4)
+                        xnote + nw + ls // 2, ynote + ls // 3,
+                        max(3, ls // 2), max(3, ls // 2))
 
             # Ledger lines
             self._draw_ledger_lines(painter, note.whitenote, xnote, nw,
@@ -470,7 +476,7 @@ class ChordSymbol(MusicSymbol):
     @staticmethod
     def _draw_note_bravura(painter, note, xnote, ynote, nh, nw, ls,
                            color_mode=False):
-        """Notenkopf mit Bravura SMuFL Glyph."""
+        """Notenkopf mit Bravura SMuFL Glyph, positioned via metadata."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
         size = max(14, int(ls * 3.5))
@@ -483,11 +489,30 @@ class ChordSymbol(MusicSymbol):
         painter.setPen(QPen(color))
         if note.duration in (ND.WHOLE,):
             glyph = BG.NOTEHEAD_WHOLE
+            glyph_name = 'noteheadWhole'
         elif note.duration in (ND.HALF, ND.DOTTED_HALF):
             glyph = BG.NOTEHEAD_HALF
+            glyph_name = 'noteheadHalf'
         else:
             glyph = BG.NOTEHEAD_FILLED
-        painter.drawText(xnote, ynote + nh // 2, glyph)
+            glyph_name = 'noteheadBlack'
+
+        # Use SMuFL bounding box for precise vertical centering
+        try:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            bbox = SMuFLMetadata.get_bbox(glyph_name)
+            ne = bbox.get('bBoxNE', [0, 0])
+            sw = bbox.get('bBoxSW', [0, 0])
+            # SMuFL y-axis: positive = up; Qt y-axis: positive = down
+            # Baseline is at y=0 in SMuFL; bBoxSW[1] is negative for
+            # glyphs extending below baseline, bBoxNE[1] positive above.
+            # Center the glyph vertically on the staff line at ynote.
+            glyph_center_y = (ne[1] + sw[1]) / 2.0
+            y_draw = ynote + nh // 2 + int(glyph_center_y * ls)
+        except Exception:
+            y_draw = ynote + nh // 2
+
+        painter.drawText(xnote, y_draw, glyph)
 
     @staticmethod
     def _draw_note_ellipse(painter, note, xnote, ynote, nh, nw, ls, lw,

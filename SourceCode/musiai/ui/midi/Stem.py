@@ -97,23 +97,54 @@ class Stem:
 
     def _draw_vertical_line(self, painter, pen, x, ytop, top_staff,
                             ls, nh, nw):
-        if self.side == LEFT_SIDE:
-            xstart = x + ls // 4 + 1
+        use_smufl = self._has_smufl_metadata()
+
+        if use_smufl:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            if self.direction == UP:
+                se = SMuFLMetadata.stem_up_se()
+                xstart = x + ls // 4 + int(se[0] * ls)
+            else:
+                nw_pt = SMuFLMetadata.stem_down_nw()
+                xstart = x + ls // 4 + int(nw_pt[0] * ls)
         else:
-            xstart = x + ls // 4 + nw
+            if self.side == LEFT_SIDE:
+                xstart = x + ls // 4 + 1
+            else:
+                xstart = x + ls // 4 + nw
 
         if self.direction == UP:
-            y1 = ytop + top_staff.dist(self.bottom) * nh // 2 + nh // 4
+            if use_smufl:
+                se = SMuFLMetadata.stem_up_se()
+                y1 = (ytop + top_staff.dist(self.bottom) * nh // 2
+                       + nh // 2 + int(se[1] * ls))
+            else:
+                y1 = ytop + top_staff.dist(self.bottom) * nh // 2 + nh // 4
             ystem = ytop + top_staff.dist(self.end) * nh // 2
             painter.drawLine(xstart, y1, xstart, ystem)
         elif self.direction == DOWN:
-            y1 = ytop + top_staff.dist(self.top) * nh // 2 + nh
-            if self.side == LEFT_SIDE:
-                y1 -= nh // 4
+            if use_smufl:
+                nw_pt = SMuFLMetadata.stem_down_nw()
+                y1 = (ytop + top_staff.dist(self.top) * nh // 2
+                       + nh // 2 + int(nw_pt[1] * ls))
             else:
-                y1 -= nh // 2
+                y1 = ytop + top_staff.dist(self.top) * nh // 2 + nh
+                if self.side == LEFT_SIDE:
+                    y1 -= nh // 4
+                else:
+                    y1 -= nh // 2
             ystem = (ytop + top_staff.dist(self.end) * nh // 2 + nh)
             painter.drawLine(xstart, y1, xstart, ystem)
+
+    @staticmethod
+    def _has_smufl_metadata() -> bool:
+        """Check if SMuFL metadata is available."""
+        try:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            SMuFLMetadata.load()
+            return bool(SMuFLMetadata._data)
+        except Exception:
+            return False
 
     def _draw_curvy_stem(self, painter, pen, x, ytop, top_staff,
                          ls, nh, nw):
@@ -176,7 +207,7 @@ class Stem:
 
     def _draw_bravura_flag(self, painter, x, ytop, top_staff,
                            ls, nh, nw):
-        """Draw flag glyph using Bravura SMuFL font."""
+        """Draw flag glyph using Bravura SMuFL font with metadata positioning."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
 
@@ -185,10 +216,20 @@ class Stem:
         if self.duration not in flaggable:
             return
 
-        if self.side == LEFT_SIDE:
-            xstart = x + ls // 4 + 1
+        use_smufl = self._has_smufl_metadata()
+        if use_smufl:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            if self.direction == UP:
+                se = SMuFLMetadata.stem_up_se()
+                xstart = x + ls // 4 + int(se[0] * ls)
+            else:
+                nw_pt = SMuFLMetadata.stem_down_nw()
+                xstart = x + ls // 4 + int(nw_pt[0] * ls)
         else:
-            xstart = x + ls // 4 + nw
+            if self.side == LEFT_SIDE:
+                xstart = x + ls // 4 + 1
+            else:
+                xstart = x + ls // 4 + nw
 
         size = max(14, int(ls * 3.5))
         font = QFont(BG.FONT_NAME, size)
@@ -197,12 +238,19 @@ class Stem:
 
         if self.direction == UP:
             ystem = ytop + top_staff.dist(self.end) * nh // 2
+            if use_smufl:
+                # Use flag's stemUpNW anchor for vertical offset
+                flag_name = self._flag_glyph_name_up()
+                anchor = SMuFLMetadata.flag_stem_up_nw(flag_name)
+                y_off = nh // 2 - int(anchor[1] * ls)
+            else:
+                y_off = nh // 2
             if self.duration in (ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET):
-                painter.drawText(xstart, ystem + nh // 2, BG.FLAG_8TH_UP)
+                painter.drawText(xstart, ystem + y_off, BG.FLAG_8TH_UP)
             elif self.duration == ND.SIXTEENTH:
-                painter.drawText(xstart, ystem + nh // 2, BG.FLAG_16TH_UP)
+                painter.drawText(xstart, ystem + y_off, BG.FLAG_16TH_UP)
             elif self.duration == ND.THIRTYSECOND:
-                painter.drawText(xstart, ystem + nh // 2, BG.FLAG_32ND_UP)
+                painter.drawText(xstart, ystem + y_off, BG.FLAG_32ND_UP)
         elif self.direction == DOWN:
             ystem = ytop + top_staff.dist(self.end) * nh // 2 + nh
             if self.duration in (ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET):
@@ -211,6 +259,16 @@ class Stem:
                 painter.drawText(xstart, ystem, BG.FLAG_16TH_DOWN)
             elif self.duration == ND.THIRTYSECOND:
                 painter.drawText(xstart, ystem, BG.FLAG_32ND_DOWN)
+
+    def _flag_glyph_name_up(self) -> str:
+        """Return SMuFL glyph name for up-stem flag based on duration."""
+        if self.duration in (ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET):
+            return 'flag8thUp'
+        elif self.duration == ND.SIXTEENTH:
+            return 'flag16thUp'
+        elif self.duration == ND.THIRTYSECOND:
+            return 'flag32ndUp'
+        return 'flag8thUp'
 
     def _draw_horiz_bar_stem(self, painter, pen, x, ytop, top_staff,
                              ls, nh, nw):
@@ -227,15 +285,27 @@ class Stem:
         pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
 
-        if self.side == LEFT_SIDE:
-            xstart = x + ls // 4 + 1
+        use_smufl = self._has_smufl_metadata()
+        if use_smufl:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            if self.direction == UP:
+                se = SMuFLMetadata.stem_up_se()
+                xstart = x + ls // 4 + int(se[0] * ls)
+                xstart2 = ls // 4 + int(se[0] * ls)
+            else:
+                nw_pt = SMuFLMetadata.stem_down_nw()
+                xstart = x + ls // 4 + int(nw_pt[0] * ls)
+                xstart2 = ls // 4 + int(nw_pt[0] * ls)
         else:
-            xstart = x + ls // 4 + nw
+            if self.side == LEFT_SIDE:
+                xstart = x + ls // 4 + 1
+            else:
+                xstart = x + ls // 4 + nw
 
-        if self.pair.side == LEFT_SIDE:
-            xstart2 = ls // 4 + 1
-        else:
-            xstart2 = ls // 4 + nw
+            if self.pair.side == LEFT_SIDE:
+                xstart2 = ls // 4 + 1
+            else:
+                xstart2 = ls // 4 + nw
 
         beamable = {ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET,
                     ND.SIXTEENTH, ND.THIRTYSECOND}
