@@ -416,9 +416,15 @@ class MidiSheetRenderer:
     # CreateStaffs
     # ------------------------------------------------------------------
     def _create_staffs_for_track(self, symbols, measure_len,
-                                 track_num, total_tracks) -> list[Staff]:
+                                 track_num, total_tracks,
+                                 key_accids=None,
+                                 time_num=0, time_den=0) -> list[Staff]:
         """Break symbols into page-width rows without splitting measures."""
-        keysig_width = SheetConfig.key_signature_width([])
+        key_accids = key_accids or []
+        keysig_width = SheetConfig.key_signature_width(key_accids)
+        # Account for time signature width
+        if time_num > 0 and time_den > 0:
+            keysig_width += SheetConfig.NoteWidth * 2
         start_idx = 0
         staffs = []
 
@@ -447,7 +453,8 @@ class MidiSheetRenderer:
                         end_idx -= 1
 
             rng = symbols[start_idx:end_idx + 1]
-            staff = Staff(rng, [], measure_len, track_num, total_tracks)
+            staff = Staff(rng, key_accids, measure_len,
+                          track_num, total_tracks, time_num, time_den)
             staffs.append(staff)
             start_idx = end_idx + 1
 

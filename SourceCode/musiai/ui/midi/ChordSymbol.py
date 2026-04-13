@@ -11,15 +11,18 @@ from musiai.ui.midi import NoteDuration as ND
 
 class NoteData:
     """Daten einer einzelnen Note im Akkord."""
-    __slots__ = ('number', 'whitenote', 'duration', 'left_side', 'accid')
+    __slots__ = ('number', 'whitenote', 'duration', 'left_side', 'accid',
+                 'velocity')
 
     def __init__(self, number: int, whitenote: WhiteNote,
-                 duration: int, left_side: bool = True, accid: int = 0):
+                 duration: int, left_side: bool = True, accid: int = 0,
+                 velocity: int = 80):
         self.number = number
         self.whitenote = whitenote
         self.duration = duration
         self.left_side = left_side
         self.accid = accid
+        self.velocity = velocity
 
 
 class ChordSymbol(MusicSymbol):
