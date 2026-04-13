@@ -556,6 +556,9 @@ class AppController:
                 f"pdf_import={self._pdf_import_engine}, "
                 f"pdf_export={self._pdf_export_engine}"
             )
+            # Refresh notation to apply chord font changes
+            if self._active_tab and self._active_tab.notation_scene:
+                self._active_tab.notation_scene.refresh()
 
     def _show_midi_dialog(self) -> None:
         dialog = MidiDeviceDialog(self.midi_keyboard, self.main_window)

@@ -4,9 +4,11 @@ import logging
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QTabWidget, QWidget, QGroupBox,
     QFormLayout, QRadioButton, QButtonGroup, QLabel, QPushButton,
-    QDialogButtonBox,
+    QDialogButtonBox, QFontComboBox, QSpinBox, QCheckBox,
+    QColorDialog, QHBoxLayout,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QColor
+from PySide6.QtCore import Qt, QSettings
 
 logger = logging.getLogger("musiai.ui.SettingsDialog")
 
@@ -30,6 +32,7 @@ class SettingsDialog(QDialog):
 
         self._tabs.addTab(self._build_detection_tab(), "Notenerkennung")
         self._tabs.addTab(self._build_audio_tab(), "Audio")
+        self._tabs.addTab(self._build_ui_tab(), "UI")
         self._tabs.addTab(self._build_pdf_tab(), "PDF")
 
         buttons = QDialogButtonBox(
@@ -85,6 +88,67 @@ class SettingsDialog(QDialog):
         layout.addWidget(QLabel("Audio-Einstellungen (zukünftig)"))
         layout.addStretch()
         return page
+
+    # ---- UI Tab ----
+
+    def _build_ui_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        settings = QSettings("MusiAI", "MusiAI")
+
+        group = QGroupBox("Font Akkorde")
+        form = QFormLayout(group)
+
+        self._chord_font_combo = QFontComboBox()
+        family = settings.value("ui/chord_font_family", "Arial")
+        self._chord_font_combo.setCurrentFont(QFont(family))
+        form.addRow("Schriftart:", self._chord_font_combo)
+
+        self._chord_font_size = QSpinBox()
+        self._chord_font_size.setRange(6, 72)
+        self._chord_font_size.setValue(int(settings.value("ui/chord_font_size", 11)))
+        form.addRow("Schriftgröße:", self._chord_font_size)
+
+        self._chord_bold = QCheckBox("Fett")
+        self._chord_bold.setChecked(
+            settings.value("ui/chord_font_bold", "true") == "true"
+        )
+        form.addRow("", self._chord_bold)
+
+        self._chord_italic = QCheckBox("Kursiv")
+        self._chord_italic.setChecked(
+            settings.value("ui/chord_font_italic", "false") == "true"
+        )
+        form.addRow("", self._chord_italic)
+
+        color_row = QHBoxLayout()
+        self._chord_color_btn = QPushButton()
+        self._chord_color_hex = settings.value("ui/chord_font_color", "#0044AA")
+        self._update_color_button()
+        self._chord_color_btn.clicked.connect(self._pick_chord_color)
+        color_row.addWidget(self._chord_color_btn)
+        color_row.addStretch()
+        form.addRow("Farbe:", color_row)
+
+        layout.addWidget(group)
+        layout.addStretch()
+        return page
+
+    def _update_color_button(self) -> None:
+        self._chord_color_btn.setStyleSheet(
+            f"background-color: {self._chord_color_hex}; "
+            f"min-width: 60px; min-height: 24px; border: 1px solid #888;"
+        )
+        self._chord_color_btn.setText(self._chord_color_hex)
+
+    def _pick_chord_color(self) -> None:
+        color = QColorDialog.getColor(
+            QColor(self._chord_color_hex), self, "Akkord-Farbe wählen"
+        )
+        if color.isValid():
+            self._chord_color_hex = color.name()
+            self._update_color_button()
 
     # ---- PDF Tab ----
 
@@ -239,3 +303,29 @@ class SettingsDialog(QDialog):
             if radio.isChecked():
                 return key
         return "lilypond"
+
+    @property
+    def chord_font(self) -> QFont:
+        font = QFont(self._chord_font_combo.currentFont().family(),
+                      self._chord_font_size.value())
+        if self._chord_bold.isChecked():
+            font.setWeight(QFont.Weight.Bold)
+        if self._chord_italic.isChecked():
+            font.setItalic(True)
+        return font
+
+    @property
+    def chord_color(self) -> QColor:
+        return QColor(self._chord_color_hex)
+
+    def accept(self) -> None:
+        settings = QSettings("MusiAI", "MusiAI")
+        settings.setValue("ui/chord_font_family",
+                          self._chord_font_combo.currentFont().family())
+        settings.setValue("ui/chord_font_size", self._chord_font_size.value())
+        settings.setValue("ui/chord_font_bold",
+                          "true" if self._chord_bold.isChecked() else "false")
+        settings.setValue("ui/chord_font_italic",
+                          "true" if self._chord_italic.isChecked() else "false")
+        settings.setValue("ui/chord_font_color", self._chord_color_hex)
+        super().accept()

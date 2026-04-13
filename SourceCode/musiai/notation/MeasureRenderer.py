@@ -249,14 +249,25 @@ class MeasureRenderer:
     def _draw_chords(self, scene: QGraphicsScene, sh: float) -> None:
         """Akkordnamen unter dem Notensystem zeichnen."""
         from musiai.notation.ChordDetector import ChordDetector
+        from PySide6.QtCore import QSettings
         chords = ChordDetector.detect_for_measure(self.measure.notes)
         if not chords:
             return
         ppb = self.pixels_per_beat
         content_start = self.x_offset + self.header_width
         chord_y = self.center_y + sh + 16
-        font = QFont("Arial", 10, QFont.Weight.Bold)
-        color = QColor(40, 80, 160)
+
+        settings = QSettings("MusiAI", "MusiAI")
+        family = settings.value("ui/chord_font_family", "Arial")
+        size = int(settings.value("ui/chord_font_size", 11))
+        bold = settings.value("ui/chord_font_bold", "true") == "true"
+        italic = settings.value("ui/chord_font_italic", "false") == "true"
+        color_hex = settings.value("ui/chord_font_color", "#0044AA")
+
+        weight = QFont.Weight.Bold if bold else QFont.Weight.Normal
+        font = QFont(family, size, weight)
+        font.setItalic(italic)
+        color = QColor(color_hex)
 
         for beat, name in chords:
             cx = content_start + beat * ppb + ppb / 2
