@@ -34,3 +34,4 @@ COLOR_CENT_MARKER = (255, 180, 50)
 MIDI_EXTENSIONS = [".mid", ".midi"]
 MUSICXML_EXTENSIONS = [".xml", ".musicxml", ".mxl"]
 PROJECT_EXTENSION = ".musiai"
+PDF_EXTENSIONS = [".pdf"]

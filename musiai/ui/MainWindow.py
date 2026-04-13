@@ -4,8 +4,7 @@ import logging
 from PySide6.QtWidgets import QMainWindow, QMenu
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import Qt
-from musiai.notation.NotationScene import NotationScene
-from musiai.ui.NotationView import NotationView
+from musiai.ui.TabWidget import TabWidget
 from musiai.ui.Toolbar import Toolbar
 from musiai.ui.StatusBar import StatusBar
 from musiai.ui.PropertiesPanel import PropertiesPanel
@@ -22,9 +21,9 @@ class MainWindow(QMainWindow):
         self.resize(1200, 800)
         self.setMinimumSize(800, 500)
 
-        # Toolbar
+        # Toolbar (versteckt - alle Funktionen im Menü)
         self.toolbar = Toolbar()
-        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolbar)
+        self.toolbar.setVisible(False)
 
         # StatusBar
         self.status_bar = StatusBar()
@@ -34,19 +33,20 @@ class MainWindow(QMainWindow):
         self.properties_panel = PropertiesPanel()
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.properties_panel)
 
-        # NotationView
-        self.notation_view: NotationView | None = None
+        # TabWidget als zentrales Widget
+        self.tab_widget = TabWidget()
+        self.setCentralWidget(self.tab_widget)
 
         # Menüleiste
         self._setup_menus()
 
         logger.debug("MainWindow erstellt")
 
-    def set_notation_scene(self, scene: NotationScene) -> None:
-        """NotationScene setzen und als zentrales Widget einbinden."""
-        self.notation_view = NotationView(scene)
-        self.setCentralWidget(self.notation_view)
-        logger.debug("NotationScene an MainWindow gebunden")
+    @property
+    def notation_view(self):
+        """Aktuelle NotationView (Kompatibilität)."""
+        doc = self.tab_widget.current_document_tab()
+        return doc.notation_view if doc else None
 
     def _show_about(self) -> None:
         from musiai.ui.AboutDialog import AboutDialog
@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
         file_menu = menu_bar.addMenu("&Datei")
         file_menu.addAction("MIDI importieren", self.toolbar.import_midi_clicked.emit)
         file_menu.addAction("MusicXML importieren", self.toolbar.import_musicxml_clicked.emit)
+        file_menu.addAction("PDF importieren...", self.toolbar.import_pdf_clicked.emit)
         file_menu.addSeparator()
 
         # Musik Datei speichern
@@ -74,6 +75,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction("Projekt laden", self.toolbar.load_project_clicked.emit, QKeySequence.StandardKey.Open)
         file_menu.addSeparator()
         file_menu.addAction("MIDI exportieren", self.toolbar.export_midi_clicked.emit)
+        file_menu.addAction("PDF exportieren...", self.toolbar.export_pdf_clicked.emit)
+        file_menu.addSeparator()
+
+        # Tab schließen
+        self._close_tab_action = file_menu.addAction("Tab schließen")
+        self._close_tab_action.setShortcut(QKeySequence("Ctrl+W"))
 
         # Bearbeiten-Menü
         edit_menu = menu_bar.addMenu("&Bearbeiten")

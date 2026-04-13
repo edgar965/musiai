@@ -27,6 +27,9 @@ class NotationView(QGraphicsView):
     paste_requested = Signal()
     deselect_requested = Signal()
 
+    # Playback
+    play_from_beat_requested = Signal(float)   # Beat-Position
+
     # Edit Mode
     edit_mode_changed = Signal(bool)           # True=entered, False=exited
     cursor_moved = Signal(float)               # new global beat position
@@ -185,7 +188,14 @@ class NotationView(QGraphicsView):
                 )
                 menu.exec(event.globalPos())
                 return
-        super().contextMenuEvent(event)
+        # Standard-Kontextmenü: Abspielen ab Position
+        beat = scene.beat_at_x(scene_pos.x())
+        from PySide6.QtWidgets import QMenu
+        menu = QMenu(self)
+        menu.addAction("Abspielen ab hier").triggered.connect(
+            lambda: self.play_from_beat_requested.emit(beat)
+        )
+        menu.exec(event.globalPos())
 
     def mousePressEvent(self, event):
         self.setFocus()  # Keyboard-Focus sicherstellen

@@ -13,7 +13,9 @@ class Toolbar(QToolBar):
 
     import_midi_clicked = Signal()
     import_musicxml_clicked = Signal()
+    import_pdf_clicked = Signal()
     export_midi_clicked = Signal()
+    export_pdf_clicked = Signal()
     save_project_clicked = Signal()
     load_project_clicked = Signal()
     play_clicked = Signal()
@@ -34,6 +36,7 @@ class Toolbar(QToolBar):
         # Datei
         self._add_action("MIDI Import", self.import_midi_clicked)
         self._add_action("XML Import", self.import_musicxml_clicked)
+        self._add_action("PDF Import", self.import_pdf_clicked)
         self.addSeparator()
         self._add_action("Speichern", self.save_project_clicked)
         self._add_action("Laden", self.load_project_clicked)

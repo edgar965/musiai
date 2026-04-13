@@ -35,6 +35,8 @@
     <Compile Include="tests\test_selection_copypaste.py" />
     <Compile Include="tests\test_ui_workflows.py" />
     <Compile Include="tests\test_integration.py" />
+    <Compile Include="tests\test_tabs_and_pdf.py" />
+    <Compile Include="tests\test_notation_and_import.py" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="tests\" />

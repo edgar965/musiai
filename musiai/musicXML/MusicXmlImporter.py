@@ -33,7 +33,10 @@ class MusicXmlImporter:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Datei nicht gefunden: {path}")
 
-        tree = ET.parse(path)
+        if path.endswith(".mxl"):
+            tree = self._parse_mxl(path)
+        else:
+            tree = ET.parse(path)
         root = tree.getroot()
 
         # Namespace handling
@@ -60,6 +63,31 @@ class MusicXmlImporter:
 
         logger.info(f"Import fertig: '{piece.title}', {piece.total_measures} Takte")
         return piece
+
+    def _parse_mxl(self, path: str) -> ET.ElementTree:
+        """Komprimierte MusicXML (.mxl) entpacken und parsen."""
+        import zipfile
+        with zipfile.ZipFile(path) as z:
+            # Versuche META-INF/container.xml für rootfile-Pfad
+            try:
+                with z.open("META-INF/container.xml") as cf:
+                    container = ET.parse(cf).getroot()
+                    ns = ""
+                    if container.tag.startswith("{"):
+                        ns = container.tag.split("}")[0] + "}"
+                    for rf in container.iter(f"{ns}rootfile"):
+                        full_path = rf.get("full-path", "")
+                        if full_path and full_path in z.namelist():
+                            with z.open(full_path) as f:
+                                return ET.parse(f)
+            except (KeyError, ET.ParseError):
+                pass
+            # Fallback: erste .xml Datei (nicht META-INF)
+            for name in z.namelist():
+                if name.endswith(".xml") and not name.startswith("META-INF"):
+                    with z.open(name) as f:
+                        return ET.parse(f)
+        raise ValueError(f"Keine MusicXML-Datei im MXL-Archiv: {path}")
 
     def _detect_namespace(self, root: ET.Element) -> str:
         if root.tag.startswith("{"):

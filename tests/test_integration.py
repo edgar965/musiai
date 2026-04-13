@@ -98,10 +98,10 @@ class TestEditAndSave(unittest.TestCase):
         ctrl.signal_bus.piece_loaded.emit(piece)
 
         # Edit
-        items = ctrl.notation_scene.get_all_note_items()
-        ctrl.edit_controller.select_note(items[0])
-        ctrl.edit_controller.change_velocity(115)
-        ctrl.edit_controller.change_cent_offset(20.0, "curve")
+        items = ctrl._active_scene().get_all_note_items()
+        ctrl._active_edit_controller().select_note(items[0])
+        ctrl._active_edit_controller().change_velocity(115)
+        ctrl._active_edit_controller().change_cent_offset(20.0, "curve")
 
         # Save
         path = os.path.join(tempfile.gettempdir(), "edit_persist.musiai")

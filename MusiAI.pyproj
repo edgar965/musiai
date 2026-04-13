@@ -77,9 +77,21 @@
     <Compile Include="musiai\notation\TimeSignatureItem.py" />
     <Compile Include="musiai\notation\WaveformItem.py" />
     <Compile Include="musiai\notation\ZigzagItem.py" />
+    <!-- PDF -->
+    <Compile Include="musiai\pdf\__init__.py" />
+    <Compile Include="musiai\pdf\PdfEngineConfig.py" />
+    <Compile Include="musiai\pdf\PdfImportWorker.py" />
+    <Compile Include="musiai\pdf\PdfExportWorker.py" />
+    <Compile Include="musiai\pdf\AudiverisAdapter.py" />
+    <Compile Include="musiai\pdf\OemerAdapter.py" />
+    <Compile Include="musiai\pdf\Pdf2MusicxmlAdapter.py" />
+    <Compile Include="musiai\pdf\LilypondAdapter.py" />
+    <Compile Include="musiai\pdf\MusescoreAdapter.py" />
+    <Compile Include="musiai\pdf\ReportlabAdapter.py" />
     <!-- UI -->
     <Compile Include="musiai\ui\__init__.py" />
     <Compile Include="musiai\ui\AboutDialog.py" />
+    <Compile Include="musiai\ui\DocumentTab.py" />
     <Compile Include="musiai\ui\MainWindow.py" />
     <Compile Include="musiai\ui\MeasureInputDialog.py" />
     <Compile Include="musiai\ui\MidiDeviceDialog.py" />
@@ -88,6 +100,7 @@
     <Compile Include="musiai\ui\SettingsDialog.py" />
     <Compile Include="musiai\ui\SoundfontDialog.py" />
     <Compile Include="musiai\ui\StatusBar.py" />
+    <Compile Include="musiai\ui\TabWidget.py" />
     <Compile Include="musiai\ui\Toolbar.py" />
     <Compile Include="musiai\ui\ZoomWidget.py" />
     <!-- Controller -->
@@ -115,6 +128,7 @@
     <Folder Include="musiai\musicXML\" />
     <Folder Include="musiai\audio\" />
     <Folder Include="musiai\notation\" />
+    <Folder Include="musiai\pdf\" />
     <Folder Include="musiai\ui\" />
     <Folder Include="musiai\controller\" />
     <Folder Include="musiai\util\" />

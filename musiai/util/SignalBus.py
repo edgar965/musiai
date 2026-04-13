@@ -37,6 +37,10 @@ class SignalBus(QObject):
     recording_started = Signal()
     recording_stopped = Signal()
 
+    # Tabs
+    tab_activated = Signal(object)      # DocumentTab
+    tab_closed = Signal(int)            # Tab-Index
+
     # UI
     status_message = Signal(str)        # Statusleisten-Text
     refresh_notation = Signal()         # Notation neu zeichnen

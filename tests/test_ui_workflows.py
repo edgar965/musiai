@@ -901,11 +901,11 @@ class TestWorkflowFullIntegration(unittest.TestCase):
         ctrl.project.add_piece(piece)
         ctrl.signal_bus.piece_loaded.emit(piece)
 
-        items = ctrl.notation_scene.get_all_note_items()
+        items = ctrl._active_scene().get_all_note_items()
         self.assertEqual(len(items), 13)
 
-        ctrl.edit_controller.select_note(items[0])
-        ctrl.edit_controller.change_velocity(100)
+        ctrl._active_edit_controller().select_note(items[0])
+        ctrl._active_edit_controller().change_velocity(100)
 
         ctrl.playback_engine.play()
         self.assertEqual(ctrl.playback_engine.transport.state, "playing")
@@ -920,10 +920,10 @@ class TestWorkflowFullIntegration(unittest.TestCase):
         ctrl.project.add_piece(piece)
         ctrl.signal_bus.piece_loaded.emit(piece)
 
-        items = ctrl.notation_scene.get_all_note_items()
-        ctrl.edit_controller.select_note(items[0])
-        ctrl.edit_controller.change_velocity(115)
-        ctrl.edit_controller.change_cent_offset(20.0, "curve")
+        items = ctrl._active_scene().get_all_note_items()
+        ctrl._active_edit_controller().select_note(items[0])
+        ctrl._active_edit_controller().change_velocity(115)
+        ctrl._active_edit_controller().change_cent_offset(20.0, "curve")
 
         path = os.path.join(tempfile.gettempdir(), "wf_integ.musiai")
         ctrl.project.save(path)

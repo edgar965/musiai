@@ -6,6 +6,7 @@ from musiai.model.Project import Project
 from musiai.util.SignalBus import SignalBus
 from musiai.notation.NotationScene import NotationScene
 from musiai.ui.MainWindow import MainWindow
+from musiai.ui.DocumentTab import DocumentTab
 from musiai.controller.FileController import FileController
 from musiai.controller.EditController import EditController
 from musiai.controller.RecordingController import RecordingController
@@ -25,7 +26,6 @@ class AppController:
     def __init__(self):
         self.project = Project()
         self.signal_bus = SignalBus()
-        self.notation_scene = NotationScene()
 
         # MIDI
         self.midi_keyboard = MidiKeyboard()
@@ -37,36 +37,147 @@ class AppController:
 
         # UI
         self.main_window = MainWindow()
-        self.main_window.set_notation_scene(self.notation_scene)
 
         # Controller
         self.file_controller = FileController(
             self.project, self.signal_bus, self.main_window
-        )
-        self.edit_controller = EditController(
-            self.notation_scene, self.signal_bus
         )
         self.recording_controller = RecordingController(
             self.midi_keyboard, self.midi_mapping,
             self.playback_engine.transport, self.signal_bus,
         )
 
+        # Tab-Zustand
+        self._active_tab: DocumentTab | None = None
         self._tempo_target_measure = None
-        self._detection_engine = "demucs+pyin"  # Default: beste integrierte Engine
+        self._detection_engine = "demucs+pyin"
+        self._pdf_import_engine = "audiveris"
+        self._pdf_export_engine = "lilypond"
+
         self._connect_signals()
         logger.info("AppController initialisiert")
+
+    # ------------------------------------------------------------------
+    # Tab-Management
+    # ------------------------------------------------------------------
+
+    def _open_piece_in_tab(self, piece, file_path=None, file_type=None):
+        """Neuen Tab für ein Piece erstellen und aktivieren."""
+        scene = NotationScene()
+        scene.set_piece(piece)
+
+        from musiai.ui.NotationView import NotationView
+        view = NotationView(scene)
+
+        edit_ctrl = EditController(scene, self.signal_bus)
+        doc_tab = DocumentTab(
+            piece, scene, view, edit_ctrl, file_path, file_type
+        )
+
+        tab_widget = self.main_window.tab_widget
+        tab_widget.add_document_tab(doc_tab)
+        # currentChanged wird automatisch gefeuert → _on_tab_switched
+
+    def _on_tab_switched(self, index: int) -> None:
+        """Tab gewechselt → Signals umverdrahten."""
+        tab_widget = self.main_window.tab_widget
+        new_tab = tab_widget.document_tab_at(index)
+        if new_tab is None or new_tab is self._active_tab:
+            return
+
+        old_tab = self._active_tab
+        self._active_tab = new_tab
+
+        # View-Signals umverdrahten
+        if old_tab:
+            self._wire_view(old_tab, connect=False)
+            self._wire_playback(old_tab.notation_scene, connect=False)
+        self._wire_view(new_tab, connect=True)
+        self._wire_playback(new_tab.notation_scene, connect=True)
+
+        # Engines aktualisieren
+        self.playback_engine.set_piece(new_tab.piece)
+        self.recording_controller.set_piece(new_tab.piece)
+
+        # UI
+        self._tempo_target_measure = None
+        self.main_window.properties_panel.clear()
+        self.main_window.setWindowTitle(f"MusiAI - {new_tab.title}")
+        self.signal_bus.tab_activated.emit(new_tab)
+        logger.info(f"Tab aktiviert: '{new_tab.title}'")
+
+    def _on_tab_close(self, index: int) -> None:
+        """Tab schließen."""
+        tab_widget = self.main_window.tab_widget
+        doc_tab = tab_widget.document_tab_at(index)
+        if doc_tab is None:
+            return
+
+        # Wenn aktiver Tab geschlossen wird
+        if doc_tab is self._active_tab:
+            self._wire_view(doc_tab, connect=False)
+            self._wire_playback(doc_tab.notation_scene, connect=False)
+            self.playback_engine.stop()
+            self._active_tab = None
+
+        tab_widget.close_tab(index)
+        self.signal_bus.tab_closed.emit(index)
+
+        # Neuer aktiver Tab (currentChanged feuert automatisch)
+        if tab_widget.tab_count() == 0:
+            self.main_window.setWindowTitle("MusiAI - Music Expression Editor")
+            self.main_window.properties_panel.clear()
+
+    def _wire_view(self, doc_tab: DocumentTab, connect: bool = True) -> None:
+        """View-Signals connecten oder disconnecten."""
+        view = doc_tab.notation_view
+        ec = doc_tab.edit_controller
+        op = "connect" if connect else "disconnect"
+
+        pairs = [
+            (view.note_clicked, ec.select_note),
+            (view.measure_clicked, self._on_measure_clicked),
+            (view.clef_clicked, self._on_clef_clicked),
+            (view.time_sig_clicked, self._on_ts_clicked_from_view),
+            (view.tempo_clicked, self._on_tempo_clicked),
+            (view.part_label_clicked, self._on_part_label_clicked),
+            (view.part_mute_clicked, self._on_part_mute_clicked),
+            (view.part_detect_requested, self._on_part_detect),
+            (view.part_delete_requested, self._on_part_delete),
+            (view.deselect_requested, self._on_deselect),
+            (view.edit_mode_changed, self._on_edit_mode_changed),
+            (view.cursor_moved, self._on_cursor_moved),
+            (view.copy_requested, ec.copy),
+            (view.paste_requested, self._on_paste),
+            (view.play_from_beat_requested, self._play_from_beat),
+        ]
+        for signal, slot in pairs:
+            getattr(signal, op)(slot)
+
+    def _wire_playback(self, scene: NotationScene, connect: bool = True):
+        """Playback-Position-Signals an Scene connecten/disconnecten."""
+        op = "connect" if connect else "disconnect"
+        getattr(self.signal_bus.playback_position, op)(scene.update_playhead)
+        getattr(self.signal_bus.playback_stopped, op)(scene.hide_playhead)
+
+    # ------------------------------------------------------------------
+    # Signal-Verbindungen (einmalig)
+    # ------------------------------------------------------------------
 
     def _connect_signals(self) -> None:
         """Alle Signals mit Slots verbinden."""
         toolbar = self.main_window.toolbar
         props = self.main_window.properties_panel
+        tab_widget = self.main_window.tab_widget
 
         # --- Datei ---
         toolbar.import_midi_clicked.connect(self.file_controller.import_midi)
         toolbar.import_musicxml_clicked.connect(self.file_controller.import_musicxml)
+        toolbar.import_pdf_clicked.connect(self._import_pdf)
         toolbar.save_project_clicked.connect(self.file_controller.save_project)
         toolbar.load_project_clicked.connect(self.file_controller.load_project)
         toolbar.export_midi_clicked.connect(self._export_midi)
+        toolbar.export_pdf_clicked.connect(self._export_pdf)
         self.main_window._save_music_action.triggered.connect(
             self.file_controller.save_music
         )
@@ -74,9 +185,16 @@ class AppController:
             self.file_controller.save_music_as
         )
 
-        # --- Zoom ---
-        toolbar.zoom_in_clicked.connect(self.main_window.notation_view.zoom_in)
-        toolbar.zoom_out_clicked.connect(self.main_window.notation_view.zoom_out)
+        # --- Tabs ---
+        tab_widget.currentChanged.connect(self._on_tab_switched)
+        tab_widget.tabCloseRequested.connect(self._on_tab_close)
+        self.main_window._close_tab_action.triggered.connect(
+            lambda: self._on_tab_close(tab_widget.currentIndex())
+        )
+
+        # --- Zoom (delegiert an aktive View) ---
+        toolbar.zoom_in_clicked.connect(self._zoom_in)
+        toolbar.zoom_out_clicked.connect(self._zoom_out)
 
         # --- Transport ---
         toolbar.play_clicked.connect(self._on_play)
@@ -110,18 +228,6 @@ class AppController:
         # --- Status ---
         self.signal_bus.status_message.connect(self.main_window.status_bar.set_message)
 
-        # --- Selection ---
-        view = self.main_window.notation_view
-        view.note_clicked.connect(self.edit_controller.select_note)
-        view.measure_clicked.connect(self._on_measure_clicked)
-        view.clef_clicked.connect(self._on_clef_clicked)
-        view.time_sig_clicked.connect(self._on_ts_clicked_from_view)
-        view.tempo_clicked.connect(self._on_tempo_clicked)
-        view.part_label_clicked.connect(self._on_part_label_clicked)
-        view.part_mute_clicked.connect(self._on_part_mute_clicked)
-        view.part_detect_requested.connect(self._on_part_detect)
-        view.part_delete_requested.connect(self._on_part_delete)
-
         # --- Stimm-Properties ---
         props.part_instrument_changed.connect(self._on_part_instrument_changed)
         props.part_muted_changed.connect(self._on_part_muted_changed)
@@ -129,43 +235,22 @@ class AppController:
         props.part_soundfont_requested.connect(self._on_part_soundfont)
         props.part_delete_requested.connect(self._on_part_delete)
         props.part_detect_requested.connect(self._on_part_detect)
-        view.deselect_requested.connect(self._on_deselect)
         self.signal_bus.note_selected.connect(self._on_note_selected)
         self.signal_bus.notes_deselected.connect(props.clear)
 
-        # --- Edit Mode ---
-        view.edit_mode_changed.connect(self._on_edit_mode_changed)
-        view.cursor_moved.connect(self._on_cursor_moved)
-        view.copy_requested.connect(self.edit_controller.copy)
-        view.paste_requested.connect(self._on_paste)
-
         # --- Properties → Edit ---
-        props.velocity_changed.connect(self.edit_controller.change_velocity)
-        props.cent_offset_changed.connect(
-            lambda c: self.edit_controller.change_cent_offset(
-                c, props._glide_combo.currentText()
-            )
-        )
-        props.duration_changed.connect(self.edit_controller.change_duration_deviation)
+        props.velocity_changed.connect(self._change_velocity)
+        props.cent_offset_changed.connect(self._change_cent_offset)
+        props.duration_changed.connect(self._change_duration)
         props.glide_type_changed.connect(self._on_glide_type_changed)
         props.tempo_changed.connect(self._on_tempo_changed)
 
         # --- Delete ---
-        self.main_window._delete_action.triggered.connect(
-            self.edit_controller.delete_selected
-        )
+        self.main_window._delete_action.triggered.connect(self._delete_selected)
 
         # --- Neue Stimme ---
         self.main_window._new_voice_action.triggered.connect(self._add_new_voice)
         self.main_window._new_audio_action.triggered.connect(self._add_audio_voice)
-
-        # --- Playback Position → Playhead ---
-        self.signal_bus.playback_position.connect(
-            self.notation_scene.update_playhead
-        )
-        self.signal_bus.playback_stopped.connect(
-            self.notation_scene.hide_playhead
-        )
 
         # --- Note changed → Refresh ---
         self.signal_bus.note_changed.connect(self._on_note_changed)
@@ -183,12 +268,70 @@ class AppController:
 
         logger.debug("Alle Signals verbunden")
 
+    # ------------------------------------------------------------------
+    # Delegierende Methoden (leiten an aktiven Tab weiter)
+    # ------------------------------------------------------------------
+
+    def _active_edit_controller(self):
+        return self._active_tab.edit_controller if self._active_tab else None
+
+    def _active_scene(self):
+        return self._active_tab.notation_scene if self._active_tab else None
+
+    def _active_piece(self):
+        return self._active_tab.piece if self._active_tab else None
+
+    def _change_velocity(self, v):
+        ec = self._active_edit_controller()
+        if ec:
+            ec.change_velocity(v)
+
+    def _change_cent_offset(self, c):
+        ec = self._active_edit_controller()
+        if ec:
+            props = self.main_window.properties_panel
+            ec.change_cent_offset(c, props._glide_combo.currentText())
+
+    def _change_duration(self, d):
+        ec = self._active_edit_controller()
+        if ec:
+            ec.change_duration_deviation(d)
+
+    def _delete_selected(self):
+        ec = self._active_edit_controller()
+        if ec:
+            ec.delete_selected()
+
+    def _zoom_in(self):
+        view = self.main_window.notation_view
+        if view:
+            view.zoom_in()
+
+    def _zoom_out(self):
+        view = self.main_window.notation_view
+        if view:
+            view.zoom_out()
+
+    # ------------------------------------------------------------------
+    # Piece / Playback
+    # ------------------------------------------------------------------
+
     def _on_piece_loaded(self, piece) -> None:
         logger.info(f"Piece geladen: '{piece.title}'")
-        self.notation_scene.set_piece(piece)
-        self.playback_engine.set_piece(piece)
-        self.recording_controller.set_piece(piece)
-        self.main_window.setWindowTitle(f"MusiAI - {piece.title}")
+        self._open_piece_in_tab(piece)
+
+    def _play_from_beat(self, beat: float) -> None:
+        """Wiedergabe ab einer bestimmten Beat-Position starten."""
+        if not self.playback_engine.piece:
+            self.signal_bus.status_message.emit("Kein Stück geladen")
+            return
+        self.playback_engine.stop()
+        self.playback_engine.transport.seek(beat)
+        self.playback_engine.play()
+        m, b = self._beat_to_measure_info(beat)
+        self.signal_bus.status_message.emit(
+            f"Wiedergabe ab Takt {m}, Beat {b:.1f}"
+        )
 
     def _on_play(self) -> None:
         if not self.playback_engine.piece:
@@ -198,7 +341,6 @@ class AppController:
         self.signal_bus.status_message.emit("Wiedergabe...")
 
     def _on_play_pause(self) -> None:
-        """Space-Taste: Play/Pause Toggle."""
         if not self.playback_engine.piece:
             self.signal_bus.status_message.emit("Kein Stück geladen")
             return
@@ -214,7 +356,7 @@ class AppController:
         self.signal_bus.status_message.emit("Gestoppt")
 
     def _export_midi(self) -> None:
-        piece = self.project.current_piece
+        piece = self._active_piece()
         if not piece:
             self.signal_bus.status_message.emit("Kein Stück zum Exportieren")
             return
@@ -225,6 +367,99 @@ class AppController:
         if path:
             self.midi_exporter.export_file(piece, path)
             self.signal_bus.status_message.emit(f"MIDI exportiert: {path}")
+
+    # ------------------------------------------------------------------
+    # PDF Import/Export
+    # ------------------------------------------------------------------
+
+    def _import_pdf(self) -> None:
+        """PDF-Datei importieren (OMR → MusicXML → Tab)."""
+        path, _ = QFileDialog.getOpenFileName(
+            self.main_window, "PDF importieren", "media/music",
+            "PDF Dateien (*.pdf);;Alle Dateien (*)"
+        )
+        if not path:
+            return
+
+        from musiai.pdf.PdfImportWorker import PdfImportWorker
+        import tempfile
+        self._pdf_temp_dir = tempfile.mkdtemp(prefix="musiai_pdf_")
+        self._pdf_source_path = path
+
+        self._pdf_worker = PdfImportWorker(
+            self._pdf_import_engine, path, self._pdf_temp_dir
+        )
+        self._pdf_worker.progress.connect(
+            self.signal_bus.status_message.emit
+        )
+        self._pdf_worker.finished.connect(self._on_pdf_import_finished)
+        self._pdf_worker.error.connect(
+            lambda msg: self.signal_bus.status_message.emit(f"PDF-Fehler: {msg}")
+        )
+        self._pdf_worker.start()
+        self.signal_bus.status_message.emit(
+            f"PDF-Import ({self._pdf_import_engine})..."
+        )
+
+    def _on_pdf_import_finished(self, musicxml_path: str) -> None:
+        """PDF→MusicXML Konversion fertig → Piece laden."""
+        try:
+            from musiai.midi.MusicXmlImporterCompat import MusicXmlImporter
+            piece = MusicXmlImporter().import_file(musicxml_path)
+            self.project.add_piece(piece)
+            self._open_piece_in_tab(
+                piece, file_path=self._pdf_source_path, file_type="pdf"
+            )
+            self.signal_bus.status_message.emit(
+                f"PDF importiert: {piece.title}"
+            )
+        except Exception as e:
+            logger.error(f"PDF Import fehlgeschlagen: {e}", exc_info=True)
+            self.signal_bus.status_message.emit(f"Fehler: {e}")
+
+    def _export_pdf(self) -> None:
+        """Aktives Piece als PDF exportieren."""
+        piece = self._active_piece()
+        if not piece:
+            self.signal_bus.status_message.emit("Kein Stück zum Exportieren")
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self.main_window, "PDF exportieren", "media/music",
+            "PDF Dateien (*.pdf);;Alle Dateien (*)"
+        )
+        if not path:
+            return
+
+        import tempfile, os
+        temp_xml = os.path.join(
+            tempfile.mkdtemp(prefix="musiai_pdf_"),
+            "export.musicxml"
+        )
+        from musiai.musicXML.MusicXmlExporter import MusicXmlExporter
+        MusicXmlExporter().export_file(piece, temp_xml)
+
+        from musiai.pdf.PdfExportWorker import PdfExportWorker
+        self._pdf_export_worker = PdfExportWorker(
+            self._pdf_export_engine, temp_xml, path
+        )
+        self._pdf_export_worker.progress.connect(
+            self.signal_bus.status_message.emit
+        )
+        self._pdf_export_worker.finished.connect(
+            lambda p: self.signal_bus.status_message.emit(f"PDF exportiert: {p}")
+        )
+        self._pdf_export_worker.error.connect(
+            lambda msg: self.signal_bus.status_message.emit(f"PDF-Fehler: {msg}")
+        )
+        self._pdf_export_worker.start()
+        self.signal_bus.status_message.emit(
+            f"PDF-Export ({self._pdf_export_engine})..."
+        )
+
+    # ------------------------------------------------------------------
+    # Settings / Backend
+    # ------------------------------------------------------------------
 
     def _switch_backend(self, name: str) -> None:
         if self.playback_engine.switch_backend(name):
@@ -267,36 +502,56 @@ class AppController:
     def _show_settings(self) -> None:
         from musiai.ui.SettingsDialog import SettingsDialog
         dialog = SettingsDialog(self.main_window)
-        # Aktuelle Engine vorselektieren
+        # Aktuelle Engines vorselektieren
         if dialog._engines.get(self._detection_engine):
             dialog._engines[self._detection_engine].setChecked(True)
+        if hasattr(dialog, '_pdf_import_engines'):
+            if dialog._pdf_import_engines.get(self._pdf_import_engine):
+                dialog._pdf_import_engines[self._pdf_import_engine].setChecked(True)
+            if dialog._pdf_export_engines.get(self._pdf_export_engine):
+                dialog._pdf_export_engines[self._pdf_export_engine].setChecked(True)
         if dialog.exec():
             self._detection_engine = dialog.selected_engine
-            logger.info(f"Erkennungs-Engine: {self._detection_engine}")
+            if hasattr(dialog, 'selected_pdf_import_engine'):
+                self._pdf_import_engine = dialog.selected_pdf_import_engine
+            if hasattr(dialog, 'selected_pdf_export_engine'):
+                self._pdf_export_engine = dialog.selected_pdf_export_engine
+            logger.info(
+                f"Engines: detect={self._detection_engine}, "
+                f"pdf_import={self._pdf_import_engine}, "
+                f"pdf_export={self._pdf_export_engine}"
+            )
 
     def _show_midi_dialog(self) -> None:
         dialog = MidiDeviceDialog(self.midi_keyboard, self.main_window)
         dialog.exec()
 
+    # ------------------------------------------------------------------
+    # Note/Measure/Edit Handlers
+    # ------------------------------------------------------------------
+
     def _on_glide_type_changed(self, glide_type: str) -> None:
-        note = self.edit_controller.selected_note
-        if note:
-            self.edit_controller.change_cent_offset(
-                note.expression.cent_offset, glide_type
+        ec = self._active_edit_controller()
+        if ec and ec.selected_note:
+            ec.change_cent_offset(
+                ec.selected_note.expression.cent_offset, glide_type
             )
 
     def _on_note_selected(self, note) -> None:
-        """Note ausgewählt → Properties Panel anzeigen, Takt-Highlight entfernen."""
         if note:
             self._tempo_target_measure = None
-            self.notation_scene.clear_measure_highlight()
+            scene = self._active_scene()
+            if scene:
+                scene.clear_measure_highlight()
             self.main_window.properties_panel.show_note(note)
 
     def _on_measure_clicked(self, measure) -> None:
-        """Klick in Takt-Bereich → Takt selektieren, Properties zeigen."""
-        self.notation_scene.highlight_measure(measure)
-        self.edit_controller.select_measure(measure)
-        # Tempo dieses Takts anzeigen (per-Takt oder global)
+        scene = self._active_scene()
+        ec = self._active_edit_controller()
+        if not scene or not ec:
+            return
+        scene.highlight_measure(measure)
+        ec.select_measure(measure)
         tempo = measure.tempo.bpm if measure.tempo else (
             self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
         )
@@ -309,39 +564,37 @@ class AppController:
         )
 
     def _on_edit_mode_changed(self, active: bool) -> None:
-        """Edit Mode ein/aus."""
         self.main_window.status_bar.set_edit_mode(active)
-        if active:
-            self.notation_scene.update_cursor(
-                self.main_window.notation_view.cursor_beat
-            )
+        scene = self._active_scene()
+        view = self.main_window.notation_view
+        if active and scene and view:
+            scene.update_cursor(view.cursor_beat)
             self.signal_bus.status_message.emit(
                 "Edit Mode — Pfeiltasten/Mausklick: Cursor bewegen, "
                 "Ctrl+C/V: Copy/Paste, Esc: beenden"
             )
-        else:
-            self.notation_scene.hide_cursor()
+        elif scene:
+            scene.hide_cursor()
             self.signal_bus.status_message.emit("Edit Mode beendet")
 
     def _on_cursor_moved(self, beat: float) -> None:
-        """Edit-Cursor wurde bewegt."""
-        self.notation_scene.update_cursor(beat)
-        # Finde Takt + lokalen Beat für Statusanzeige
+        scene = self._active_scene()
+        if scene:
+            scene.update_cursor(beat)
         measure_num, local_beat = self._beat_to_measure_info(beat)
         self.main_window.status_bar.set_position(measure_num, local_beat)
 
     def _on_paste(self) -> None:
-        """Paste an der Cursor-Position im Edit Mode."""
         view = self.main_window.notation_view
-        if not view.edit_mode:
+        ec = self._active_edit_controller()
+        if not view or not view.edit_mode or not ec:
             return
         beat = view.cursor_beat
         target_measure, local_beat = self._find_measure_at_beat(beat)
-        self.edit_controller.paste_at(target_measure, local_beat)
+        ec.paste_at(target_measure, local_beat)
 
     def _beat_to_measure_info(self, global_beat: float) -> tuple[int, float]:
-        """Globaler Beat → (Taktnummer, lokaler Beat)."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
         if not piece or not piece.parts:
             return 1, global_beat
         cumulative = 0.0
@@ -350,14 +603,11 @@ class AppController:
             if global_beat < cumulative + dur:
                 return m.number, global_beat - cumulative
             cumulative += dur
-        # Hinter dem letzten Takt
         last = piece.parts[0].measures[-1]
         return last.number, global_beat - (cumulative - last.duration_beats)
 
     def _find_measure_at_beat(self, global_beat: float):
-        """Globaler Beat → (Measure, lokaler Beat)."""
-        from musiai.model.Measure import Measure
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
         if not piece or not piece.parts:
             return None, 0.0
         cumulative = 0.0
@@ -370,28 +620,20 @@ class AppController:
         return last, global_beat - (cumulative - last.duration_beats)
 
     def _on_tempo_changed(self, bpm: float) -> None:
-        """Tempo geändert → NUR den Ziel-Takt oder globales Tempo.
-
-        _tempo_target_measure bestimmt, was geändert wird:
-          - None → globales Tempo (piece.tempos[0])
-          - Measure → nur dieser Takt (measure.tempo)
-        """
-        piece = self.notation_scene.piece
-        if not piece:
+        piece = self._active_piece()
+        scene = self._active_scene()
+        if not piece or not scene:
             return
 
         from musiai.model.Tempo import Tempo
         target = self._tempo_target_measure
 
         if target:
-            # NUR diesen einen Takt ändern
             target.tempo = Tempo(bpm, 0)
             logger.info(f"Takt {target.number} Tempo → {bpm:.0f} BPM")
         else:
-            # Globales Tempo für alle Takte
             if piece.tempos:
                 piece.tempos[0].bpm = bpm
-            # Auch alle per-Takt-Tempos aktualisieren
             for part in piece.parts:
                 for m in part.measures:
                     if m.tempo:
@@ -399,30 +641,37 @@ class AppController:
             logger.info(f"Globales Tempo → {bpm:.0f} BPM")
 
         self.playback_engine.transport.tempo_bpm = bpm
-        self.notation_scene.refresh()
+        scene.refresh()
         if target:
-            self.notation_scene.highlight_measure(target)
+            scene.highlight_measure(target)
         self.signal_bus.status_message.emit(
             f"Tempo: {bpm:.0f} BPM ({'Takt ' + str(target.number) if target else 'global'})"
         )
 
     def _on_deselect(self) -> None:
-        """Escape (outside edit mode): Alles deselektieren."""
         self._tempo_target_measure = None
-        self.edit_controller.deselect()
-        self.notation_scene.clear_measure_highlight()
+        ec = self._active_edit_controller()
+        scene = self._active_scene()
+        if ec:
+            ec.deselect()
+        if scene:
+            scene.clear_measure_highlight()
         self.main_window.properties_panel.clear()
         self.signal_bus.status_message.emit("Auswahl aufgehoben")
 
     def _on_note_changed(self, note) -> None:
-        """Note wurde geändert → Panel updaten falls selektiert."""
-        if self.edit_controller.selected_note is note:
+        ec = self._active_edit_controller()
+        if ec and ec.selected_note is note:
             self.main_window.properties_panel.show_note(note)
 
+    # ------------------------------------------------------------------
+    # Voice / Part Management
+    # ------------------------------------------------------------------
+
     def _add_new_voice(self) -> None:
-        """Neue Stimme (Part) zum aktuellen Piece hinzufügen."""
-        piece = self.project.current_piece
-        if not piece:
+        piece = self._active_piece()
+        scene = self._active_scene()
+        if not piece or not scene:
             self.signal_bus.status_message.emit("Kein Stück geladen")
             return
 
@@ -433,9 +682,8 @@ class AppController:
         part_num = len(piece.parts) + 1
         new_part = Part(name=f"Stimme {part_num}", channel=min(part_num, 15))
 
-        # Gleiche Taktanzahl wie erste Stimme, leere Takte
         if piece.parts:
-            for i, existing in enumerate(piece.parts[0].measures):
+            for existing in piece.parts[0].measures:
                 m = Measure(
                     number=existing.number,
                     time_signature=TimeSignature(
@@ -448,20 +696,22 @@ class AppController:
             new_part.add_measure(Measure(number=1))
 
         piece.add_part(new_part)
-        self.notation_scene.refresh()
+        scene.refresh()
         self.signal_bus.status_message.emit(
             f"Neue Stimme '{new_part.name}' hinzugefügt"
         )
         logger.info(f"Neue Stimme: {new_part.name} (Part {part_num})")
 
     def _on_tempo_clicked(self) -> None:
-        """Tempo-Anzeige angeklickt → Globales Tempo editieren."""
-        piece = self.notation_scene.piece
-        if not piece:
+        piece = self._active_piece()
+        scene = self._active_scene()
+        ec = self._active_edit_controller()
+        if not piece or not scene:
             return
-        self.edit_controller.deselect()
-        self.notation_scene.clear_measure_highlight()
-        self._tempo_target_measure = None  # Global
+        if ec:
+            ec.deselect()
+        scene.clear_measure_highlight()
+        self._tempo_target_measure = None
         tempo = piece.initial_tempo
         ts = piece.parts[0].measures[0].time_signature if piece.parts else None
         if ts:
@@ -471,7 +721,6 @@ class AppController:
         )
 
     def _add_audio_voice(self) -> None:
-        """Audio-Datei laden und als neue Stimme hinzufügen."""
         path, _ = QFileDialog.getOpenFileName(
             self.main_window, "Audio laden", "media/mp3",
             "Audio Dateien (*.wav *.mp3 *.flac *.ogg);;Alle Dateien (*)"
@@ -494,19 +743,20 @@ class AppController:
             self.signal_bus.status_message.emit("Audio laden fehlgeschlagen")
             return
 
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        scene = self._active_scene()
         if not piece:
             from musiai.model.Piece import Piece
             piece = Piece("Audio Import")
             self.project.add_piece(piece)
+            self._open_piece_in_tab(piece)
+            scene = self._active_scene()
 
-        # Neue Stimme mit Audio
         import os
         name = os.path.splitext(os.path.basename(path))[0]
         part = Part(name=f"Audio: {name}", channel=len(piece.parts))
         part.audio_track = track
 
-        # Leere Takte anlegen (Dauer = Audio-Dauer)
         tempo = piece.initial_tempo
         beats = track.duration_seconds * (tempo / 60.0)
         from musiai.model.TimeSignature import TimeSignature
@@ -516,17 +766,17 @@ class AppController:
             part.add_measure(Measure(i + 1, ts))
 
         piece.add_part(part)
-        # Playback-Engine aktualisieren (Audio-Track registrieren)
         self.playback_engine.set_piece(piece)
-        self.notation_scene.refresh()
+        if scene:
+            scene.refresh()
         QApplication.restoreOverrideCursor()
         self.signal_bus.status_message.emit(
             f"Audio-Stimme '{part.name}' geladen ({track.duration_seconds:.1f}s)"
         )
 
     def _on_part_delete(self, part_idx: int) -> None:
-        """Stimme löschen."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        scene = self._active_scene()
         if not piece or part_idx >= len(piece.parts):
             return
         if len(piece.parts) <= 1:
@@ -534,14 +784,15 @@ class AppController:
             return
         name = piece.parts[part_idx].name
         del piece.parts[part_idx]
-        self.playback_engine.set_piece(piece)  # Playback-Liste neu
+        self.playback_engine.set_piece(piece)
         self.main_window.properties_panel.clear()
-        self.notation_scene.refresh()
+        if scene:
+            scene.refresh()
         self.signal_bus.status_message.emit(f"Stimme '{name}' gelöscht")
 
     def _on_part_detect(self, part_idx: int) -> None:
-        """Noten aus Audio erkennen (asynchron mit Fortschrittsanzeige)."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        scene = self._active_scene()
         if not piece or part_idx >= len(piece.parts):
             return
         part = piece.parts[part_idx]
@@ -549,7 +800,6 @@ class AppController:
             self.signal_bus.status_message.emit("Keine Audio-Daten vorhanden")
             return
 
-        # Verhindere doppelten Start
         if hasattr(self, '_detect_worker') and self._detect_worker and self._detect_worker.isRunning():
             self.signal_bus.status_message.emit("Erkennung läuft bereits...")
             return
@@ -574,8 +824,8 @@ class AppController:
         self.signal_bus.status_message.emit(f"Erkenne Noten ({engine})...")
 
     def _on_detect_finished(self, results: dict, source_part) -> None:
-        """Worker fertig → Erkannte Noten als Stimmen hinzufügen."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        scene = self._active_scene()
         if not piece:
             return
 
@@ -589,7 +839,8 @@ class AppController:
 
         if total > 0:
             self.playback_engine.set_piece(piece)
-            self.notation_scene.refresh()
+            if scene:
+                scene.refresh()
             self.signal_bus.status_message.emit(
                 f"{total} Noten in {len(results)} Stimmen erkannt"
             )
@@ -598,7 +849,6 @@ class AppController:
 
     def _add_detected_part(self, piece, name: str,
                            notes_data: list[dict]) -> None:
-        """Erkannte Noten als neue Stimme hinzufügen."""
         from musiai.model.Part import Part
         from musiai.model.Measure import Measure
         from musiai.model.Note import Note
@@ -622,42 +872,46 @@ class AppController:
             new_part.measures[m_idx].add_note(note)
 
         piece.add_part(new_part)
-        self.playback_engine.set_piece(piece)  # Playback-Liste neu
-        self.notation_scene.refresh()
+        self.playback_engine.set_piece(piece)
+        scene = self._active_scene()
+        if scene:
+            scene.refresh()
         self.signal_bus.status_message.emit(
             f"{len(notes_data)} Noten → '{name}'"
         )
 
     def _on_part_label_clicked(self, part_idx: int) -> None:
-        """Stimm-Label angeklickt → Eigenschaften im Panel zeigen."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        ec = self._active_edit_controller()
+        scene = self._active_scene()
         if not piece or part_idx >= len(piece.parts):
             return
         part = piece.parts[part_idx]
-        self.edit_controller.deselect()
-        self.notation_scene.clear_measure_highlight()
+        if ec:
+            ec.deselect()
+        if scene:
+            scene.clear_measure_highlight()
         self.main_window.properties_panel.show_part(part, part_idx)
         self.signal_bus.status_message.emit(
             f"Stimme '{part.name}' (Kanal {part.channel})"
         )
 
     def _on_part_mute_clicked(self, part_idx: int) -> None:
-        """Mute-Icon angeklickt → Mute togglen."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        scene = self._active_scene()
         if not piece or part_idx >= len(piece.parts):
             return
         part = piece.parts[part_idx]
         part.muted = not part.muted
-        # Audio-Spur muten/unmuten
         if part.audio_track:
             self.playback_engine.audio_player.set_muted(part.muted)
-        self.notation_scene.refresh()
+        if scene:
+            scene.refresh()
         status = "stumm" if part.muted else "aktiv"
         self.signal_bus.status_message.emit(f"Stimme '{part.name}': {status}")
 
     def _on_part_instrument_changed(self, part_idx: int, program: int) -> None:
-        """Instrument geändert → MIDI Program setzen."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
         if not piece or part_idx >= len(piece.parts):
             return
         part = piece.parts[part_idx]
@@ -668,27 +922,28 @@ class AppController:
         )
 
     def _on_part_muted_changed(self, part_idx: int, muted: bool) -> None:
-        """Mute über Properties Panel geändert."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        scene = self._active_scene()
         if not piece or part_idx >= len(piece.parts):
             return
         part = piece.parts[part_idx]
         part.muted = muted
         if part.audio_track:
             self.playback_engine.audio_player.set_muted(muted)
-        self.notation_scene.refresh()
+        if scene:
+            scene.refresh()
 
     def _on_part_name_changed(self, part_idx: int, name: str) -> None:
-        """Stimm-Name geändert."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
+        scene = self._active_scene()
         if not piece or part_idx >= len(piece.parts):
             return
         piece.parts[part_idx].name = name
-        self.notation_scene.refresh()
+        if scene:
+            scene.refresh()
 
     def _on_part_soundfont(self, part_idx: int) -> None:
-        """SoundFont für Stimme laden."""
-        piece = self.notation_scene.piece
+        piece = self._active_piece()
         if not piece or part_idx >= len(piece.parts):
             return
         part = piece.parts[part_idx]
@@ -712,12 +967,10 @@ class AppController:
             self.signal_bus.status_message.emit("SoundFont konnte nicht geladen werden")
 
     def _on_clef_clicked(self, measure) -> None:
-        """Schlüssel angeklickt → Properties zeigen."""
         self.main_window.properties_panel.show_clef()
         self.signal_bus.status_message.emit("Notenschlüssel ausgewählt")
 
     def _on_ts_clicked_from_view(self, measure) -> None:
-        """Taktart in Notation angeklickt → Properties zeigen."""
         tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
         self.main_window.properties_panel.show_time_signature(
             measure.time_signature, tempo
@@ -726,31 +979,28 @@ class AppController:
             f"Taktart {measure.time_signature} ausgewählt"
         )
 
-    def _on_ts_clicked(self, ts_item) -> None:
-        """Taktart angeklickt → Properties zeigen (legacy)."""
-        ts = ts_item.time_sig
-        tempo = self.playback_engine.piece.initial_tempo if self.playback_engine.piece else 120
-        self.main_window.properties_panel.show_time_signature(ts, tempo)
+    # ------------------------------------------------------------------
+    # Startup / Shutdown
+    # ------------------------------------------------------------------
 
     def _load_default_file(self) -> None:
-        """Standard-Dateien beim Start laden wenn vorhanden."""
         import os
 
-        # MusicXML laden
         default_xml = os.path.abspath("media/music/test.musicxml")
         if os.path.exists(default_xml):
             try:
                 from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
                 piece = MusicXmlImporter().import_file(default_xml)
                 self.project.add_piece(piece)
-                self.signal_bus.piece_loaded.emit(piece)
+                self._open_piece_in_tab(piece, default_xml, "musicxml")
                 logger.info(f"Standard-Datei geladen: {default_xml}")
             except Exception as e:
                 logger.warning(f"MusicXML laden fehlgeschlagen: {e}")
 
         # test.mp3 als Audio-Stimme laden
         default_mp3 = os.path.abspath("media/mp3/test.mp3")
-        if os.path.exists(default_mp3) and self.notation_scene.piece:
+        piece = self._active_piece()
+        if os.path.exists(default_mp3) and piece:
             try:
                 from musiai.model.AudioTrack import AudioTrack
                 from musiai.model.Part import Part
@@ -759,7 +1009,6 @@ class AppController:
 
                 track = AudioTrack()
                 if track.load(default_mp3):
-                    piece = self.notation_scene.piece
                     part = Part(name="Audio: test", channel=len(piece.parts))
                     part.audio_track = track
                     tempo = piece.initial_tempo
@@ -769,21 +1018,21 @@ class AppController:
                         part.add_measure(Measure(i + 1, ts))
                     piece.add_part(part)
                     self.playback_engine.set_piece(piece)
-                    self.notation_scene.refresh()
+                    scene = self._active_scene()
+                    if scene:
+                        scene.refresh()
                     logger.info(f"Audio geladen: {default_mp3}")
             except Exception as e:
                 logger.warning(f"Audio laden fehlgeschlagen: {e}")
 
     def start(self) -> None:
-        """App starten."""
         self.main_window.show()
         self._load_default_file()
-        if not self.project.current_piece:
+        if not self._active_piece():
             self.signal_bus.status_message.emit("Bereit. MIDI oder MusicXML importieren.")
         logger.info("MusiAI gestartet")
 
     def shutdown(self) -> None:
-        """Aufräumen beim Beenden."""
         self.playback_engine.shutdown()
         self.midi_keyboard.shutdown()
         logger.info("MusiAI beendet")
