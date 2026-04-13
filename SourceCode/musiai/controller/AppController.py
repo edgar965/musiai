@@ -82,7 +82,8 @@ class AppController:
         # currentChanged wird automatisch gefeuert → _on_tab_switched
 
     def _on_tab_switched(self, index: int) -> None:
-        """Tab gewechselt → Signals umverdrahten."""
+        """Tab gewechselt -> Signals umverdrahten."""
+        logger.debug(f"Tab gewechselt: index={index}")
         tab_widget = self.main_window.tab_widget
         new_tab = tab_widget.document_tab_at(index)
         if new_tab is None or new_tab is self._active_tab:
@@ -283,6 +284,7 @@ class AppController:
 
     def _on_render_mode_changed(self, mode: str) -> None:
         """Render-Modus fuer alle offenen Tabs aendern."""
+        logger.info(f"Render-Modus gewechselt: {mode}")
         tab_widget = self.main_window.tab_widget
         for i in range(tab_widget.tab_count()):
             doc_tab = tab_widget.document_tab_at(i)
@@ -370,6 +372,7 @@ class AppController:
         if not self.playback_engine.piece:
             self.signal_bus.status_message.emit("Kein Stück geladen")
             return
+        logger.info("Wiedergabe gestartet")
         self.playback_engine.play()
         self.signal_bus.status_message.emit("Wiedergabe...")
 
@@ -385,6 +388,7 @@ class AppController:
             self.signal_bus.status_message.emit("Wiedergabe...")
 
     def _on_stop(self) -> None:
+        logger.info("Wiedergabe gestoppt")
         self.playback_engine.stop()
         self.signal_bus.status_message.emit("Gestoppt")
 
@@ -558,6 +562,11 @@ class AppController:
                 f"pdf_import={self._pdf_import_engine}, "
                 f"pdf_export={self._pdf_export_engine}"
             )
+            # Apply log level change
+            from musiai.util.LoggingConfig import apply_log_level
+            new_level = dialog.log_level
+            apply_log_level(new_level)
+            logger.info(f"Log-Level geändert: {new_level}")
             # Refresh notation to apply chord font changes
             if self._active_tab and self._active_tab.notation_scene:
                 self._active_tab.notation_scene.refresh()

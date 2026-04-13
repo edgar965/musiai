@@ -56,6 +56,7 @@ class MidiSheetRenderer:
         cfg["color_mode"] = self.color_mode
         y_offset = 60
 
+        logger.info(f"render_from_file gestartet: {file_path}")
         converter = Music21Converter()
         try:
             parts_data = converter.convert(file_path)
@@ -67,6 +68,9 @@ class MidiSheetRenderer:
             return
 
         track_symbols = [pd['symbols'] for pd in parts_data]
+        total_symbols = sum(len(s) for s in track_symbols)
+        logger.debug(f"render_from_file: {len(parts_data)} Parts, "
+                     f"{total_symbols} Symbole gesamt")
 
         # Align symbols across tracks
         widths = SymbolWidths(track_symbols)
@@ -183,6 +187,8 @@ class MidiSheetRenderer:
                system_width: float = 1100) -> None:
         if not piece or not piece.parts:
             return
+        logger.info(f"render gestartet: '{piece.title}', "
+                    f"{len(piece.parts)} Parts")
 
         self.config.page_width = int(system_width) - 120
         SheetConfig.PageWidth = self.config.page_width
@@ -537,6 +543,7 @@ class MidiSheetRenderer:
                 return False, [], 0
 
             chord_indexes = [i]
+            horiz_dist = symbols[i].width  # Start with first chord width
             found = True
             for ci in range(1, num_chords):
                 i += 1
@@ -551,7 +558,8 @@ class MidiSheetRenderer:
                     found = False
                     break
                 chord_indexes.append(i)
-                horiz_dist += symbols[i].width
+                if ci < num_chords - 1:
+                    horiz_dist += symbols[i].width  # Middle chords
 
             if found:
                 return True, chord_indexes, horiz_dist

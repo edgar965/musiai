@@ -227,10 +227,10 @@ class TestSettingsDialogPdfTab(unittest.TestCase):
         tab_titles = [dialog._tabs.tabText(i) for i in range(dialog._tabs.count())]
         self.assertIn("PDF", tab_titles)
 
-    def test_has_four_tabs(self):
+    def test_has_five_tabs(self):
         from musiai.ui.SettingsDialog import SettingsDialog
         dialog = SettingsDialog()
-        self.assertEqual(dialog._tabs.count(), 4)
+        self.assertEqual(dialog._tabs.count(), 5)
 
     def test_pdf_import_engines_exist(self):
         from musiai.ui.SettingsDialog import SettingsDialog

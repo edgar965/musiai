@@ -42,6 +42,8 @@ class FileController:
             self._source_type = "midi"
             self.signal_bus.piece_loaded.emit(piece)
             self.signal_bus.status_message.emit(f"MIDI importiert: {Path(path).name}")
+            logger.info(f"MIDI importiert: {path} "
+                        f"({len(piece.parts)} Parts)")
             return piece
         except Exception as e:
             logger.error(f"MIDI Import fehlgeschlagen: {e}", exc_info=True)
@@ -64,6 +66,8 @@ class FileController:
             self._source_type = "musicxml"
             self.signal_bus.piece_loaded.emit(piece)
             self.signal_bus.status_message.emit(f"MusicXML importiert: {Path(path).name}")
+            logger.info(f"MusicXML importiert: {path} "
+                        f"({len(piece.parts)} Parts)")
             return piece
         except Exception as e:
             logger.error(f"MusicXML Import fehlgeschlagen: {e}", exc_info=True)

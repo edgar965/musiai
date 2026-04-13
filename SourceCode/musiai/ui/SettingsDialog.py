@@ -1,11 +1,14 @@
 """SettingsDialog - Einstellungen mit Tab-Controls."""
 
 import logging
+import os
+import subprocess
+import sys
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QTabWidget, QWidget, QGroupBox,
     QFormLayout, QRadioButton, QButtonGroup, QLabel, QPushButton,
     QDialogButtonBox, QFontComboBox, QSpinBox, QCheckBox,
-    QColorDialog, QHBoxLayout,
+    QColorDialog, QHBoxLayout, QSlider,
 )
 from PySide6.QtGui import QFont, QColor
 from PySide6.QtCore import Qt, QSettings
@@ -34,6 +37,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_audio_tab(), "Audio")
         self._tabs.addTab(self._build_ui_tab(), "UI")
         self._tabs.addTab(self._build_pdf_tab(), "PDF")
+        self._tabs.addTab(self._build_logging_tab(), "Logging")
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok |
@@ -217,6 +221,68 @@ class SettingsDialog(QDialog):
         layout.addWidget(export_group)
         return page
 
+    # ---- Logging Tab ----
+
+    def _build_logging_tab(self) -> QWidget:
+        from musiai.util.LoggingConfig import LOG_DIR, LEVEL_NAMES
+
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        settings = QSettings("MusiAI", "MusiAI")
+        current_level = int(settings.value("logging/level", 4))
+
+        group = QGroupBox("Log-Level")
+        g_lay = QFormLayout(group)
+
+        self._log_level_slider = QSlider(Qt.Orientation.Horizontal)
+        self._log_level_slider.setRange(1, 10)
+        self._log_level_slider.setValue(current_level)
+        self._log_level_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._log_level_slider.setTickInterval(1)
+        self._log_level_slider.setSingleStep(1)
+
+        self._log_level_label = QLabel(
+            f"{current_level} - {LEVEL_NAMES.get(current_level, 'INFO')}"
+        )
+        self._log_level_label.setStyleSheet("font-weight: bold;")
+        self._log_level_slider.valueChanged.connect(self._on_log_level_changed)
+
+        g_lay.addRow("Level (1-10):", self._log_level_slider)
+        g_lay.addRow("Aktuell:", self._log_level_label)
+
+        desc = QLabel(
+            "1 = CRITICAL  |  2 = ERROR  |  3 = WARNING\n"
+            "4 = INFO (Standard)  |  5-10 = DEBUG (zunehmend detailliert)"
+        )
+        desc.setStyleSheet("color: #666; font-size: 9px;")
+        g_lay.addRow(desc)
+
+        layout.addWidget(group)
+
+        # Open logs button
+        open_btn = QPushButton("Log-Dateien offnen")
+        open_btn.clicked.connect(lambda: self._open_log_dir(str(LOG_DIR)))
+        layout.addWidget(open_btn)
+
+        layout.addStretch()
+        return page
+
+    def _on_log_level_changed(self, value: int) -> None:
+        from musiai.util.LoggingConfig import LEVEL_NAMES
+        name = LEVEL_NAMES.get(value, "INFO")
+        self._log_level_label.setText(f"{value} - {name}")
+
+    @staticmethod
+    def _open_log_dir(path: str) -> None:
+        """Open the log directory in file explorer."""
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+
     # ---- Engine Detection ----
 
     def _detect_engines(self) -> None:
@@ -333,6 +399,11 @@ class SettingsDialog(QDialog):
     def chord_color(self) -> QColor:
         return QColor(self._chord_color_hex)
 
+    @property
+    def log_level(self) -> int:
+        """Return the selected log level (1-10)."""
+        return self._log_level_slider.value()
+
     def accept(self) -> None:
         settings = QSettings("MusiAI", "MusiAI")
         settings.setValue("ui/musicxml_bravura",
@@ -348,4 +419,5 @@ class SettingsDialog(QDialog):
         settings.setValue("ui/chord_font_color", self._chord_color_hex)
         settings.setValue("ui/chords_default",
                           "true" if self._chords_default.isChecked() else "false")
+        settings.setValue("logging/level", self._log_level_slider.value())
         super().accept()

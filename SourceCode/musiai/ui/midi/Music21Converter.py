@@ -36,6 +36,7 @@ class Music21Converter:
         """
         from musiai.music21.converter import parse as m21_parse
 
+        logger.info(f"Konvertiere: {file_path}")
         score = m21_parse(file_path)
         results = []
 
@@ -48,6 +49,12 @@ class Music21Converter:
                 part_data['tempo_bpm'] = tempo_bpm
                 results.append(part_data)
 
+        logger.info(f"Konvertierung abgeschlossen: {len(results)} Parts, "
+                    f"Tempo={tempo_bpm}")
+        for i, pd in enumerate(results):
+            logger.debug(f"  Part {i}: {pd.get('part_name', '?')}, "
+                         f"{len(pd['symbols'])} Symbole, "
+                         f"Taktart={pd.get('time_num')}/{pd.get('time_den')}")
         return results
 
     # ------------------------------------------------------------------

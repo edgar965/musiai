@@ -1,6 +1,7 @@
 """NotationScene - QGraphicsScene die das gesamte Stück rendert."""
 
 import logging
+import time
 from PySide6.QtWidgets import QGraphicsScene, QGraphicsSimpleTextItem
 from PySide6.QtGui import QColor, QPen, QFont, QBrush
 from musiai.model.Piece import Piece
@@ -87,6 +88,7 @@ class NotationScene(QGraphicsScene):
                 self.refresh()
 
     def refresh(self) -> None:
+        _t0 = time.perf_counter()
         self.removeItem(self.playhead)
         self.removeItem(self.cursor)
         self.clear()
@@ -224,8 +226,10 @@ class NotationScene(QGraphicsScene):
         self.playhead.set_y_range(self.MARGIN_TOP, center_y)
         self.cursor.set_y_range(self.MARGIN_TOP, center_y)
         self.setSceneRect(0, 0, max_width + 60, center_y + 40)
+        _elapsed = (time.perf_counter() - _t0) * 1000
         logger.info(f"Scene gerendert: {len(self.measure_renderers)} Renderer, "
                     f"{len(self._primary_renderers)} primär")
+        logger.debug(f"Scene refresh dauerte {_elapsed:.1f} ms")
 
     # ------------------------------------------------------------------
     # System-Layout
