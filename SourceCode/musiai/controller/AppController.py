@@ -77,6 +77,8 @@ class AppController:
 
         tab_widget = self.main_window.tab_widget
         tab_widget.add_document_tab(doc_tab)
+        # View zum Anfang scrollen
+        view.centerOn(0, 0)
         # currentChanged wird automatisch gefeuert → _on_tab_switched
 
     def _on_tab_switched(self, index: int) -> None:
