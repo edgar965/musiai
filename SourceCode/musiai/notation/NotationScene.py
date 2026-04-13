@@ -31,6 +31,7 @@ class NotationScene(QGraphicsScene):
     # Render-Modi
     MODE_MUSICXML = "musicxml"
     MODE_MIDISHEET = "midisheet"
+    MODE_MIDISHEET_BRAVURA = "midisheet_bravura"
     MODE_MIDISHEET_SEQ = "midisheet_seq"
     MODE_SVG = "svg"
     MODE_PIANOROLL = "pianoroll"
@@ -59,7 +60,8 @@ class NotationScene(QGraphicsScene):
     def set_render_mode(self, mode: str) -> None:
         """Render-Modus setzen."""
         valid = (self.MODE_MUSICXML, self.MODE_MIDISHEET,
-                 self.MODE_MIDISHEET_SEQ, self.MODE_SVG, self.MODE_PIANOROLL)
+                 self.MODE_MIDISHEET_BRAVURA, self.MODE_MIDISHEET_SEQ,
+                 self.MODE_SVG, self.MODE_PIANOROLL)
         if mode not in valid:
             logger.warning(f"Unbekannter Render-Modus: {mode}")
             return
@@ -94,8 +96,9 @@ class NotationScene(QGraphicsScene):
         self.addItem(self.playhead)
         self.addItem(self.cursor)
 
-        # MIDI Sheet (Partitur oder Stimmen)
-        if self._render_mode in (self.MODE_MIDISHEET, self.MODE_MIDISHEET_SEQ):
+        # MIDI Sheet (alle Varianten)
+        if self._render_mode in (self.MODE_MIDISHEET, self.MODE_MIDISHEET_BRAVURA,
+                                 self.MODE_MIDISHEET_SEQ):
             file_path = getattr(self, '_source_file_path', None)
             if file_path and file_path.lower().endswith(('.mid', '.midi')):
                 self._refresh_midisheet()
@@ -441,9 +444,11 @@ class NotationScene(QGraphicsScene):
         """MIDI-Notenblatt rendern."""
         try:
             from musiai.ui.midi.MidiSheetRenderer import MidiSheetRenderer
-            renderer = MidiSheetRenderer()
+            use_bravura = self._render_mode == self.MODE_MIDISHEET_BRAVURA
+            renderer = MidiSheetRenderer(use_bravura=use_bravura)
             file_path = getattr(self, '_source_file_path', None)
-            interleave = self._render_mode == self.MODE_MIDISHEET
+            interleave = self._render_mode in (
+                self.MODE_MIDISHEET, self.MODE_MIDISHEET_BRAVURA)
             if file_path and file_path.lower().endswith(('.mid', '.midi')):
                 renderer.render_from_file(
                     file_path, self, self._system_width,

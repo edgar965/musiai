@@ -28,8 +28,12 @@ logger = logging.getLogger("musiai.ui.midi.MidiSheetRenderer")
 class MidiSheetRenderer:
     """Rendert ein Piece als klassisches Notenblatt."""
 
-    def __init__(self, config: SheetConfig = None):
+    def __init__(self, config: SheetConfig = None, use_bravura: bool = False):
         self.config = config or SheetConfig.large()
+        self.use_bravura = use_bravura
+        if use_bravura:
+            from musiai.ui.midi.BravuraGlyphs import ensure_font
+            ensure_font()
 
     def render_from_file(self, file_path: str, scene: QGraphicsScene,
                          system_width: float = 1100,
@@ -46,6 +50,7 @@ class MidiSheetRenderer:
         self.config.page_width = int(system_width) - 120
         SheetConfig.PageWidth = self.config.page_width
         cfg = self.config.to_dict()
+        cfg["use_bravura"] = self.use_bravura
         y_offset = 60
 
         converter = Music21Converter()
@@ -171,6 +176,7 @@ class MidiSheetRenderer:
         self.config.page_width = int(system_width) - 120
         SheetConfig.PageWidth = self.config.page_width
         cfg = self.config.to_dict()
+        cfg["use_bravura"] = self.use_bravura
         y_offset = 60
 
         # Collect tracks
