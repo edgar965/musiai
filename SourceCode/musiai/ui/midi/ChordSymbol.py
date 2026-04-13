@@ -454,7 +454,7 @@ class ChordSymbol(MusicSymbol):
                                  ND.DOTTED_EIGHTH):
                 if use_bravura:
                     from musiai.ui.midi.BravuraGlyphs import DOT, FONT_NAME
-                    dot_size = max(10, int(ls * 2.5))
+                    dot_size = max(14, int(ls * 3.5))
                     painter.setFont(QFont(FONT_NAME, dot_size))
                     if color_mode:
                         from musiai.notation.ColorScheme import ColorScheme

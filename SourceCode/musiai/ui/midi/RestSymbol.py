@@ -51,6 +51,9 @@ class RestSymbol(MusicSymbol):
             ND.HALF: BG.REST_HALF,
             ND.QUARTER: BG.REST_QUARTER,
             ND.EIGHTH: BG.REST_8TH,
+            ND.SIXTEENTH: BG.REST_16TH,
+            ND.THIRTYSECOND: BG.REST_32ND,
+            ND.DOTTED_EIGHTH: BG.REST_8TH,  # Achtel-Pause + Punkt
         }
         glyph = glyph_map.get(self.duration)
         if glyph is None:
