@@ -31,6 +31,74 @@ class MidiSheetRenderer:
     def __init__(self, config: SheetConfig = None):
         self.config = config or SheetConfig.large()
 
+    def render_from_file(self, file_path: str, scene: QGraphicsScene,
+                         system_width: float = 1100) -> None:
+        """Render a MIDI file using music21 as parser.
+
+        Uses Music21Converter to extract clefs, time signatures, rests,
+        and proper note durations directly from the file, bypassing
+        the Piece model which loses some of this information.
+        """
+        from musiai.ui.midi.Music21Converter import Music21Converter
+
+        self.config.page_width = int(system_width) - 120
+        SheetConfig.PageWidth = self.config.page_width
+        cfg = self.config.to_dict()
+        y_offset = 60
+
+        converter = Music21Converter()
+        try:
+            parts_data = converter.convert(file_path)
+        except Exception as e:
+            logger.error(f"music21 parse failed: {e}", exc_info=True)
+            return
+
+        if not parts_data:
+            return
+
+        track_symbols = [pd['symbols'] for pd in parts_data]
+        track_clefs = [pd['clef'] for pd in parts_data]
+
+        # Align symbols across tracks
+        widths = SymbolWidths(track_symbols)
+        self._align_symbols(track_symbols, widths)
+
+        # Use first part's time signature
+        time_num = parts_data[0]['time_num']
+        time_den = parts_data[0]['time_den']
+        measure_len = parts_data[0]['measure_len']
+        quarter = 480  # TPB
+
+        # Create beamed chords
+        self._create_all_beamed_chords(
+            track_symbols, time_num, time_den, quarter, measure_len)
+
+        # Create staffs and render
+        for track_idx, symbols in enumerate(track_symbols):
+            pd = parts_data[track_idx]
+
+            staffs = self._create_staffs_for_track(
+                symbols, pd['measure_len'],
+                track_idx, len(track_symbols))
+
+            for s in staffs:
+                s.calculate_height()
+
+            label = scene.addText(pd['part_name'])
+            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            label.setDefaultTextColor(QColor(30, 30, 80))
+            label.setPos(4, y_offset)
+
+            for staff in staffs:
+                pixmap = self._render_staff(staff, cfg)
+                item = scene.addPixmap(pixmap)
+                item.setPos(100, y_offset)
+                y_offset += staff.height + 15
+            y_offset += 20
+
+        scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
+        logger.info(f"Rendered {len(parts_data)} parts from file via music21")
+
     def render(self, piece: Piece, scene: QGraphicsScene,
                system_width: float = 1100) -> None:
         if not piece or not piece.parts:

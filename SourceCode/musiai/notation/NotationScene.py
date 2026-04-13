@@ -84,6 +84,17 @@ class NotationScene(QGraphicsScene):
         self.addItem(self.playhead)
         self.addItem(self.cursor)
 
+        # MIDI Sheet can render from file without Piece parts
+        if self._render_mode == self.MODE_MIDISHEET:
+            file_path = getattr(self, '_source_file_path', None)
+            if file_path and file_path.lower().endswith(('.mid', '.midi')):
+                self._refresh_midisheet()
+                return
+            if not self.piece or not self.piece.parts:
+                return
+            self._refresh_midisheet()
+            return
+
         if not self.piece or not self.piece.parts:
             return
 
@@ -93,9 +104,6 @@ class NotationScene(QGraphicsScene):
             return
         if self._render_mode == self.MODE_PIANOROLL:
             self._refresh_pianoroll()
-            return
-        if self._render_mode == self.MODE_MIDISHEET:
-            self._refresh_midisheet()
             return
 
         note_parts = [p for p in self.piece.parts
@@ -406,11 +414,21 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def _refresh_midisheet(self) -> None:
-        """MIDI-Notenblatt rendern (portiert von MusicExplorer)."""
+        """MIDI-Notenblatt rendern (portiert von MusicExplorer).
+
+        When a source MIDI file path is available, uses music21 to parse
+        the file directly for accurate durations, rests, and clefs.
+        Falls back to the Piece model for non-MIDI sources.
+        """
         try:
             from musiai.ui.midi.MidiSheetRenderer import MidiSheetRenderer
             renderer = MidiSheetRenderer()
-            renderer.render(self.piece, self, self._system_width)
+            file_path = getattr(self, '_source_file_path', None)
+            if file_path and file_path.lower().endswith(('.mid', '.midi')):
+                renderer.render_from_file(
+                    file_path, self, self._system_width)
+            else:
+                renderer.render(self.piece, self, self._system_width)
         except Exception as e:
             logger.error(f"MIDI Sheet Fehler: {e}", exc_info=True)
             text = self.addText(f"MIDI Sheet Fehler: {e}")
