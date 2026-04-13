@@ -314,20 +314,35 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def update_playhead(self, beat: float) -> None:
-        # Playhead nur wenn MeasureRenderers vorhanden (MusicXML ohne Bravura)
-        if not self._primary_renderers:
-            self.playhead.hide()
-            return
         x, y_center = self._beat_to_pos(beat)
         if y_center is not None:
             sh = STAFF_LINE_SPACING * 3
             self.playhead.set_y_range(y_center - sh, y_center + sh)
+        else:
+            # Volle Scene-Höhe für Modi ohne MeasureRenderers
+            sr = self.sceneRect()
+            self.playhead.set_y_range(0, sr.height())
         self.playhead.show_at(x)
 
     def _beat_to_pos(self, global_beat: float) -> tuple[float, float | None]:
         """Beat → (x, center_y) mit korrekter Zeile bei Systemumbrüchen."""
         if not self._primary_renderers:
+            # Fallback: linearer Fortschritt über Scene-Breite
+            total_beats = self._get_total_beats()
+            if total_beats > 0:
+                sr = self.sceneRect()
+                frac = global_beat / total_beats
+                x = self.MARGIN_LEFT + frac * (sr.width() - self.MARGIN_LEFT * 2)
+                return x, None
             return self.MARGIN_LEFT + global_beat * PIXELS_PER_BEAT, None
+
+    def _get_total_beats(self) -> float:
+        """Gesamtdauer des Stücks in Beats."""
+        if self.piece and self.piece.parts:
+            for part in self.piece.parts:
+                if part.measures:
+                    return sum(m.duration_beats for m in part.measures)
+        return 0.0
         cumulative = 0.0
         for r in self._primary_renderers:
             dur = r.measure.duration_beats
