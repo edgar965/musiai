@@ -37,7 +37,7 @@ class NotationView(QGraphicsView):
     def __init__(self, scene: NotationScene):
         super().__init__(scene)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -175,7 +175,7 @@ class NotationView(QGraphicsView):
     def _exit_edit_mode(self) -> None:
         self._edit_mode = False
         self._edit_label.setVisible(False)
-        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.setDragMode(QGraphicsView.DragMode.NoDrag)
         self.edit_mode_changed.emit(False)
         logger.info("Edit Mode deaktiviert")
 
