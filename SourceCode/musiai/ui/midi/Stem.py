@@ -148,31 +148,17 @@ class Stem:
             xstart = x + ls // 4 + nw
 
         if self.direction == UP:
-            if use_smufl:
-                se = SMuFLMetadata.stem_up_se()
-                y1 = (ytop + top_staff.dist(self.bottom) * nh // 2
-                       + nh // 2 - int(se[1] * sc))
-            else:
-                y1 = ytop + top_staff.dist(self.bottom) * nh // 2 + nh // 4
+            y1 = ytop + top_staff.dist(self.bottom) * nh // 2 + nh // 4
             ystem = ytop + top_staff.dist(self.end) * nh // 2
-            painter.drawLine(xstart, int(y1), xstart, int(ystem))
+            painter.drawLine(int(xstart), int(y1), int(xstart), int(ystem))
         elif self.direction == DOWN:
-            if use_smufl:
-                nw_pt = SMuFLMetadata.stem_down_nw()
-                y1 = (ytop + top_staff.dist(self.top) * nh // 2
-                       + nh // 2 - int(nw_pt[1] * sc))
+            y1 = ytop + top_staff.dist(self.top) * nh // 2 + nh
+            if self.side == LEFT_SIDE:
+                y1 -= nh // 4
             else:
-                y1 = ytop + top_staff.dist(self.top) * nh // 2 + nh
-                if self.side == LEFT_SIDE:
-                    y1 -= nh // 4
-                else:
-                    y1 -= nh // 2
+                y1 -= nh // 2
             ystem = (ytop + top_staff.dist(self.end) * nh // 2 + nh)
-            painter.drawLine(xstart, int(y1), xstart, int(ystem))
-
-        if use_smufl:
-            pen.setWidth(1)
-            painter.setPen(pen)
+            painter.drawLine(int(xstart), int(y1), int(xstart), int(ystem))
 
     @staticmethod
     def _has_smufl_metadata() -> bool:
