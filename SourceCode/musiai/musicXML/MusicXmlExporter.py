@@ -13,6 +13,13 @@ SEMITONE_TO_STEP = {0: "C", 1: "C", 2: "D", 3: "D", 4: "E", 5: "F",
 SEMITONE_ALTER = {0: 0, 1: 1, 2: 0, 3: 1, 4: 0, 5: 0,
                   6: 1, 7: 0, 8: 1, 9: 0, 10: 1, 11: 0}
 
+# Beats → MusicXML <type>
+DURATION_TO_TYPE = [
+    (4.0, "whole"), (3.0, "half"), (2.0, "half"), (1.5, "quarter"),
+    (1.0, "quarter"), (0.75, "eighth"), (0.5, "eighth"),
+    (0.375, "16th"), (0.25, "16th"), (0.125, "32nd"),
+]
+
 
 class MusicXmlExporter:
     """Exportiert ein Piece als MusicXML mit allen Mikrotönen und Expression-Daten."""
@@ -39,6 +46,9 @@ class MusicXmlExporter:
         for i, part in enumerate(piece.parts):
             part_elem = ET.SubElement(root, "part", id=f"P{i+1}")
 
+            # Auto-detect clef
+            clef_sign, clef_line = self._detect_clef(part)
+
             for m_idx, measure in enumerate(part.measures):
                 measure_elem = ET.SubElement(part_elem, "measure", number=str(measure.number))
 
@@ -52,8 +62,8 @@ class MusicXmlExporter:
                     ET.SubElement(time, "beats").text = str(measure.time_signature.numerator)
                     ET.SubElement(time, "beat-type").text = str(measure.time_signature.denominator)
                     clef = ET.SubElement(attrs, "clef")
-                    ET.SubElement(clef, "sign").text = "G"
-                    ET.SubElement(clef, "line").text = "2"
+                    ET.SubElement(clef, "sign").text = clef_sign
+                    ET.SubElement(clef, "line").text = str(clef_line)
 
                 # Tempo
                 if measure.tempo or (m_idx == 0 and piece.tempos):
@@ -89,6 +99,7 @@ class MusicXmlExporter:
 
         for i, part in enumerate(piece.parts):
             part_elem = ET.SubElement(root, "part", id=f"P{i+1}")
+            clef_sign, clef_line = self._detect_clef(part)
             for m_idx, measure in enumerate(part.measures):
                 measure_elem = ET.SubElement(
                     part_elem, "measure", number=str(measure.number)
@@ -106,8 +117,8 @@ class MusicXmlExporter:
                         measure.time_signature.denominator
                     )
                     clef = ET.SubElement(attrs, "clef")
-                    ET.SubElement(clef, "sign").text = "G"
-                    ET.SubElement(clef, "line").text = "2"
+                    ET.SubElement(clef, "sign").text = clef_sign
+                    ET.SubElement(clef, "line").text = str(clef_line)
                 if measure.tempo or (m_idx == 0 and piece.tempos):
                     tempo_bpm = (
                         measure.tempo.bpm if measure.tempo else piece.initial_tempo
@@ -145,6 +156,14 @@ class MusicXmlExporter:
         duration_ticks = int(note.duration_beats * self.DIVISIONS)
         ET.SubElement(note_elem, "duration").text = str(duration_ticks)
 
+        # Type (required by Verovio for correct note head rendering)
+        note_type = self._beats_to_type(note.duration_beats)
+        if note_type:
+            ET.SubElement(note_elem, "type").text = note_type
+            # Dot for dotted notes
+            if self._is_dotted(note.duration_beats):
+                ET.SubElement(note_elem, "dot")
+
         # Velocity als <sound dynamics="X"/>
         if note.expression.velocity != 80:
             sound = ET.SubElement(note_elem, "sound",
@@ -154,3 +173,28 @@ class MusicXmlExporter:
         if note.expression.glide_type == "curve":
             notations = ET.SubElement(note_elem, "notations")
             ET.SubElement(notations, "glissando", type="start")
+
+    @staticmethod
+    def _detect_clef(part) -> tuple[str, int]:
+        """Schlüssel für einen Part erkennen (G/2 oder F/4)."""
+        pitches = [n.pitch for m in part.measures for n in m.notes]
+        if not pitches:
+            return "G", 2
+        median = sorted(pitches)[len(pitches) // 2]
+        if median < 55:  # Unter G3 → Bass
+            return "F", 4
+        return "G", 2
+
+    @staticmethod
+    def _beats_to_type(beats: float) -> str | None:
+        """Beat-Dauer → MusicXML <type> String."""
+        for threshold, name in DURATION_TO_TYPE:
+            if beats >= threshold - 0.01:
+                return name
+        return "32nd"
+
+    @staticmethod
+    def _is_dotted(beats: float) -> bool:
+        """Prüft ob eine Notendauer punktiert ist."""
+        dotted = {3.0, 1.5, 0.75, 0.375}
+        return any(abs(beats - d) < 0.01 for d in dotted)
