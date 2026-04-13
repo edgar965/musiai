@@ -55,9 +55,8 @@ class NoteItem(QGraphicsEllipseItem):
         color = ColorScheme.velocity_to_color(self.note.expression.velocity)
         self.setBrush(QBrush(color))
         self.setPen(QPen(Qt.PenStyle.NoPen))
-        # Hals in gleicher Farbe, etwas dunkler
-        stem_color = color.darker(120)
-        self._stem.setPen(QPen(stem_color, 1.5))
+        # Hals immer schwarz (wie in echter Notation)
+        self._stem.setPen(QPen(QColor(30, 30, 50), 1.2))
 
         if self._selected:
             self.setPen(QPen(QColor(255, 255, 255), 2))

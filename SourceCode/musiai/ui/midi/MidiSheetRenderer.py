@@ -73,7 +73,7 @@ class MidiSheetRenderer:
             'line_space': self.config.line_space,
             'line_width': self.config.line_width,
             'staff_height': self.config.staff_height,
-            'note_color': QColor(200, 60, 30),
+            'note_color': QColor(20, 20, 30),  # Schwarz wie im C#-Projekt
         }
 
     def _create_symbols(self, part, clef: int) -> list:
@@ -99,7 +99,10 @@ class MidiSheetRenderer:
                 for n in notes:
                     wn = WhiteNote.from_midi(n.pitch)
                     dur = ND.from_beats(n.duration_beats)
-                    nd = NoteData(n.pitch, wn, dur)
+                    # Vorzeichen: schwarze Tasten → ♯
+                    pc = n.pitch % 12
+                    accid = 1 if pc in (1, 3, 6, 8, 10) else 0  # SHARP
+                    nd = NoteData(n.pitch, wn, dur, accid=accid)
                     note_data.append(nd)
                 chord = ChordSymbol(note_data, clef, tick)
                 symbols.append(chord)

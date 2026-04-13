@@ -78,8 +78,10 @@ class MeasureRenderer:
         )
         self._items.extend(lines)
 
+        # Taktstrich immer schwarz (nicht tempo-gefärbt)
+        bar_color = QColor(40, 40, 50)
         self._add_line(scene, self.x_offset, self.center_y - sh,
-                       self.x_offset, self.center_y + sh, 1.5, line_color)
+                       self.x_offset, self.center_y + sh, 1.0, bar_color)
 
         if self.show_clef:
             self._draw_clef(scene, sh)
@@ -186,15 +188,17 @@ class MeasureRenderer:
             ny = self.pitch_to_y(note.pitch)
             expr = note.expression
 
-            # Dauerlinie (geclippt auf Taktbreite)
+            # Dauerlinie (dezent, nur wenn Expression aktiv)
             eff_dur = note.duration_beats * expr.duration_deviation
-            line_end_x = nx + eff_dur * ppb - NOTE_RADIUS
-            line_end_x = min(line_end_x, content_end - 4)
-            line_w = max(4, line_end_x - nx)
-            dur_line = scene.addLine(nx, ny, nx + line_w, ny,
-                                     QPen(QColor(100, 100, 120, 80), 2))
-            dur_line.setZValue(5)
-            self._items.append(dur_line)
+            line_end_x = nx + eff_dur * ppb - NOTE_RADIUS * 2
+            line_end_x = min(line_end_x, content_end - 8)
+            line_w = max(0, line_end_x - nx)
+            if line_w > NOTE_RADIUS * 2:
+                dur_line = scene.addLine(
+                    nx + NOTE_RADIUS, ny, nx + line_w, ny,
+                    QPen(QColor(160, 160, 180, 60), 1))
+                dur_line.setZValue(3)
+                self._items.append(dur_line)
 
             if abs(expr.duration_deviation - 1.0) >= 0.01:
                 d = DurationItem(expr.duration_deviation, nx, ny)

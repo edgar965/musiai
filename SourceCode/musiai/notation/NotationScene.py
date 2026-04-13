@@ -162,8 +162,8 @@ class NotationScene(QGraphicsScene):
                         self._primary_renderers.append(renderer)
                     x_offset += renderer.width
 
-                # Schlusstaktstrich
-                pen = QPen(QColor(100, 100, 120), 3)
+                # Schlusstaktstrich (schwarz, dünn)
+                pen = QPen(QColor(40, 40, 50), 1.5)
                 sh = 2 * STAFF_LINE_SPACING
                 self.addLine(x_offset, center_y - sh,
                              x_offset, center_y + sh, pen)

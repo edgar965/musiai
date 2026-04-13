@@ -115,6 +115,18 @@ class ChordSymbol(MusicSymbol):
                 nw, int(nh * 0.8)
             )
 
+            # Vorzeichen (♯ / ♭)
+            if nd.accid == 1:  # SHARP
+                from PySide6.QtGui import QFont
+                painter.setFont(QFont("Arial", int(nh * 0.9)))
+                painter.setPen(QPen(color, 1))
+                painter.drawText(int(nx - nh), int(ny - nh * 0.3), "♯")
+            elif nd.accid == 2:  # FLAT
+                from PySide6.QtGui import QFont
+                painter.setFont(QFont("Arial", int(nh * 0.9)))
+                painter.setPen(QPen(color, 1))
+                painter.drawText(int(nx - nh), int(ny - nh * 0.3), "♭")
+
             # Hilfslinien
             self._draw_ledger_lines(
                 painter, nd.whitenote, nx, nw, ytop, ls, half_space
