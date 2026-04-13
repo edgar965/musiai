@@ -56,7 +56,8 @@ class RestSymbol(MusicSymbol):
         if glyph is None:
             return
 
-        size = max(14, int(ls * 3.5))
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        size = max(14, int(SC.LineSpace * 3.5))
         painter.setFont(QFont(BG.FONT_NAME, size))
         painter.setPen(QPen(QColor(0, 0, 0)))
         # Position rest vertically centered on the staff
