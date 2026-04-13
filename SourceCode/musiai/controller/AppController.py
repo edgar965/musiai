@@ -64,6 +64,7 @@ class AppController:
     def _open_piece_in_tab(self, piece, file_path=None, file_type=None):
         """Neuen Tab für ein Piece erstellen und aktivieren."""
         scene = NotationScene()
+        scene._source_file_path = file_path  # Für Verovio
         scene.set_piece(piece)
 
         from musiai.ui.NotationView import NotationView
