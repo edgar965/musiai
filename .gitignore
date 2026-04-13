@@ -2,6 +2,8 @@ pythonENV/
 __pycache__/
 *.pyc
 *.pyo
+# music21 lokale Kopie (88MB, wird aus pip kopiert + gepatcht)
+SourceCode/musiai/music21/
 logs/
 media/projects/*.musiai
 media/music/test_*.mid
