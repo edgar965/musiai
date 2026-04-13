@@ -314,14 +314,14 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def update_playhead(self, beat: float) -> None:
+        # Playhead nur wenn MeasureRenderers vorhanden (MusicXML ohne Bravura)
+        if not self._primary_renderers:
+            self.playhead.hide()
+            return
         x, y_center = self._beat_to_pos(beat)
         if y_center is not None:
-            # MusicXML-Modus: Playhead über aktuelle Stave
             sh = STAFF_LINE_SPACING * 3
             self.playhead.set_y_range(y_center - sh, y_center + sh)
-        else:
-            # Andere Modi: kompakte Höhe oben
-            self.playhead.set_y_range(40, 120)
         self.playhead.show_at(x)
 
     def _beat_to_pos(self, global_beat: float) -> tuple[float, float | None]:
