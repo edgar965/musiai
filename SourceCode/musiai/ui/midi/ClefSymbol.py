@@ -1,13 +1,35 @@
-"""ClefSymbol - Violin- und Bassschluessel (portiert von ClefSymbol.java)."""
+"""ClefSymbol - Violin- und Bassschluessel via Bravura SMuFL Font."""
 
 from musiai.ui.midi.MusicSymbol import MusicSymbol
 
 TREBLE = 0
 BASS = 1
 
+_font_loaded = False
+
+
+def _ensure_font():
+    """Bravura Font einmalig laden."""
+    global _font_loaded
+    if _font_loaded:
+        return
+    import os
+    from PySide6.QtGui import QFontDatabase
+    font_path = os.path.join(
+        os.path.dirname(__file__), "..", "..", "..", "..",
+        "media", "fonts", "Bravura.otf")
+    font_path = os.path.abspath(font_path)
+    if os.path.exists(font_path):
+        QFontDatabase.addApplicationFont(font_path)
+    _font_loaded = True
+
 
 class ClefSymbol(MusicSymbol):
-    """Zeichnet einen Notenschluessel (Treble oder Bass)."""
+    """Zeichnet Notenschluessel mit Bravura SMuFL Font."""
+
+    # SMuFL Codepoints
+    TREBLE_GLYPH = "\uE050"
+    BASS_GLYPH = "\uE062"
 
     def __init__(self, clef: int, start_time: int = 0, small: bool = False):
         super().__init__(start_time)
@@ -18,10 +40,7 @@ class ClefSymbol(MusicSymbol):
     @property
     def min_width(self) -> int:
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
-        if self.small:
-            return SC.NoteWidth * 2
-        else:
-            return SC.NoteWidth * 3
+        return SC.NoteWidth * 2 if self.small else SC.NoteWidth * 3
 
     @property
     def above_staff(self) -> int:
@@ -40,36 +59,34 @@ class ClefSymbol(MusicSymbol):
         return 0
 
     def draw(self, painter, x: int, ytop: int, config: dict) -> None:
-        from PySide6.QtGui import QFont, QColor
+        from PySide6.QtGui import QFont, QColor, QPen
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
-        nh = SC.NoteHeight
-        nw = SC.NoteWidth
-        staff_h = SC.StaffHeight
 
-        # Align to right (like Java: canvas.translate(getWidth()-getMinWidth(), 0))
+        _ensure_font()
+
+        nh = SC.NoteHeight
+        staff_h = SC.StaffHeight
         offset = self.width - self.min_width
         dx = x + offset
 
-        painter.setPen(QColor(30, 30, 60))
+        painter.setPen(QPen(QColor(0, 0, 0)))
+
         if self.clef == TREBLE:
             if self.small:
-                height = staff_h + staff_h // 4
-                y = ytop
+                size = max(12, int(staff_h * 0.7))
+                y = ytop + nh
             else:
-                height = 3 * staff_h // 2 + nh // 2
-                y = ytop - nh
-            # Use Unicode treble clef, scaled to match Java bitmap height
-            size = max(10, int(height * 0.75))
-            painter.setFont(QFont("Segoe UI Symbol", size))
-            painter.drawText(dx, y, self.min_width + 10,
-                             height, 0, "\U0001D11E")
+                size = max(18, int(staff_h * 1.0))
+                y = ytop + int(nh * 3.2)
+            font = QFont("Bravura", size)
+            painter.setFont(font)
+            painter.drawText(dx, y, self.TREBLE_GLYPH)
         else:
             if self.small:
-                height = staff_h - 3 * nh // 2
+                size = max(10, int(staff_h * 0.5))
             else:
-                height = staff_h - nh
-            y = ytop
-            size = max(8, int(height * 0.85))
-            painter.setFont(QFont("Segoe UI Symbol", size))
-            painter.drawText(dx, y, self.min_width + 10,
-                             height, 0, "\U0001D122")
+                size = max(14, int(staff_h * 0.7))
+            y = ytop + int(nh * 1.5)
+            font = QFont("Bravura", size)
+            painter.setFont(font)
+            painter.drawText(dx, y, self.BASS_GLYPH)
