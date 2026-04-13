@@ -12,10 +12,13 @@
     <Name>MusiAI</Name>
     <RootNamespace>MusiAI</RootNamespace>
     <InterpreterId>MSBuild|pythonENV|$(MSBuildProjectFullPath)</InterpreterId>
+    <IsWindowsApplication>true</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <IsWindowsApplication>true</IsWindowsApplication>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <DebugSymbols>true</DebugSymbols>
