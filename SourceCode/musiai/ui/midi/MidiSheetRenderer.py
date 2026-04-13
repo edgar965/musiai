@@ -113,6 +113,9 @@ class MidiSheetRenderer:
                 scene, all_staffs, parts_data, cfg, y_offset, system_width)
 
         scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
+
+        # Pass staff layout to scene for playhead positioning
+        self._store_staff_layout(scene)
         logger.info(f"Rendered {len(parts_data)} parts from file via music21")
 
     def _render_interleaved(self, scene, all_staffs, parts_data, cfg,
@@ -126,6 +129,9 @@ class MidiSheetRenderer:
         for track_idx, staffs in all_staffs:
             for s in staffs:
                 s.show_measures = (track_idx == all_staffs[0][0])
+
+        # Track staff y-positions for playhead map
+        self._staff_y_positions = []  # (staff, y_scene_offset)
 
         for row in range(max_rows):
             system_top = y_offset
@@ -147,6 +153,12 @@ class MidiSheetRenderer:
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
+
+                # Remember first track's staff positions for playhead
+                if track_idx == all_staffs[0][0]:
+                    self._staff_y_positions.append(
+                        (staff, y_offset, y_offset + staff.height))
+
                 y_offset += staff.height - 8  # Eng zusammen
 
             # Klammer links (verbindet die Staves im System)
@@ -166,6 +178,8 @@ class MidiSheetRenderer:
     def _render_sequential(self, scene, all_staffs, parts_data, cfg,
                            y_offset, system_width):
         """Jeder Track separat (klassische Ansicht)."""
+        self._staff_y_positions = []
+        first_track = True
         for track_idx, staffs in all_staffs:
             pd = parts_data[track_idx]
 
@@ -178,8 +192,12 @@ class MidiSheetRenderer:
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
+                if first_track:
+                    self._staff_y_positions.append(
+                        (staff, y_offset, y_offset + staff.height))
                 y_offset += staff.height + 15
             y_offset += 20
+            first_track = False
 
         return y_offset
 
@@ -230,6 +248,8 @@ class MidiSheetRenderer:
         self._create_all_beamed_chords(
             track_symbols, time_num, time_den, quarter, measure_len)
         # Create staffs and render
+        self._staff_y_positions = []
+        first_track = True
         for track_idx, symbols in enumerate(track_symbols):
             clef = track_clefs[track_idx]
             part = self._get_part(piece, track_idx)
@@ -251,10 +271,15 @@ class MidiSheetRenderer:
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
+                if first_track:
+                    self._staff_y_positions.append(
+                        (staff, y_offset, y_offset + staff.height))
                 y_offset += staff.height + 15
             y_offset += 20
+            first_track = False
 
         scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
+        self._store_staff_layout(scene)
 
     # ------------------------------------------------------------------
     # Symbol creation
@@ -566,6 +591,18 @@ class MidiSheetRenderer:
             # Start searching from next position
             i = chord_indexes[0] + 1
             continue
+
+    def _store_staff_layout(self, scene):
+        """Store staff layout on the scene for playhead positioning.
+
+        Each entry: (staff, y_top, y_bottom) — same as MidiSheetMusic's
+        ShadeNotes approach: iterate staffs, call find_x_for_pulse().
+        Pixmaps are at x=100 in scene coordinates.
+        """
+        layout = getattr(self, '_staff_y_positions', [])
+        if hasattr(scene, '_staff_layout'):
+            scene._staff_layout = layout
+            scene._staff_x_offset = 100  # pixmaps placed at x=100
 
     # ------------------------------------------------------------------
     # Helpers

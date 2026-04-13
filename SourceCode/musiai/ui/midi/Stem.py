@@ -24,6 +24,8 @@ class Stem:
         self.pair: 'Stem | None' = None
         self.width_to_pair = 0
         self.receiver = False
+        # Actual drawn x-position — set during draw, read by pair's beam
+        self.drawn_x: int | None = None
 
     @property
     def is_beam(self) -> bool:
@@ -77,8 +79,11 @@ class Stem:
         pen = QPen(QColor(0, 0, 0), 1)
         painter.setPen(pen)
 
-        self._draw_vertical_line(painter, pen, x, ytop, top_staff,
-                                 ls, nh, nw, use_bravura)
+        # Calculate and STORE stem x-position
+        xstem = self._calc_stem_x(x, ls, nw, use_bravura)
+        self.drawn_x = xstem
+
+        self._draw_vertical_line(painter, xstem, ytop, top_staff, nh)
 
         if self.duration in (ND.QUARTER, ND.DOTTED_QUARTER,
                              ND.HALF, ND.DOTTED_HALF):
@@ -87,70 +92,34 @@ class Stem:
             return
 
         if self.pair is not None:
-            self._draw_horiz_bar_stem(painter, pen, x, ytop, top_staff,
-                                      ls, nh, nw, use_bravura)
+            self._draw_beam(painter, pen, xstem, ytop, top_staff,
+                            ls, nh, nw, use_bravura)
         else:
             if use_bravura:
                 self._draw_bravura_flag(painter, x, ytop, top_staff,
                                         ls, nh, nw)
             else:
-                self._draw_curvy_stem(painter, pen, x, ytop, top_staff,
+                self._draw_curvy_stem(painter, pen, xstem, ytop, top_staff,
                                       ls, nh, nw)
 
-    # ------------------------------------------------------------------
-    # Stem x-position helper
-    # ------------------------------------------------------------------
-    def _stem_x(self, x, ls, nw, use_smufl, sc=0.0):
-        """Calculate stem x-position for this stem's direction."""
-        if use_smufl:
-            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
-            if self.direction == UP:
-                se = SMuFLMetadata.stem_up_se()
-                return int(x + ls // 4 + se[0] * sc)
-            else:
-                nw_pt = SMuFLMetadata.stem_down_nw()
-                return int(x + ls // 4 + nw_pt[0] * sc)
-        else:
-            if self.side == LEFT_SIDE:
-                return x + ls // 4 + 1
-            else:
-                return x + ls // 4 + nw
-
-    @staticmethod
-    def _stem_x_offset(direction, ls, nw, use_smufl, sc=0.0):
-        """Stem x offset relative to chord note-x (no absolute x)."""
-        if use_smufl:
-            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
-            if direction == UP:
-                se = SMuFLMetadata.stem_up_se()
-                return int(ls // 4 + se[0] * sc)
-            else:
-                nw_pt = SMuFLMetadata.stem_down_nw()
-                return int(ls // 4 + nw_pt[0] * sc)
-        else:
-            if direction == UP:
-                return ls // 4 + nw
-            else:
-                return ls // 4 + 1
-
-    def _draw_vertical_line(self, painter, pen, x, ytop, top_staff,
-                            ls, nh, nw, use_bravura=False):
-        # Use SAME x-calculation as beams for consistency
+    def _calc_stem_x(self, x, ls, nw, use_bravura) -> int:
+        """Single source of truth for stem x-position."""
         if use_bravura:
             glyph_w = int(ls * 1.34)
             if self.direction == UP:
-                xstart = x + ls // 4 + glyph_w
+                return x + ls // 4 + glyph_w
             else:
-                xstart = x + ls // 4
+                return x + ls // 4
         elif self.side == LEFT_SIDE:
-            xstart = x + ls // 4 + 1
+            return x + ls // 4 + 1
         else:
-            xstart = x + ls // 4 + nw
+            return x + ls // 4 + nw
 
+    def _draw_vertical_line(self, painter, xstem, ytop, top_staff, nh):
         if self.direction == UP:
             y1 = ytop + top_staff.dist(self.bottom) * nh // 2 + nh // 4
             ystem = ytop + top_staff.dist(self.end) * nh // 2
-            painter.drawLine(int(xstart), int(y1), int(xstart), int(ystem))
+            painter.drawLine(xstem, y1, xstem, ystem)
         elif self.direction == DOWN:
             y1 = ytop + top_staff.dist(self.top) * nh // 2 + nh
             if self.side == LEFT_SIDE:
@@ -158,7 +127,7 @@ class Stem:
             else:
                 y1 -= nh // 2
             ystem = (ytop + top_staff.dist(self.end) * nh // 2 + nh)
-            painter.drawLine(int(xstart), int(y1), int(xstart), int(ystem))
+            painter.drawLine(xstem, y1, xstem, ystem)
 
     @staticmethod
     def _has_smufl_metadata() -> bool:
@@ -170,17 +139,11 @@ class Stem:
         except Exception:
             return False
 
-    def _draw_curvy_stem(self, painter, pen, x, ytop, top_staff,
+    def _draw_curvy_stem(self, painter, pen, xstem, ytop, top_staff,
                          ls, nh, nw):
         """Draw curvy flag for single (unbeamed) 8th/16th/32nd notes."""
-        from PySide6.QtGui import QPen, QPainterPath
         pen.setWidth(2)
         painter.setPen(pen)
-
-        if self.side == LEFT_SIDE:
-            xstart = x + ls // 4 + 1
-        else:
-            xstart = x + ls // 4 + nw
 
         flaggable = {ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET,
                      ND.SIXTEENTH, ND.THIRTYSECOND}
@@ -188,23 +151,23 @@ class Stem:
         if self.direction == UP:
             ystem = ytop + top_staff.dist(self.end) * nh // 2
             if self.duration in flaggable:
-                self._bezier_up(painter, xstart, ystem, ls, nh)
+                self._bezier_up(painter, xstem, ystem, ls, nh)
             ystem += nh
             if self.duration in (ND.SIXTEENTH, ND.THIRTYSECOND):
-                self._bezier_up(painter, xstart, ystem, ls, nh)
+                self._bezier_up(painter, xstem, ystem, ls, nh)
             ystem += nh
             if self.duration == ND.THIRTYSECOND:
-                self._bezier_up(painter, xstart, ystem, ls, nh)
+                self._bezier_up(painter, xstem, ystem, ls, nh)
         elif self.direction == DOWN:
             ystem = (ytop + top_staff.dist(self.end) * nh // 2 + nh)
             if self.duration in flaggable:
-                self._bezier_down(painter, xstart, ystem, ls, nh)
+                self._bezier_down(painter, xstem, ystem, ls, nh)
             ystem -= nh
             if self.duration in (ND.SIXTEENTH, ND.THIRTYSECOND):
-                self._bezier_down(painter, xstart, ystem, ls, nh)
+                self._bezier_down(painter, xstem, ystem, ls, nh)
             ystem -= nh
             if self.duration == ND.THIRTYSECOND:
-                self._bezier_down(painter, xstart, ystem, ls, nh)
+                self._bezier_down(painter, xstem, ystem, ls, nh)
 
         pen.setWidth(1)
         painter.setPen(pen)
@@ -247,7 +210,7 @@ class Stem:
             fs = SMuFLMetadata.notehead_font_size(ls)
             sc = SMuFLMetadata.font_scale(fs)
 
-        xstart = self._stem_x(x, ls, nw, use_smufl, sc)
+        xstart = self._calc_stem_x(x, ls, nw, True)
 
         size = max(14, int(ls * 3.5))
         font = QFont(BG.FONT_NAME, size)
@@ -286,7 +249,6 @@ class Stem:
                 painter.drawText(xstart, ystem + y_off, glyph)
 
     def _flag_glyph_name_up(self) -> str:
-        """Return SMuFL glyph name for up-stem flag."""
         if self.duration in (ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET):
             return 'flag8thUp'
         elif self.duration == ND.SIXTEENTH:
@@ -296,7 +258,6 @@ class Stem:
         return 'flag8thUp'
 
     def _flag_glyph_name_down(self) -> str:
-        """Return SMuFL glyph name for down-stem flag."""
         if self.duration in (ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET):
             return 'flag8thDown'
         elif self.duration == ND.SIXTEENTH:
@@ -305,9 +266,12 @@ class Stem:
             return 'flag32ndDown'
         return 'flag8thDown'
 
-    def _draw_horiz_bar_stem(self, painter, pen, x, ytop, top_staff,
-                             ls, nh, nw, use_bravura=False):
-        """Draw horizontal beam to paired stem."""
+    def _draw_beam(self, painter, pen, xstart, ytop, top_staff,
+                   ls, nh, nw, use_bravura=False):
+        """Draw horizontal beam to paired stem.
+
+        Uses the pair's actual drawn_x position — no recalculation needed.
+        """
         from PySide6.QtCore import Qt
 
         use_smufl = use_bravura and self._has_smufl_metadata()
@@ -326,25 +290,28 @@ class Stem:
         pen.setCapStyle(Qt.PenCapStyle.FlatCap)
         painter.setPen(pen)
 
-        # Beam x-positions: must match vertical stem positions exactly
-        if use_bravura:
-            glyph_w = int(ls * 1.34)
-            if self.direction == UP:
-                xstart = x + ls // 4 + glyph_w
-                xstart2 = ls // 4 + glyph_w
-            else:
-                xstart = x + ls // 4
-                xstart2 = ls // 4
+        # xend = pair stem's ACTUAL drawn x-position.
+        # Falls back to old width_to_pair calculation if not yet drawn.
+        if self.pair.drawn_x is not None:
+            xend = self.pair.drawn_x
         else:
-            xstart = self._stem_x(x, ls, nw, use_smufl, sc)
-            xstart2 = self._stem_x_offset(
-                self.pair.direction, ls, nw, use_smufl, sc)
+            # Fallback (should not happen in normal rendering)
+            if use_bravura:
+                glyph_w = int(ls * 1.34)
+                if self.direction == UP:
+                    xoff = ls // 4 + glyph_w
+                else:
+                    xoff = ls // 4
+            else:
+                xoff = self._stem_x_offset(
+                    self.pair.direction, ls, nw,
+                    use_smufl, sc)
+            xend = xstart - (xstart - xstart) + self.width_to_pair + xoff
 
         beamable = {ND.EIGHTH, ND.DOTTED_EIGHTH, ND.TRIPLET,
                     ND.SIXTEENTH, ND.THIRTYSECOND}
 
         if self.direction == UP:
-            xend = x + self.width_to_pair + xstart2
             ystart = ytop + top_staff.dist(self.end) * nh // 2
             yend = ytop + top_staff.dist(self.pair.end) * nh // 2
 
@@ -366,7 +333,6 @@ class Stem:
             if self.duration == ND.THIRTYSECOND:
                 painter.drawLine(xstart, ystart, xend, yend)
         else:
-            xend = x + self.width_to_pair + xstart2
             ystart = ytop + top_staff.dist(self.end) * nh // 2 + nh
             yend = ytop + top_staff.dist(self.pair.end) * nh // 2 + nh
 
@@ -390,6 +356,23 @@ class Stem:
 
         pen.setWidth(1)
         painter.setPen(pen)
+
+    @staticmethod
+    def _stem_x_offset(direction, ls, nw, use_smufl, sc=0.0):
+        """Stem x offset relative to chord note-x (fallback only)."""
+        if use_smufl:
+            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            if direction == UP:
+                se = SMuFLMetadata.stem_up_se()
+                return int(ls // 4 + se[0] * sc)
+            else:
+                nw_pt = SMuFLMetadata.stem_down_nw()
+                return int(ls // 4 + nw_pt[0] * sc)
+        else:
+            if direction == UP:
+                return ls // 4 + nw
+            else:
+                return ls // 4 + 1
 
     def __repr__(self):
         return (f"Stem(dur={self.duration} dir={self.direction} "

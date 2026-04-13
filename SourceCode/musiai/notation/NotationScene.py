@@ -50,6 +50,9 @@ class NotationScene(QGraphicsScene):
         self.cursor = CursorItem()
         self.addItem(self.cursor)
         self._show_chords = False
+        # MidiSheet playhead: staff layout from MidiSheetRenderer
+        self._staff_layout: list = []  # [(staff, y_top, y_bot), ...]
+        self._staff_x_offset: int = 100
 
     def set_show_chords(self, enabled: bool) -> None:
         """Akkord-Anzeige aktivieren/deaktivieren und neu rendern."""
@@ -94,6 +97,7 @@ class NotationScene(QGraphicsScene):
         self.clear()
         self.measure_renderers.clear()
         self._primary_renderers.clear()
+        self._staff_layout = []
         self._measure_highlight = None
         self.addItem(self.playhead)
         self.addItem(self.cursor)
@@ -329,16 +333,63 @@ class NotationScene(QGraphicsScene):
         self.playhead.show_at(x)
 
     def _beat_to_pos(self, global_beat: float) -> tuple[float, float | None]:
-        """Beat → (x, center_y) mit korrekter Zeile bei Systemumbrüchen."""
-        if not self._primary_renderers:
-            # Fallback: linearer Fortschritt über Scene-Breite
-            total_beats = self._get_total_beats()
-            if total_beats > 0:
-                sr = self.sceneRect()
-                frac = global_beat / total_beats
-                x = self.MARGIN_LEFT + frac * (sr.width() - self.MARGIN_LEFT * 2)
-                return x, None
-            return self.MARGIN_LEFT + global_beat * PIXELS_PER_BEAT, None
+        """Beat → (x, center_y) mit korrekter Zeile bei Systemumbrüchen.
+
+        Uses MidiSheetMusic-style Staff.find_x_for_pulse() when available.
+        """
+        # MidiSheet mode: use staff layout from renderer
+        staff_layout = getattr(self, '_staff_layout', [])
+        if staff_layout:
+            return self._beat_to_pos_staff(global_beat, staff_layout)
+
+        # MeasureRenderer mode
+        if self._primary_renderers:
+            cumulative = 0.0
+            for r in self._primary_renderers:
+                dur = r.measure.duration_beats
+                if global_beat < cumulative + dur:
+                    local = global_beat - cumulative
+                    x = r.x_offset + r.header_width + local * r.pixels_per_beat
+                    return x, r.center_y
+                cumulative += dur
+            last = self._primary_renderers[-1]
+            overshoot = global_beat - cumulative
+            x = last.x_offset + last.width + overshoot * last.pixels_per_beat
+            return x, last.center_y
+
+        # Last resort: linear across scene width
+        total_beats = self._get_total_beats()
+        if total_beats > 0:
+            sr = self.sceneRect()
+            frac = global_beat / total_beats
+            x = self.MARGIN_LEFT + frac * (sr.width() - self.MARGIN_LEFT * 2)
+            return x, None
+        return self.MARGIN_LEFT + global_beat * PIXELS_PER_BEAT, None
+
+    def _beat_to_pos_staff(self, global_beat, staff_layout):
+        """MidiSheet playhead: find x via Staff.find_x_for_pulse().
+
+        Converts beats to ticks (TPB=480) and iterates staffs just like
+        MidiSheetMusic's ShadeNotes method.
+        """
+        pulse_time = int(global_beat * 480)
+        x_offset = getattr(self, '_staff_x_offset', 100)
+
+        for staff, y_top, y_bot in staff_layout:
+            x = staff.find_x_for_pulse(pulse_time)
+            if x is not None:
+                y_center = (y_top + y_bot) / 2
+                return x_offset + x, y_center
+
+        # Past all staffs: return end of last staff
+        if staff_layout:
+            staff, y_top, y_bot = staff_layout[-1]
+            x = staff.find_x_for_pulse(staff.end_time)
+            if x is None:
+                x = staff.width
+            return x_offset + x, (y_top + y_bot) / 2
+
+        return self.MARGIN_LEFT, None
 
     def _get_total_beats(self) -> float:
         """Gesamtdauer des Stücks in Beats."""
@@ -347,18 +398,6 @@ class NotationScene(QGraphicsScene):
                 if part.measures:
                     return sum(m.duration_beats for m in part.measures)
         return 0.0
-        cumulative = 0.0
-        for r in self._primary_renderers:
-            dur = r.measure.duration_beats
-            if global_beat < cumulative + dur:
-                local = global_beat - cumulative
-                x = r.x_offset + r.header_width + local * r.pixels_per_beat
-                return x, r.center_y
-            cumulative += dur
-        last = self._primary_renderers[-1]
-        overshoot = global_beat - cumulative
-        x = last.x_offset + last.width + overshoot * last.pixels_per_beat
-        return x, last.center_y
 
     def hide_playhead(self) -> None:
         self.playhead.hide()

@@ -92,6 +92,44 @@ class Staff:
                 if self.end_time < s.end_time:
                     self.end_time = s.end_time
 
+    def find_x_for_pulse(self, pulse_time: int) -> int | None:
+        """Return the x-offset within this staff for the given pulse time.
+
+        Mirrors the ShadeNotes logic from MidiSheetMusic: iterate symbols,
+        find where start <= pulse_time < end, return that symbol's x-pos.
+        Returns None if pulse_time is outside this staff's range.
+        """
+        if pulse_time < self.start_time or pulse_time > self.end_time:
+            return None
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        xpos = self.keysig_width + SC.LeftMargin + 5 + self.clefsym.width
+        if self.time_num > 0 and self.time_den > 0:
+            xpos += SC.NoteWidth * 2
+
+        for i, sym in enumerate(self.symbols):
+            if isinstance(sym, BarSymbol):
+                xpos += sym.width
+                continue
+
+            start = sym.start_time
+            # Determine end time: next non-bar symbol's start_time
+            end = self.end_time
+            j = i + 1
+            while j < len(self.symbols):
+                if isinstance(self.symbols[j], BarSymbol):
+                    j += 1
+                    continue
+                end = self.symbols[j].start_time
+                break
+
+            if start <= pulse_time < end:
+                return xpos
+            if start > pulse_time:
+                return xpos
+
+            xpos += sym.width
+        return xpos
+
     def _full_justify(self):
         """Expand symbols to fill page width."""
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
@@ -126,7 +164,40 @@ class Staff:
             while i < len(self.symbols) and self.symbols[i].start_time == start:
                 i += 1
 
-    # ------------------------------------------------------------------
+    def _precompute_stem_positions(self, x_start, config):
+        """Pre-calculate every stem's drawn_x before actual drawing.
+
+        This lets beam-drawing read the pair's exact x-position
+        instead of guessing via width_to_pair arithmetic.
+        """
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        use_bravura = (config.get('use_bravura', False)
+                       if isinstance(config, dict) else False)
+        ls = SC.LineSpace
+        nw = SC.NoteWidth
+
+        x = x_start
+        for sym in self.symbols:
+            if isinstance(sym, ChordSymbol):
+                # Mirror ChordSymbol.draw() offset logic
+                offset = sym.width - sym.min_width
+                accid_w = 0
+                prev = None
+                for ac in sym.accidsymbols:
+                    if prev is not None and ac.note.dist(prev.note) < 6:
+                        accid_w += ac.width
+                    prev = ac
+                if prev is not None:
+                    accid_w += prev.width
+                nx_base = x + offset + accid_w
+
+                for st in (sym.stem1, sym.stem2):
+                    if st is not None:
+                        st.drawn_x = st._calc_stem_x(
+                            nx_base, ls, nw, use_bravura)
+            x += sym.width
+
+# ------------------------------------------------------------------
     # Drawing
     # ------------------------------------------------------------------
     def draw(self, painter, y_offset: int, config: dict) -> None:
@@ -156,6 +227,9 @@ class Staff:
         if self.time_num > 0 and self.time_den > 0:
             x_current = self._draw_time_signature(
                 painter, x_current, ytop, config)
+
+        # Pre-calculate stem x-positions so beams know their endpoints
+        self._precompute_stem_positions(x_current, config)
 
         # Draw symbols (notes, rests, bars)
         x_symbols_start = x_current

@@ -12,8 +12,11 @@ Source code is in `SourceCode/`, data in `media/`. Always `cd SourceCode` before
 # Run the app
 pythonENV/Scripts/python.exe main.py
 
-# Run all tests (unittest discovery, 145 tests)
+# Run standard tests (fast, 237 tests, excludes longrunner/)
 pythonENV/Scripts/python.exe tests/run_tests.py
+
+# Run ALL tests including longrunner (slow, 309 tests)
+pythonENV/Scripts/python.exe tests/run_tests.py --all
 
 # Run test runner GUI
 pythonENV/Scripts/python.exe tests/test_runner_ui.py
