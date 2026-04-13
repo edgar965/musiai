@@ -119,6 +119,11 @@ class NotationScene(QGraphicsScene):
         if not self.piece or not self.piece.parts:
             return
 
+        # MusicXML + Bravura: use unified MidiSheetRenderer pipeline
+        if self._render_mode == self.MODE_MUSICXML and self._use_bravura:
+            self._refresh_midisheet()
+            return
+
         # Dispatch nach Render-Modus
         if self._render_mode == self.MODE_SVG:
             self._refresh_svg()
@@ -453,11 +458,16 @@ class NotationScene(QGraphicsScene):
         """MIDI-Notenblatt rendern."""
         try:
             from musiai.ui.midi.MidiSheetRenderer import MidiSheetRenderer
-            use_bravura = self._render_mode == self.MODE_MIDISHEET_BRAVURA
-            renderer = MidiSheetRenderer(use_bravura=use_bravura)
+            use_bravura = self._render_mode in (
+                self.MODE_MIDISHEET_BRAVURA, self.MODE_MUSICXML)
+            color_mode = (self._render_mode == self.MODE_MUSICXML
+                          and self._use_bravura)
+            renderer = MidiSheetRenderer(
+                use_bravura=use_bravura, color_mode=color_mode)
             file_path = getattr(self, '_source_file_path', None)
             interleave = self._render_mode in (
-                self.MODE_MIDISHEET, self.MODE_MIDISHEET_BRAVURA)
+                self.MODE_MIDISHEET, self.MODE_MIDISHEET_BRAVURA,
+                self.MODE_MUSICXML)
             if file_path and file_path.lower().endswith(('.mid', '.midi')):
                 renderer.render_from_file(
                     file_path, self, self._system_width,

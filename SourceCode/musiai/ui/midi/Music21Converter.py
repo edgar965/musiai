@@ -121,15 +121,18 @@ class Music21Converter:
             group = time_groups[tick]
 
             # Collect pitches and total beat duration from all elements
-            pitches = []
+            pitches = []  # list of (pitch, velocity)
             dur_beats = 0.0
             for el in group:
                 el_dur = float(el.duration.quarterLength)
                 dur_beats = max(dur_beats, el_dur)
+                vel_obj = getattr(el, 'volume', None)
+                vel = int(vel_obj.velocity) if vel_obj and vel_obj.velocity else 80
                 if self._is_chord(el):
-                    pitches.extend(el.pitches)
+                    for p in el.pitches:
+                        pitches.append((p, vel))
                 elif self._is_note(el):
-                    pitches.append(el.pitch)
+                    pitches.append((el.pitch, vel))
 
             if not pitches:
                 continue
@@ -144,8 +147,8 @@ class Music21Converter:
                 end_tick = current_tick + part_ticks
 
                 note_data_list = []
-                for p in pitches:
-                    nd = self._pitch_to_notedata(p, part_beats)
+                for p, vel in pitches:
+                    nd = self._pitch_to_notedata(p, part_beats, vel)
                     if nd is not None:
                         note_data_list.append(nd)
 
@@ -176,7 +179,8 @@ class Music21Converter:
     # Pitch / NoteData conversion
     # ------------------------------------------------------------------
     @staticmethod
-    def _pitch_to_notedata(m21_pitch, dur_beats: float) -> NoteData | None:
+    def _pitch_to_notedata(m21_pitch, dur_beats: float,
+                           velocity: int = 80) -> NoteData | None:
         """Convert a music21 Pitch to a NoteData."""
         midi = m21_pitch.midi
         if midi < 0 or midi > 127:
@@ -194,7 +198,7 @@ class Music21Converter:
             elif alter < 0:
                 accid = FLAT
 
-        return NoteData(midi, wn, dur, True, accid)
+        return NoteData(midi, wn, dur, True, accid, velocity)
 
     @staticmethod
     def _fix_left_sides(note_data_list: list[NoteData]):

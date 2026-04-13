@@ -28,9 +28,11 @@ logger = logging.getLogger("musiai.ui.midi.MidiSheetRenderer")
 class MidiSheetRenderer:
     """Rendert ein Piece als klassisches Notenblatt."""
 
-    def __init__(self, config: SheetConfig = None, use_bravura: bool = False):
+    def __init__(self, config: SheetConfig = None, use_bravura: bool = False,
+                 color_mode: bool = False):
         self.config = config or SheetConfig.large()
         self.use_bravura = use_bravura
+        self.color_mode = color_mode
         if use_bravura:
             from musiai.ui.midi.BravuraGlyphs import ensure_font
             ensure_font()
@@ -51,6 +53,7 @@ class MidiSheetRenderer:
         SheetConfig.PageWidth = self.config.page_width
         cfg = self.config.to_dict()
         cfg["use_bravura"] = self.use_bravura
+        cfg["color_mode"] = self.color_mode
         y_offset = 60
 
         converter = Music21Converter()
@@ -85,10 +88,18 @@ class MidiSheetRenderer:
             pd = parts_data[track_idx]
             staffs = self._create_staffs_for_track(
                 symbols, pd['measure_len'],
-                track_idx, len(track_symbols))
+                track_idx, len(track_symbols),
+                key_accids=pd.get('key_accids', []),
+                time_num=pd.get('time_num', 0),
+                time_den=pd.get('time_den', 0))
             for s in staffs:
                 s.calculate_height()
             all_staffs.append((track_idx, staffs))
+
+        # Draw tempo marking above first system
+        tempo_bpm = parts_data[0].get('tempo_bpm')
+        if tempo_bpm is not None:
+            self._draw_tempo_marking(scene, tempo_bpm, y_offset)
 
         if interleave and len(all_staffs) > 1:
             y_offset = self._render_interleaved(
@@ -177,6 +188,7 @@ class MidiSheetRenderer:
         SheetConfig.PageWidth = self.config.page_width
         cfg = self.config.to_dict()
         cfg["use_bravura"] = self.use_bravura
+        cfg["color_mode"] = self.color_mode
         y_offset = 60
 
         # Collect tracks
@@ -292,7 +304,9 @@ class MidiSheetRenderer:
                 prev_wn = result[-1].whitenote
                 if abs(wn.dist(prev_wn)) == 1:
                     left_side = not result[-1].left_side
-            nd = NoteData(n.pitch, wn, dur, left_side, accid)
+            vel = getattr(n, 'expression', None)
+            velocity = vel.velocity if vel and hasattr(vel, 'velocity') else 80
+            nd = NoteData(n.pitch, wn, dur, left_side, accid, velocity)
             result.append(nd)
         return result
 
@@ -586,6 +600,27 @@ class MidiSheetRenderer:
                 return p
             midi_idx += 1
         return None
+
+    def _draw_tempo_marking(self, scene, tempo_bpm, y_offset):
+        """Draw tempo marking (quarter note = BPM) above first system."""
+        bpm_int = int(round(tempo_bpm))
+        if self.use_bravura:
+            from musiai.ui.midi import BravuraGlyphs as BG
+            # Use Bravura quarter note glyph + text
+            note_item = scene.addText(BG.NOTEHEAD_FILLED)
+            note_item.setFont(QFont("Bravura", 12))
+            note_item.setDefaultTextColor(QColor(0, 0, 0))
+            note_item.setPos(105, y_offset - 30)
+
+            text_item = scene.addText(f"= {bpm_int}")
+            text_item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            text_item.setDefaultTextColor(QColor(0, 0, 0))
+            text_item.setPos(120, y_offset - 28)
+        else:
+            text_item = scene.addText(f"\u2669 = {bpm_int}")
+            text_item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            text_item.setDefaultTextColor(QColor(0, 0, 0))
+            text_item.setPos(105, y_offset - 28)
 
     def _render_staff(self, staff: Staff, cfg: dict) -> QPixmap:
         """Render a staff onto a QPixmap."""

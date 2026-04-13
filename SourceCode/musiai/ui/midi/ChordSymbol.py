@@ -398,8 +398,9 @@ class ChordSymbol(MusicSymbol):
         # Draw notes
         nx_base = ax + accid_width
         use_bravura = config.get('use_bravura', False) if isinstance(config, dict) else False
+        color_mode = config.get('color_mode', False) if isinstance(config, dict) else False
         self._draw_notes(painter, nx_base, ytop, topstaff, nh, nw, ls, lw,
-                         use_bravura=use_bravura)
+                         use_bravura=use_bravura, color_mode=color_mode)
 
         # Draw stems
         stem_cfg = config.copy() if isinstance(config, dict) else {}
@@ -426,7 +427,7 @@ class ChordSymbol(MusicSymbol):
         return xpos
 
     def _draw_notes(self, painter, x, ytop, topstaff, nh, nw, ls, lw,
-                    use_bravura=False):
+                    use_bravura=False, color_mode=False):
         from PySide6.QtGui import QPen, QColor, QBrush, QFont
         from PySide6.QtCore import Qt
 
@@ -441,10 +442,12 @@ class ChordSymbol(MusicSymbol):
 
             if use_bravura:
                 self._draw_note_bravura(
-                    painter, note, xnote, ynote, nh, nw, ls)
+                    painter, note, xnote, ynote, nh, nw, ls,
+                    color_mode=color_mode)
             else:
                 self._draw_note_ellipse(
-                    painter, note, xnote, ynote, nh, nw, ls, lw)
+                    painter, note, xnote, ynote, nh, nw, ls, lw,
+                    color_mode=color_mode)
 
             # Dotted notes
             if note.duration in (ND.DOTTED_HALF, ND.DOTTED_QUARTER,
@@ -465,13 +468,19 @@ class ChordSymbol(MusicSymbol):
                                     ytop, topstaff, nh, ls, lw)
 
     @staticmethod
-    def _draw_note_bravura(painter, note, xnote, ynote, nh, nw, ls):
+    def _draw_note_bravura(painter, note, xnote, ynote, nh, nw, ls,
+                           color_mode=False):
         """Notenkopf mit Bravura SMuFL Glyph."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
         size = max(14, int(ls * 3.5))
         painter.setFont(QFont(BG.FONT_NAME, size))
-        painter.setPen(QPen(QColor(0, 0, 0)))
+        if color_mode:
+            from musiai.notation.ColorScheme import ColorScheme
+            color = ColorScheme.velocity_to_color(note.velocity)
+        else:
+            color = QColor(0, 0, 0)
+        painter.setPen(QPen(color))
         if note.duration in (ND.WHOLE,):
             glyph = BG.NOTEHEAD_WHOLE
         elif note.duration in (ND.HALF, ND.DOTTED_HALF):
@@ -481,10 +490,16 @@ class ChordSymbol(MusicSymbol):
         painter.drawText(xnote, ynote + nh // 2, glyph)
 
     @staticmethod
-    def _draw_note_ellipse(painter, note, xnote, ynote, nh, nw, ls, lw):
+    def _draw_note_ellipse(painter, note, xnote, ynote, nh, nw, ls, lw,
+                           color_mode=False):
         """Notenkopf mit rotierter Ellipse (Original-Methode)."""
         from PySide6.QtGui import QPen, QColor, QBrush
         from PySide6.QtCore import Qt
+        if color_mode:
+            from musiai.notation.ColorScheme import ColorScheme
+            color = ColorScheme.velocity_to_color(note.velocity)
+        else:
+            color = QColor(0, 0, 0)
         cx = xnote + nw // 2 + 1
         cy = ynote - lw + nh // 2
         painter.save()
@@ -492,16 +507,16 @@ class ChordSymbol(MusicSymbol):
         painter.rotate(-45)
         if note.duration in (ND.WHOLE, ND.HALF, ND.DOTTED_HALF):
             painter.setBrush(QBrush(Qt.GlobalColor.transparent))
-            painter.setPen(QPen(QColor(0, 0, 0), 1))
+            painter.setPen(QPen(color, 1))
             painter.drawEllipse(-nw // 2, -nh // 2, nw, nh - 1)
             painter.drawEllipse(-nw // 2, -nh // 2 + 1, nw, nh - 2)
             painter.drawEllipse(-nw // 2, -nh // 2 + 1, nw, nh - 3)
         else:
-            painter.setBrush(QBrush(QColor(0, 0, 0)))
-            painter.setPen(QPen(QColor(0, 0, 0), 1))
+            painter.setBrush(QBrush(color))
+            painter.setPen(QPen(color, 1))
             painter.drawEllipse(-nw // 2, -nh // 2, nw, nh - 1)
             painter.setBrush(QBrush(Qt.GlobalColor.transparent))
-        painter.setPen(QPen(QColor(0, 0, 0), 1))
+        painter.setPen(QPen(color, 1))
         painter.restore()
 
     def _draw_ledger_lines(self, painter, whitenote, xnote, nw,
