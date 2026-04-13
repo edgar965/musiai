@@ -1,10 +1,10 @@
-"""MusicSymbol - Abstrakte Basisklasse für alle Notation-Symbole."""
+"""MusicSymbol - Abstrakte Basisklasse fuer alle Notation-Symbole."""
 
 from abc import ABC, abstractmethod
 
 
 class MusicSymbol(ABC):
-    """Basisklasse für alle zeichenbaren Musik-Symbole."""
+    """Basisklasse fuer alle zeichenbaren Musik-Symbole."""
 
     def __init__(self, start_time: int = 0):
         self._start_time = start_time
@@ -13,6 +13,10 @@ class MusicSymbol(ABC):
     @property
     def start_time(self) -> int:
         return self._start_time
+
+    @start_time.setter
+    def start_time(self, value: int):
+        self._start_time = value
 
     @property
     @abstractmethod
@@ -30,7 +34,7 @@ class MusicSymbol(ABC):
 
     @property
     def above_staff(self) -> int:
-        """Pixel über dem Notensystem."""
+        """Pixel ueber dem Notensystem."""
         return 0
 
     @property

@@ -225,8 +225,7 @@ class TestMidiSheetRenderer(unittest.TestCase):
     def test_staff_height(self):
         from musiai.ui.midi.Staff import Staff
         from musiai.ui.midi.BarSymbol import BarSymbol
-        staff = Staff([BarSymbol(0)])
-        staff.calculate_layout({'line_space': 12, 'note_height': 12})
+        staff = Staff([BarSymbol(0)], [], 480, 0, 1)
         self.assertGreater(staff.height, 40)
 
 

@@ -376,8 +376,10 @@ class NotationScene(QGraphicsScene):
     def _refresh_svg(self) -> None:
         """Verovio SVG Rendering."""
         from musiai.notation.VerovioRenderer import VerovioRenderer
-        renderer = VerovioRenderer()
-        renderer.render_piece(self.piece, self, self._system_width)
+        # Store as instance attr so renderer + its QSvgRenderers survive GC
+        self._verovio_renderer = VerovioRenderer()
+        self._verovio_renderer.render_piece(self.piece, self,
+                                            self._system_width)
 
     def _refresh_pianoroll(self) -> None:
         """Piano-Roll Rendering."""

@@ -3,6 +3,7 @@
 import logging
 from PySide6.QtWidgets import QGraphicsScene
 from PySide6.QtCore import QByteArray
+from PySide6.QtGui import QTransform
 from musiai.model.Piece import Piece
 
 logger = logging.getLogger("musiai.notation.VerovioRenderer")
@@ -13,6 +14,7 @@ class VerovioRenderer:
 
     def __init__(self):
         self._toolkit = None
+        self._renderers: list = []  # Strong refs to QSvgRenderers
 
     def _ensure_toolkit(self):
         """Verovio Toolkit lazy initialisieren."""
@@ -46,6 +48,8 @@ class VerovioRenderer:
 
         Returns True bei Erfolg, False bei Fehler.
         """
+        self._renderers.clear()
+
         if not self._ensure_toolkit():
             self._render_error(scene, "Verovio nicht verfuegbar. "
                                "Bitte installieren: pip install verovio")
@@ -68,6 +72,7 @@ class VerovioRenderer:
 
             page_count = self._toolkit.getPageCount()
             y_offset = 0.0
+            target_width = system_width
 
             from PySide6.QtSvgWidgets import QGraphicsSvgItem
             from PySide6.QtSvg import QSvgRenderer
@@ -78,20 +83,37 @@ class VerovioRenderer:
 
                 renderer = QSvgRenderer(svg_bytes)
                 if not renderer.isValid():
+                    logger.warning(f"SVG Renderer Seite {page} ungueltig")
                     continue
+
+                # Store strong reference so GC cannot collect it
+                self._renderers.append(renderer)
 
                 item = QGraphicsSvgItem()
                 item.setSharedRenderer(renderer)
-                # Keep renderer alive
-                item._svg_renderer = renderer
+
+                # Scale SVG to fit target width
+                vb = renderer.viewBoxF()
+                if vb.width() > 0:
+                    scale = target_width / vb.width()
+                    item.setTransform(QTransform.fromScale(scale, scale))
+                    page_height = vb.height() * scale
+                else:
+                    page_height = vb.height()
+
                 item.setPos(10, y_offset)
+                item.setVisible(True)
+                item.setZValue(0)
                 scene.addItem(item)
 
-                bounds = renderer.viewBoxF()
-                y_offset += bounds.height() + 20
+                y_offset += page_height + 20
 
-            scene.setSceneRect(0, 0, system_width + 40, y_offset + 40)
-            logger.info(f"Verovio: {page_count} Seiten gerendert")
+            total_width = target_width + 40
+            total_height = y_offset + 40
+            scene.setSceneRect(0, 0, total_width, total_height)
+            scene.update()
+            logger.info(f"Verovio: {page_count} Seiten gerendert, "
+                        f"scene {total_width:.0f}x{total_height:.0f}")
             return True
 
         except Exception as e:
