@@ -215,6 +215,9 @@ class AppController:
         # --- Render-Modus ---
         self.main_window.render_mode_changed.connect(self._on_render_mode_changed)
 
+        # --- Akkord-Anzeige ---
+        self.main_window.chord_display_changed.connect(self._on_chord_display_changed)
+
         # --- Audio Backend ---
         self.main_window._backend_gm_action.triggered.connect(
             lambda: self._switch_backend("windows_gm")
@@ -288,6 +291,17 @@ class AppController:
                 doc_tab.notation_view.centerOn(0, 0)
         self.signal_bus.status_message.emit(f"Anzeige: {mode}")
         logger.info(f"Render-Modus gewechselt: {mode}")
+
+    def _on_chord_display_changed(self, enabled: bool) -> None:
+        """Akkord-Anzeige fuer alle offenen Tabs setzen."""
+        tab_widget = self.main_window.tab_widget
+        for i in range(tab_widget.tab_count()):
+            doc_tab = tab_widget.document_tab_at(i)
+            if doc_tab:
+                doc_tab.notation_scene.set_show_chords(enabled)
+        state = "ein" if enabled else "aus"
+        self.signal_bus.status_message.emit(f"Akkorde: {state}")
+        logger.info(f"Akkord-Anzeige: {state}")
 
     def _active_edit_controller(self):
         return self._active_tab.edit_controller if self._active_tab else None

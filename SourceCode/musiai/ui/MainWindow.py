@@ -3,6 +3,7 @@
 import logging
 from PySide6.QtWidgets import (
     QMainWindow, QMenu, QComboBox, QWidget, QHBoxLayout, QLabel, QToolBar,
+    QPushButton,
 )
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtCore import Qt, Signal
@@ -18,6 +19,7 @@ class MainWindow(QMainWindow):
     """MusiAI Hauptfenster."""
 
     render_mode_changed = Signal(str)
+    chord_display_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -74,7 +76,19 @@ class MainWindow(QMainWindow):
         )
         tb.addWidget(self._render_mode_combo)
 
+        tb.addSeparator()
+
+        self._chord_toggle = QPushButton("Akkorde")
+        self._chord_toggle.setCheckable(True)
+        self._chord_toggle.setChecked(False)
+        self._chord_toggle.setToolTip("Akkorderkennung ein-/ausblenden")
+        self._chord_toggle.clicked.connect(self._on_chord_toggle)
+        tb.addWidget(self._chord_toggle)
+
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
+
+    def _on_chord_toggle(self, checked: bool) -> None:
+        self.chord_display_changed.emit(checked)
 
     def _on_render_mode_changed(self, index: int) -> None:
         mode = self._render_mode_combo.itemData(index)

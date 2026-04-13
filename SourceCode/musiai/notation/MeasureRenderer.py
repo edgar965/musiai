@@ -29,7 +29,7 @@ class MeasureRenderer:
     def __init__(self, measure: Measure, x_offset: float, center_y: float,
                  show_clef: bool = False, tempo_bpm: float = 0,
                  velocity: int = 0, effective_tempo: float = 120.0,
-                 clef: str = TREBLE):
+                 clef: str = TREBLE, show_chords: bool = False):
         self.measure = measure
         self.x_offset = x_offset
         self.center_y = center_y
@@ -38,6 +38,7 @@ class MeasureRenderer:
         self.velocity = velocity
         self.effective_tempo = max(20, effective_tempo)
         self.clef = clef
+        self.show_chords = show_chords
         self._ref_staff_pos = ClefHelper.ref_staff_pos(clef)
         self.note_items: list[NoteItem] = []
         self._items: list[QGraphicsItem] = []
@@ -95,6 +96,8 @@ class MeasureRenderer:
 
         self._draw_measure_number(scene, sh)
         self._draw_notes(scene)
+        if self.show_chords:
+            self._draw_chords(scene, sh)
         # Beams temporär deaktiviert bis Logik stabil
         # self._draw_beams(scene)
 
@@ -217,9 +220,53 @@ class MeasureRenderer:
 
             self._draw_ledger_lines(scene, note.pitch, nx, ny)
 
+            # Vorzeichen (♯/♭) für schwarze Tasten
+            pc = note.pitch % 12
+            if pc in (1, 3, 6, 8, 10):  # C♯, D♯, F♯, G♯, A♯
+                accid = QGraphicsSimpleTextItem("♯")
+                accid.setFont(QFont("Arial", 9))
+                accid.setBrush(QBrush(QColor(40, 40, 60)))
+                accid.setPos(nx - NOTE_RADIUS - 8, ny - 6)
+                accid.setZValue(11)
+                scene.addItem(accid)
+                self._items.append(accid)
+
+            # Punkt für punktierte Noten
+            dotted_durs = {1.5, 0.75, 3.0, 0.375}
+            if any(abs(note.duration_beats - d) < 0.02 for d in dotted_durs):
+                dot = QGraphicsSimpleTextItem(".")
+                dot.setFont(QFont("Arial", 14, QFont.Weight.Bold))
+                dot.setBrush(QBrush(QColor(40, 40, 60)))
+                dot.setPos(nx + NOTE_RADIUS + 1, ny - 8)
+                dot.setZValue(11)
+                scene.addItem(dot)
+                self._items.append(dot)
+
             ni = NoteItem(note, nx, ny, self.center_y)
             scene.addItem(ni)
             self.note_items.append(ni)
+
+    def _draw_chords(self, scene: QGraphicsScene, sh: float) -> None:
+        """Akkordnamen unter dem Notensystem zeichnen."""
+        from musiai.notation.ChordDetector import ChordDetector
+        chords = ChordDetector.detect_for_measure(self.measure.notes)
+        if not chords:
+            return
+        ppb = self.pixels_per_beat
+        content_start = self.x_offset + self.header_width
+        chord_y = self.center_y + sh + 16
+        font = QFont("Arial", 10, QFont.Weight.Bold)
+        color = QColor(40, 80, 160)
+
+        for beat, name in chords:
+            cx = content_start + beat * ppb + ppb / 2
+            label = QGraphicsSimpleTextItem(name)
+            label.setFont(font)
+            label.setBrush(QBrush(color))
+            label.setPos(cx - label.boundingRect().width() / 2, chord_y)
+            label.setZValue(4)
+            scene.addItem(label)
+            self._items.append(label)
 
     def _draw_beams(self, scene: QGraphicsScene) -> None:
         """Balken für Achtel/Sechzehntelnoten zeichnen."""
