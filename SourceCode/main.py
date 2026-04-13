@@ -21,10 +21,18 @@ sys.excepthook = _exception_hook
 def main():
     logger.info("MusiAI startet...")
 
+    # Apply log level from settings
     from PySide6.QtWidgets import QApplication
     app = QApplication(sys.argv)
     app.setApplicationName("MusiAI")
     app.setOrganizationName("MusiAI")
+
+    from PySide6.QtCore import QSettings
+    from musiai.util.LoggingConfig import apply_log_level
+    settings = QSettings("MusiAI", "MusiAI")
+    level = int(settings.value("logging/level", 4))
+    apply_log_level(level)
+    logger.info(f"Log-Level aus Settings: {level}")
 
     from musiai.controller.AppController import AppController
     controller = AppController()

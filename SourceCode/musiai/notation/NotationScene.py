@@ -100,7 +100,7 @@ class NotationScene(QGraphicsScene):
         from PySide6.QtCore import QSettings
         settings = QSettings("MusiAI", "MusiAI")
         self._use_bravura = (
-            settings.value("ui/musicxml_bravura", "false") == "true"
+            settings.value("ui/musicxml_bravura", "true") == "true"
             and self._render_mode == self.MODE_MUSICXML
         )
 
