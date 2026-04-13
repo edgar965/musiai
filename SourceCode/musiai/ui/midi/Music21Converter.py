@@ -138,6 +138,7 @@ class Music21Converter:
             beat_parts = ND.split_complex(dur_beats)
 
             current_tick = tick
+            split_chords = []
             for part_beats in beat_parts:
                 part_ticks = int(part_beats * TPB)
                 end_tick = current_tick + part_ticks
@@ -153,9 +154,21 @@ class Music21Converter:
                     self._fix_left_sides(note_data_list)
                     chord = ChordSymbol(
                         note_data_list, clef, current_tick, end_tick)
-                    chords.append(chord)
+                    split_chords.append(chord)
 
                 current_tick = end_tick
+
+            # Mark split parts as tied (except the last)
+            for i in range(len(split_chords) - 1):
+                split_chords[i].tied_to_next = True
+
+            # Detect ties from music21 (original MIDI ties)
+            for el in group:
+                if hasattr(el, 'tie') and el.tie and el.tie.type in ('start', 'continue'):
+                    if split_chords:
+                        split_chords[-1].tied_to_next = True
+
+            chords.extend(split_chords)
 
         return chords
 

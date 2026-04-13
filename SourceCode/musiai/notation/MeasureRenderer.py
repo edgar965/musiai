@@ -98,6 +98,8 @@ class MeasureRenderer:
 
         self._draw_measure_number(scene, sh)
         self._draw_notes(scene)
+        self._draw_rests(scene)
+        self._draw_ties(scene)
         if self.show_chords:
             self._draw_chords(scene, sh)
         # Beams temporär deaktiviert bis Logik stabil
@@ -146,31 +148,65 @@ class MeasureRenderer:
 
     def _draw_time_signature(self, scene: QGraphicsScene, sh: float) -> None:
         ts = self.measure.time_signature
-        font = QFont("Arial", 15, QFont.Weight.ExtraBold)
-        color = QColor(30, 30, 60)
         ts_x = self.x_offset + 34
+        color = QColor(30, 30, 60)
 
-        num = QGraphicsSimpleTextItem(str(ts.numerator))
-        num.setFont(font)
-        num.setBrush(QBrush(color))
-        num_w = num.boundingRect().width()
-        num.setPos(ts_x + (16 - num_w) / 2, self.center_y - sh)
-        num.setZValue(3)
-        num.setData(0, "time_sig")
-        num.setData(1, self.measure)
-        scene.addItem(num)
-        self._items.append(num)
+        if self._use_bravura:
+            from musiai.ui.midi.BravuraGlyphs import (
+                ensure_font, FONT_NAME, TIME_DIGITS,
+            )
+            ensure_font()
+            bravura_font = QFont(FONT_NAME, int(STAFF_LINE_SPACING * 1.8))
 
-        den = QGraphicsSimpleTextItem(str(ts.denominator))
-        den.setFont(font)
-        den.setBrush(QBrush(color))
-        den_w = den.boundingRect().width()
-        den.setPos(ts_x + (16 - den_w) / 2, self.center_y + 2)
-        den.setZValue(3)
-        den.setData(0, "time_sig")
-        den.setData(1, self.measure)
-        scene.addItem(den)
-        self._items.append(den)
+            def _time_glyphs(value: int) -> str:
+                return "".join(TIME_DIGITS[int(d)] for d in str(value))
+
+            num = QGraphicsSimpleTextItem(_time_glyphs(ts.numerator))
+            num.setFont(bravura_font)
+            num.setBrush(QBrush(color))
+            num_w = num.boundingRect().width()
+            num.setPos(ts_x + (16 - num_w) / 2,
+                       self.center_y - sh - STAFF_LINE_SPACING * 0.3)
+            num.setZValue(3)
+            num.setData(0, "time_sig")
+            num.setData(1, self.measure)
+            scene.addItem(num)
+            self._items.append(num)
+
+            den = QGraphicsSimpleTextItem(_time_glyphs(ts.denominator))
+            den.setFont(bravura_font)
+            den.setBrush(QBrush(color))
+            den_w = den.boundingRect().width()
+            den.setPos(ts_x + (16 - den_w) / 2,
+                       self.center_y + STAFF_LINE_SPACING * 0.2)
+            den.setZValue(3)
+            den.setData(0, "time_sig")
+            den.setData(1, self.measure)
+            scene.addItem(den)
+            self._items.append(den)
+        else:
+            font = QFont("Arial", 15, QFont.Weight.ExtraBold)
+            num = QGraphicsSimpleTextItem(str(ts.numerator))
+            num.setFont(font)
+            num.setBrush(QBrush(color))
+            num_w = num.boundingRect().width()
+            num.setPos(ts_x + (16 - num_w) / 2, self.center_y - sh)
+            num.setZValue(3)
+            num.setData(0, "time_sig")
+            num.setData(1, self.measure)
+            scene.addItem(num)
+            self._items.append(num)
+
+            den = QGraphicsSimpleTextItem(str(ts.denominator))
+            den.setFont(font)
+            den.setBrush(QBrush(color))
+            den_w = den.boundingRect().width()
+            den.setPos(ts_x + (16 - den_w) / 2, self.center_y + 2)
+            den.setZValue(3)
+            den.setData(0, "time_sig")
+            den.setData(1, self.measure)
+            scene.addItem(den)
+            self._items.append(den)
 
     def _draw_tempo(self, scene: QGraphicsScene, sh: float) -> None:
         if self.tempo_bpm <= 0:
@@ -299,6 +335,143 @@ class MeasureRenderer:
                           use_bravura=self._use_bravura)
             scene.addItem(ni)
             self.note_items.append(ni)
+
+    def _draw_ties(self, scene: QGraphicsScene) -> None:
+        """Draw tie curves between consecutive same-pitch notes."""
+        from PySide6.QtWidgets import QGraphicsPathItem
+        from PySide6.QtGui import QPainterPath
+
+        for i, ni in enumerate(self.note_items):
+            for j in range(i + 1, len(self.note_items)):
+                nj = self.note_items[j]
+                if ni.note.pitch == nj.note.pitch:
+                    end_beat = ni.note.start_beat + ni.note.duration_beats
+                    if abs(end_beat - nj.note.start_beat) < 0.05:
+                        self._draw_tie_curve(scene, ni, nj)
+                    break
+
+    def _draw_tie_curve(self, scene: QGraphicsScene,
+                        note_item_a, note_item_b) -> None:
+        """Draw a bezier tie arc between two NoteItems."""
+        from PySide6.QtWidgets import QGraphicsPathItem
+        from PySide6.QtGui import QPainterPath
+
+        x1 = note_item_a.x() + NOTE_RADIUS
+        x2 = note_item_b.x() - NOTE_RADIUS
+        y = note_item_a.y()
+
+        if y > self.center_y:
+            curve_offset = STAFF_LINE_SPACING
+        else:
+            curve_offset = -STAFF_LINE_SPACING
+
+        mid_x = (x1 + x2) / 2
+        path = QPainterPath()
+        path.moveTo(x1, y)
+        path.cubicTo(mid_x, y + curve_offset,
+                     mid_x, y + curve_offset, x2, y)
+
+        item = QGraphicsPathItem(path)
+        item.setPen(QPen(QColor(40, 40, 60), 1.2))
+        item.setZValue(9)
+        scene.addItem(item)
+        self._items.append(item)
+
+    def _draw_rests(self, scene: QGraphicsScene) -> None:
+        """Draw rest symbols in gaps between notes."""
+        ppb = self.pixels_per_beat
+        content_start = self.x_offset + self.header_width
+        ts = self.measure.time_signature
+        measure_dur = ts.beats_per_measure()
+
+        # Build sorted list of occupied intervals
+        intervals = []
+        for note in self.measure.notes:
+            intervals.append((note.start_beat, note.end_beat))
+        intervals.sort()
+
+        # Find gaps
+        gaps = []
+        covered_end = 0.0
+        for start, end in intervals:
+            if start > covered_end + 0.05:
+                gaps.append((covered_end, start))
+            covered_end = max(covered_end, end)
+        if covered_end + 0.05 < measure_dur:
+            gaps.append((covered_end, measure_dur))
+
+        for gap_start, gap_end in gaps:
+            gap_dur = gap_end - gap_start
+            if gap_dur < 0.1:
+                continue
+            rest_parts = self._split_rest_duration(gap_dur)
+            beat = gap_start
+            for dur in rest_parts:
+                rx = content_start + beat * ppb + dur * ppb / 2
+                self._draw_rest_symbol(scene, rx, dur)
+                beat += dur
+
+    def _split_rest_duration(self, dur: float) -> list[float]:
+        """Split a rest duration into standard note values."""
+        parts = []
+        remaining = dur
+        standard = [4.0, 2.0, 1.0, 0.5, 0.25]
+        for s in standard:
+            while remaining >= s - 0.02:
+                parts.append(s)
+                remaining -= s
+        if remaining > 0.1:
+            parts.append(remaining)
+        return parts
+
+    def _draw_rest_symbol(self, scene: QGraphicsScene,
+                          x: float, dur_beats: float) -> None:
+        """Draw a single rest glyph at position x."""
+        if self._use_bravura:
+            from musiai.ui.midi.BravuraGlyphs import (
+                ensure_font, FONT_NAME,
+                REST_WHOLE, REST_HALF, REST_QUARTER,
+                REST_8TH, REST_16TH, REST_32ND,
+            )
+            ensure_font()
+            glyph_map = {
+                4.0: REST_WHOLE, 2.0: REST_HALF, 1.0: REST_QUARTER,
+                0.5: REST_8TH, 0.25: REST_16TH, 0.125: REST_32ND,
+            }
+            glyph = None
+            for threshold, g in glyph_map.items():
+                if abs(dur_beats - threshold) < 0.05:
+                    glyph = g
+                    break
+            if glyph is None:
+                glyph = REST_QUARTER
+            item = QGraphicsSimpleTextItem(glyph)
+            rest_size = int(STAFF_LINE_SPACING * 1.8)
+            item.setFont(QFont(FONT_NAME, rest_size))
+            item.setBrush(QBrush(QColor(100, 100, 120)))
+            bw = item.boundingRect().width()
+            item.setPos(x - bw / 2, self.center_y - STAFF_LINE_SPACING * 0.8)
+        else:
+            text_map = {
+                4.0: "\U0001D13B", 2.0: "\U0001D13C",
+                1.0: "\U0001D13D", 0.5: "\U0001D13E",
+                0.25: "\U0001D13F", 0.125: "\U0001D140",
+            }
+            text = None
+            for threshold, t in text_map.items():
+                if abs(dur_beats - threshold) < 0.05:
+                    text = t
+                    break
+            if text is None:
+                text = "\U0001D13D"
+            item = QGraphicsSimpleTextItem(text)
+            item.setFont(QFont("Segoe UI Symbol", 18))
+            item.setBrush(QBrush(QColor(100, 100, 120)))
+            bw = item.boundingRect().width()
+            item.setPos(x - bw / 2, self.center_y - 14)
+        item.setZValue(5)
+        scene.addItem(item)
+        self._items.append(item)
 
     def _draw_chords(self, scene: QGraphicsScene, sh: float) -> None:
         """Akkordnamen unter dem Notensystem zeichnen."""

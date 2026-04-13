@@ -158,9 +158,13 @@ class Staff:
                 painter, x_current, ytop, config)
 
         # Draw symbols (notes, rests, bars)
+        x_symbols_start = x_current
         for s in self.symbols:
             s.draw(painter, x_current, ytop, config)
             x_current += s.width
+
+        # Draw tie curves between tied note pairs
+        self._draw_ties(painter, ytop, x_symbols_start)
 
         # Draw 5 horizontal staff lines
         pen = QPen(QColor(0, 0, 0), max(1, lw))
@@ -243,6 +247,61 @@ class Staff:
             painter.drawText(x + 2, y_den, den_str)
 
         return x + SC.NoteWidth * 2
+
+    def _draw_ties(self, painter, ytop, x_symbols_start):
+        """Draw tie curves between tied note pairs."""
+        from PySide6.QtGui import QPen, QColor, QPainterPath
+        from PySide6.QtCore import Qt
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        from musiai.ui.midi.Stem import UP
+
+        nh = SC.NoteHeight
+
+        # Build x-position list for each symbol
+        x_positions = []
+        x = x_symbols_start
+        for s in self.symbols:
+            x_positions.append(x)
+            x += s.width
+
+        pen = QPen(QColor(0, 0, 0), 1.2)
+        painter.setPen(pen)
+        painter.setBrush(QColor(0, 0, 0, 0))
+
+        topstaff = WhiteNote.top(self.clef)
+
+        for i, sym in enumerate(self.symbols):
+            if not isinstance(sym, ChordSymbol):
+                continue
+            if not getattr(sym, 'tied_to_next', False):
+                continue
+            # Find the next ChordSymbol
+            for j in range(i + 1, len(self.symbols)):
+                if isinstance(self.symbols[j], ChordSymbol):
+                    next_sym = self.symbols[j]
+                    # Draw a tie for the bottom note (representative)
+                    note = sym.notedata[0].whitenote
+                    y_note = ytop + topstaff.dist(note) * nh // 2
+
+                    x1 = x_positions[i] + sym.width - nh // 2
+                    x2 = x_positions[j] + nh // 2
+
+                    # Curve below if stem up, above if stem down
+                    if sym.stem1 and sym.stem1.direction == UP:
+                        curve_y = y_note + nh
+                        ctrl_offset = nh * 2
+                    else:
+                        curve_y = y_note - nh // 2
+                        ctrl_offset = -nh * 2
+
+                    mid_x = (x1 + x2) / 2
+                    path = QPainterPath()
+                    path.moveTo(x1, curve_y)
+                    path.cubicTo(mid_x, curve_y + ctrl_offset,
+                                 mid_x, curve_y + ctrl_offset,
+                                 x2, curve_y)
+                    painter.drawPath(path)
+                    break
 
     def _draw_measure_numbers(self, painter, ytop):
         from PySide6.QtGui import QFont, QColor

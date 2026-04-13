@@ -35,6 +35,7 @@ class ChordSymbol(MusicSymbol):
         self.stem1: Stem | None = None
         self.stem2: Stem | None = None
         self.hastwostems = False
+        self.tied_to_next = False
 
         if not notedata:
             return
