@@ -55,7 +55,14 @@ class Music21Converter:
         clef = self._detect_clef(part)
         time_num, time_den = self._detect_time_sig(part)
         measure_len = int(time_num * (4 / time_den) * TPB)
-        part_name = part.partName or "Track"
+        # Part-Name: music21 liefert manchmal None
+        part_name = part.partName
+        if not part_name or part_name.strip() == "":
+            # Fallback basierend auf Schlüssel
+            if clef == BASS:
+                part_name = "Bass"
+            else:
+                part_name = "Treble"
 
         chords = []
         for m_idx, m21_measure in enumerate(measures):
