@@ -135,20 +135,17 @@ class Stem:
 
     def _draw_vertical_line(self, painter, pen, x, ytop, top_staff,
                             ls, nh, nw, use_bravura=False):
-        use_smufl = use_bravura and self._has_smufl_metadata()
-        sc = 0.0
-
-        if use_smufl:
-            from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
-            fs = SMuFLMetadata.notehead_font_size(ls)
-            sc = SMuFLMetadata.font_scale(fs)
-            stem_thickness = SMuFLMetadata.get_engraving_default(
-                'stemThickness', 0.12)
-            stem_w = max(1, int(stem_thickness * sc + 0.5))
-            pen.setWidth(stem_w)
-            painter.setPen(pen)
-
-        xstart = self._stem_x(x, ls, nw, use_smufl, sc)
+        # Use SAME x-calculation as beams for consistency
+        if use_bravura:
+            glyph_w = int(ls * 1.34)
+            if self.direction == UP:
+                xstart = x + ls // 4 + glyph_w
+            else:
+                xstart = x + ls // 4
+        elif self.side == LEFT_SIDE:
+            xstart = x + ls // 4 + 1
+        else:
+            xstart = x + ls // 4 + nw
 
         if self.direction == UP:
             if use_smufl:
