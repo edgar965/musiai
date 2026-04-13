@@ -32,19 +32,20 @@ class ClefSymbol(MusicSymbol):
 
     def draw(self, painter, x: int, ytop: int, config: dict) -> None:
         from PySide6.QtGui import QFont, QColor
-        ls = config.get('line_space', 12)
-        staff_h = 4 * ls
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        ls = SC.LineSpace
+        nh = SC.NoteHeight
+        staff_h = SC.StaffHeight
 
         painter.setPen(QColor(30, 30, 60))
         if self.clef == TREBLE:
-            size = 42 if not self.small else 28
+            # Font-Größe proportional zum Staff (C#: Bildgröße = 1.5*StaffHeight)
+            size = max(16, int(staff_h * 1.2))
             painter.setFont(QFont("Segoe UI Symbol", size))
-            # Treble-Schlüssel sitzt auf der 2. Linie (G4)
-            painter.drawText(x, int(ytop - ls * 1.5), 50, int(staff_h + ls * 3),
-                             0, "𝄞")
+            painter.drawText(x, ytop - nh * 2, self.min_width + 10,
+                             staff_h + nh * 4, 0, "𝄞")
         else:
-            size = 30 if not self.small else 20
+            size = max(12, int(staff_h * 0.8))
             painter.setFont(QFont("Segoe UI Symbol", size))
-            # Bass-Schlüssel sitzt auf der 4. Linie (F3)
-            painter.drawText(x + 2, int(ytop - ls * 0.3), 50, int(staff_h + ls),
-                             0, "𝄢")
+            painter.drawText(x + 1, ytop - nh, self.min_width + 10,
+                             staff_h + nh * 2, 0, "𝄢")

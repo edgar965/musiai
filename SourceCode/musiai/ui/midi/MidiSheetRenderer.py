@@ -90,40 +90,46 @@ class MidiSheetRenderer:
         """Treble+Bass zusammen pro Zeile (Partitur-Ansicht)."""
         from PySide6.QtGui import QPen
         max_rows = max(len(staffs) for _, staffs in all_staffs)
+        n_tracks = len(all_staffs)
+
+        # Taktnummern nur beim ersten Track pro System anzeigen
+        for track_idx, staffs in all_staffs:
+            for s in staffs:
+                s.show_measures = (track_idx == all_staffs[0][0])
 
         for row in range(max_rows):
             system_top = y_offset
 
-            # Part-Labels nur in erster Zeile
-            if row == 0:
-                for track_idx, _ in all_staffs:
-                    pd = parts_data[track_idx]
-                    label = scene.addText(pd['part_name'])
-                    label.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-                    label.setDefaultTextColor(QColor(30, 30, 80))
-                    label.setPos(4, y_offset)
-                    y_offset += 14
-
-                y_offset = system_top
-
-            # Alle Tracks dieser Zeile direkt untereinander (eng)
-            for track_idx, staffs in all_staffs:
+            # Alle Tracks dieser Zeile direkt untereinander
+            for i, (track_idx, staffs) in enumerate(all_staffs):
                 if row >= len(staffs):
                     continue
                 staff = staffs[row]
+
+                # Part-Label links neben dem Staff (jede Zeile)
+                if row == 0 or True:
+                    pd = parts_data[track_idx]
+                    lbl = scene.addText(pd['part_name'])
+                    lbl.setFont(QFont("Arial", 8))
+                    lbl.setDefaultTextColor(QColor(50, 50, 100))
+                    lbl.setPos(4, y_offset + 15)
+
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
-                y_offset += staff.height - 5  # Eng zusammen
+                y_offset += staff.height - 8  # Eng zusammen
 
-            # Klammer links (verbindet die Staves)
-            if len(all_staffs) > 1:
-                pen = QPen(QColor(40, 40, 50), 2)
+            # Klammer links (verbindet die Staves im System)
+            if n_tracks > 1:
+                pen = QPen(QColor(30, 30, 50), 2.5)
                 bracket = scene.addLine(
-                    98, system_top + 30, 98, y_offset - 10, pen)
+                    96, system_top + 25, 96, y_offset - 5, pen)
                 bracket.setZValue(5)
+                # Oberer/unterer Haken
+                scene.addLine(96, system_top + 25, 100, system_top + 25, pen)
+                scene.addLine(96, y_offset - 5, 100, y_offset - 5, pen)
 
-            y_offset += 30  # Großer Abstand zum nächsten System
+            y_offset += 35  # Abstand zum nächsten System
 
         return y_offset
 
