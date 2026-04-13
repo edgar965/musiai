@@ -10,30 +10,35 @@ from musiai.notation.ZigzagItem import ZigzagItem
 from musiai.notation.CurveItem import CurveItem
 from musiai.notation.DurationItem import DurationItem
 from musiai.notation.StaffRenderer import StaffRenderer
+from musiai.notation.ClefHelper import ClefHelper, TREBLE, BASS
+from musiai.notation.BeamGroup import BeamGroup
 from musiai.util.Constants import (
-    PIXELS_PER_BEAT, STAFF_LINE_SPACING, COLOR_MEASURE_LINE,
+    PIXELS_PER_BEAT, STAFF_LINE_SPACING, COLOR_MEASURE_LINE, NOTE_RADIUS,
 )
 
 logger = logging.getLogger("musiai.notation.MeasureRenderer")
 
-HEADER_WIDTH = 58  # Platz für Schlüssel + Taktart
+HEADER_WIDTH = 58
 
 
 class MeasureRenderer:
     """Rendert einen einzelnen Takt mit allen Expression-Visuals."""
 
-    REFERENCE_TEMPO = 120.0  # Referenz-Tempo für Standardbreite
+    REFERENCE_TEMPO = 120.0
 
     def __init__(self, measure: Measure, x_offset: float, center_y: float,
                  show_clef: bool = False, tempo_bpm: float = 0,
-                 velocity: int = 0, effective_tempo: float = 120.0):
+                 velocity: int = 0, effective_tempo: float = 120.0,
+                 clef: str = TREBLE):
         self.measure = measure
         self.x_offset = x_offset
         self.center_y = center_y
         self.show_clef = show_clef
-        self.tempo_bpm = tempo_bpm  # Anzeige-Tempo (0 = nicht anzeigen)
+        self.tempo_bpm = tempo_bpm
         self.velocity = velocity
         self.effective_tempo = max(20, effective_tempo)
+        self.clef = clef
+        self._ref_staff_pos = ClefHelper.ref_staff_pos(clef)
         self.note_items: list[NoteItem] = []
         self._items: list[QGraphicsItem] = []
 
@@ -43,7 +48,6 @@ class MeasureRenderer:
 
     @property
     def tempo_scale(self) -> float:
-        """Breiten-Skalierung: langsames Tempo → breiter, schnelles → schmaler."""
         return self.REFERENCE_TEMPO / self.effective_tempo
 
     @property
@@ -52,39 +56,28 @@ class MeasureRenderer:
 
     @property
     def width(self) -> float:
-        return self.measure.effective_duration_beats * self.pixels_per_beat + self.header_width
+        return self.measure.duration_beats * self.pixels_per_beat + self.header_width
 
     def _staff_line_color(self) -> QColor:
-        """Notenlinien-Farbe basierend auf Tempo.
-
-        Standard (120 BPM): Dunkelschwarz
-        Langsamer (<120): Richtung Blau (breiter)
-        Schneller (>120): Richtung Gelb/Orange (schmaler)
-        """
-        scale = self.tempo_scale  # >1 = langsam, <1 = schnell
+        scale = self.tempo_scale
         if abs(scale - 1.0) < 0.05:
             return QColor(40, 40, 50)
-
         if scale > 1.0:
-            # Langsamer → Blau-Töne
             t = min((scale - 1.0) / 1.0, 1.0)
             return QColor(int(40 - 20 * t), int(40 + 40 * t), int(50 + 180 * t))
         else:
-            # Schneller → Orange/Gelb-Töne
             t = min((1.0 - scale) / 0.5, 1.0)
             return QColor(int(40 + 160 * t), int(40 + 100 * t), int(50 - 30 * t))
 
     def render(self, scene: QGraphicsScene) -> None:
-        sh = 2 * STAFF_LINE_SPACING  # staff_half
+        sh = 2 * STAFF_LINE_SPACING
         line_color = self._staff_line_color()
 
-        # Notenlinien (eingefärbt nach Taktlänge)
         lines = StaffRenderer.draw_staff_lines(
             scene, self.x_offset, self.width, self.center_y, line_color
         )
         self._items.extend(lines)
 
-        # Taktstrich links
         self._add_line(scene, self.x_offset, self.center_y - sh,
                        self.x_offset, self.center_y + sh, 1.5, line_color)
 
@@ -93,46 +86,49 @@ class MeasureRenderer:
             self._draw_time_signature(scene, sh)
             self._draw_tempo(scene, sh)
             self._draw_dynamic(scene, sh)
-            # Trennlinie nach Header
             sep_x = self.x_offset + self.header_width
             self._add_line(scene, sep_x, self.center_y - sh,
-                          sep_x, self.center_y + sh, 0.5,
-                          QColor(190, 190, 210))
+                           sep_x, self.center_y + sh, 0.5,
+                           QColor(190, 190, 210))
 
         self._draw_measure_number(scene, sh)
         self._draw_notes(scene)
+        # Beams temporär deaktiviert bis Logik stabil
+        # self._draw_beams(scene)
 
     def _draw_clef(self, scene: QGraphicsScene, sh: float) -> None:
-        """Violinschlüssel - ragt über und unter die Notenlinien hinaus."""
-        clef = scene.addText("𝄞")
-        clef.setFont(QFont("Segoe UI Symbol", 42))
+        """Schlüssel zeichnen (Violin- oder Bassschlüssel)."""
+        symbol = ClefHelper.clef_symbol(self.clef)
+        clef = scene.addText(symbol)
+        if self.clef == BASS:
+            clef.setFont(QFont("Segoe UI Symbol", 32))
+            clef.setPos(self.x_offset, self.center_y - sh - 10)
+        else:
+            clef.setFont(QFont("Segoe UI Symbol", 42))
+            clef.setPos(self.x_offset - 2, self.center_y - sh - 24)
         clef.setDefaultTextColor(QColor(30, 30, 60))
-        clef.setPos(self.x_offset - 2, self.center_y - sh - 24)
         clef.setZValue(3)
-        clef.setData(0, "clef")  # Tag for click detection
+        clef.setData(0, "clef")
         clef.setData(1, self.measure)
         self._items.append(clef)
 
     def _draw_time_signature(self, scene: QGraphicsScene, sh: float) -> None:
-        """Taktart: Zähler oben, Nenner unten, rechts vom Schlüssel."""
         ts = self.measure.time_signature
         font = QFont("Arial", 15, QFont.Weight.ExtraBold)
         color = QColor(30, 30, 60)
         ts_x = self.x_offset + 34
 
-        # Zähler - zentriert in der oberen Hälfte der Notenlinien
         num = QGraphicsSimpleTextItem(str(ts.numerator))
         num.setFont(font)
         num.setBrush(QBrush(color))
         num_w = num.boundingRect().width()
         num.setPos(ts_x + (16 - num_w) / 2, self.center_y - sh)
         num.setZValue(3)
-        num.setData(0, "time_sig")  # Tag for click detection
+        num.setData(0, "time_sig")
         num.setData(1, self.measure)
         scene.addItem(num)
         self._items.append(num)
 
-        # Nenner - zentriert in der unteren Hälfte
         den = QGraphicsSimpleTextItem(str(ts.denominator))
         den.setFont(font)
         den.setBrush(QBrush(color))
@@ -154,7 +150,7 @@ class MeasureRenderer:
         item.setDefaultTextColor(QColor(20, 120, 20))
         item.setPos(self.x_offset + 2, self.center_y - sh - 38)
         item.setZValue(2)
-        item.setData(0, "tempo")  # Tag for click detection
+        item.setData(0, "tempo")
         item.setData(1, self.measure)
         self._items.append(item)
 
@@ -181,16 +177,21 @@ class MeasureRenderer:
 
     def _draw_notes(self, scene: QGraphicsScene) -> None:
         ppb = self.pixels_per_beat
+        content_start = self.x_offset + self.header_width
+        content_end = self.x_offset + self.width
+
         for note in self.measure.notes:
-            nx = (self.x_offset + self.header_width +
-                  note.start_beat * ppb + ppb / 2)
+            # Direkte Beat-Position (wie im Original)
+            nx = content_start + note.start_beat * ppb + ppb / 2
             ny = self.pitch_to_y(note.pitch)
             expr = note.expression
 
-            # Dauerlinie: zeigt effektive Notenlänge
+            # Dauerlinie (geclippt auf Taktbreite)
             eff_dur = note.duration_beats * expr.duration_deviation
-            line_w = eff_dur * ppb
-            dur_line = scene.addLine(nx, ny, nx + line_w - 8, ny,
+            line_end_x = nx + eff_dur * ppb - NOTE_RADIUS
+            line_end_x = min(line_end_x, content_end - 4)
+            line_w = max(4, line_end_x - nx)
+            dur_line = scene.addLine(nx, ny, nx + line_w, ny,
                                      QPen(QColor(100, 100, 120, 80), 2))
             dur_line.setZValue(5)
             self._items.append(dur_line)
@@ -210,45 +211,47 @@ class MeasureRenderer:
                     scene.addItem(z)
                     self._items.append(z)
 
-            # Hilfslinien für Noten über/unter dem Notensystem
             self._draw_ledger_lines(scene, note.pitch, nx, ny)
 
             ni = NoteItem(note, nx, ny, self.center_y)
             scene.addItem(ni)
             self.note_items.append(ni)
 
+    def _draw_beams(self, scene: QGraphicsScene) -> None:
+        """Balken für Achtel/Sechzehntelnoten zeichnen."""
+        groups = BeamGroup.find_beam_groups(
+            self.measure.notes, self.measure.time_signature
+        )
+        for group in groups:
+            BeamGroup.draw_beams(scene, self.note_items, group)
+
     def _draw_ledger_lines(self, scene: QGraphicsScene,
                            midi_pitch: int, nx: float, ny: float) -> None:
         """Hilfslinien für Noten über/unter dem 5-Linien-System."""
-        octave = midi_pitch // 12
-        pc = midi_pitch % 12
-        diatonic = self._CHROMATIC_TO_DIATONIC[pc]
-        staff_pos = octave * 7 + diatonic
-
-        # Notenlinien-Positionen (staff_pos):
-        #   Linie 1 (E4): 37, Linie 2 (G4): 39, Linie 3 (B4): 41,
-        #   Linie 4 (D5): 43, Linie 5 (F5): 45
+        staff_pos = ClefHelper.pitch_to_staff_pos(midi_pitch)
         half_sp = STAFF_LINE_SPACING / 2
-        ledger_half_w = 10  # Halbe Breite der Hilfslinie
+        ledger_half_w = 10
         color = QColor(80, 80, 90)
         pen = QPen(color, 1.2)
 
-        if staff_pos <= 35:
-            # Unter dem System: Hilfslinien bei 35 (C4), 33 (A3), ...
-            pos = 35
+        # Linien-Positionen relativ zum Referenzpunkt
+        bottom_line_pos = self._ref_staff_pos - 4
+        top_line_pos = self._ref_staff_pos + 4
+
+        if staff_pos <= bottom_line_pos - 2:
+            pos = bottom_line_pos - 2
             while pos >= staff_pos:
-                y = self.center_y - (pos - self._REF_STAFF_POS) * half_sp
+                y = self.center_y - (pos - self._ref_staff_pos) * half_sp
                 line = scene.addLine(nx - ledger_half_w, y,
                                      nx + ledger_half_w, y, pen)
                 line.setZValue(6)
                 self._items.append(line)
-                pos -= 2  # Jede Linie = 2 diatonische Schritte
+                pos -= 2
 
-        elif staff_pos >= 47:
-            # Über dem System: Hilfslinien bei 47 (A5), 49 (C6), ...
-            pos = 47
+        elif staff_pos >= top_line_pos + 2:
+            pos = top_line_pos + 2
             while pos <= staff_pos:
-                y = self.center_y - (pos - self._REF_STAFF_POS) * half_sp
+                y = self.center_y - (pos - self._ref_staff_pos) * half_sp
                 line = scene.addLine(nx - ledger_half_w, y,
                                      nx + ledger_half_w, y, pen)
                 line.setZValue(6)
@@ -261,19 +264,10 @@ class MeasureRenderer:
         line.setZValue(1)
         self._items.append(line)
 
-    # Chromatic pitch class → diatonic step within octave
-    # C=0, C#=0, D=1, D#=1, E=2, F=3, F#=3, G=4, G#=4, A=5, A#=5, B=6
-    _CHROMATIC_TO_DIATONIC = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6]
-    # B4 (MIDI 71) sits on the 3rd staff line = center_y
-    _REF_STAFF_POS = (71 // 12) * 7 + 6  # = 41
-
     def pitch_to_y(self, midi_pitch: int) -> float:
-        """MIDI-Pitch → Y-Position auf dem Notensystem (diatonisch)."""
-        octave = midi_pitch // 12
-        pc = midi_pitch % 12
-        diatonic = self._CHROMATIC_TO_DIATONIC[pc]
-        staff_pos = octave * 7 + diatonic
-        return self.center_y - (staff_pos - self._REF_STAFF_POS) * (STAFF_LINE_SPACING / 2)
+        """MIDI-Pitch → Y-Position (nutzt clef-spezifischen Referenzpunkt)."""
+        staff_pos = ClefHelper.pitch_to_staff_pos(midi_pitch)
+        return self.center_y - (staff_pos - self._ref_staff_pos) * (STAFF_LINE_SPACING / 2)
 
     def clear(self, scene: QGraphicsScene) -> None:
         for item in self.note_items:

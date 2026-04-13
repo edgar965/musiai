@@ -1001,33 +1001,7 @@ class AppController:
             except Exception as e:
                 logger.warning(f"MusicXML laden fehlgeschlagen: {e}")
 
-        # test.mp3 als Audio-Stimme laden
-        default_mp3 = os.path.abspath("../media/mp3/test.mp3")
-        piece = self._active_piece()
-        if os.path.exists(default_mp3) and piece:
-            try:
-                from musiai.model.AudioTrack import AudioTrack
-                from musiai.model.Part import Part
-                from musiai.model.Measure import Measure
-                from musiai.model.TimeSignature import TimeSignature
-
-                track = AudioTrack()
-                if track.load(default_mp3):
-                    part = Part(name="Audio: test", channel=len(piece.parts))
-                    part.audio_track = track
-                    tempo = piece.initial_tempo
-                    beats = track.duration_seconds * (tempo / 60.0)
-                    ts = TimeSignature(4, 4)
-                    for i in range(max(1, int(beats / 4) + 1)):
-                        part.add_measure(Measure(i + 1, ts))
-                    piece.add_part(part)
-                    self.playback_engine.set_piece(piece)
-                    scene = self._active_scene()
-                    if scene:
-                        scene.refresh()
-                    logger.info(f"Audio geladen: {default_mp3}")
-            except Exception as e:
-                logger.warning(f"Audio laden fehlgeschlagen: {e}")
+        # Audio-Stimme nur laden wenn explizit gewünscht (nicht automatisch)
 
     def start(self) -> None:
         self.main_window.show()
@@ -1037,6 +1011,30 @@ class AppController:
         logger.info("MusiAI gestartet")
 
     def shutdown(self) -> None:
+        # Transport-Timer sofort stoppen
+        self.playback_engine.transport._timer.stop()
         self.playback_engine.shutdown()
         self.midi_keyboard.shutdown()
+
+        # pygame komplett beenden (verhindert hängende Threads)
+        try:
+            import pygame.mixer
+            pygame.mixer.quit()
+        except Exception:
+            pass
+        try:
+            import pygame.midi
+            pygame.midi.quit()
+        except Exception:
+            pass
+        try:
+            import pygame
+            pygame.quit()
+        except Exception:
+            pass
+
         logger.info("MusiAI beendet")
+
+        # Prozess-Exit erzwingen falls noch Threads hängen
+        import os
+        os._exit(0)

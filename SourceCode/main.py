@@ -16,10 +16,12 @@ def main():
 
     from musiai.controller.AppController import AppController
     controller = AppController()
+
+    # Sauberes Beenden bei Fenster-Schließen
+    app.aboutToQuit.connect(controller.shutdown)
     controller.start()
 
     exit_code = app.exec()
-    controller.shutdown()
     sys.exit(exit_code)
 
 

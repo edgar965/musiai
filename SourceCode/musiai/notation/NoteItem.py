@@ -68,6 +68,13 @@ class NoteItem(QGraphicsEllipseItem):
         else:
             self.setPen(QPen(Qt.PenStyle.NoPen))
 
+    def stem_end_pos(self) -> tuple[float, float] | None:
+        """Absolute Position des Stem-Endes (für Beaming)."""
+        if not self._stem:
+            return None
+        line = self._stem.line()
+        return (self.x() + line.x2(), self.y() + line.y2())
+
     def hoverEnterEvent(self, event):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         if not self._selected:

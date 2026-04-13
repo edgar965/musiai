@@ -152,7 +152,8 @@ class PlaybackEngine:
                 for note in measure.notes:
                     abs_start = abs_beat + note.start_beat
                     self._all_notes.append((abs_start, note, part.channel, part))
-                abs_beat += measure.effective_duration_beats
+                # Taktart-Dauer statt effective (verhindert Drift durch Expression)
+                abs_beat += measure.duration_beats
             self.transport.set_end_beat(abs_beat)
         self._all_notes.sort(key=lambda x: x[0])
 
@@ -188,14 +189,14 @@ class PlaybackEngine:
                     self._play_note(note, channel)
 
         finished = []
-        for midi_note, note_data in self._active_notes.items():
+        for key, note_data in self._active_notes.items():
             abs_beat, note, channel = note_data
             eff_dur = note.duration_beats * note.expression.duration_deviation
             if current_beat >= abs_beat + eff_dur:
-                self.player.note_off(channel, midi_note)
-                finished.append(midi_note)
-        for midi_note in finished:
-            del self._active_notes[midi_note]
+                self.player.note_off(channel, note.pitch)
+                finished.append(key)
+        for key in finished:
+            del self._active_notes[key]
 
         self._last_beat = current_beat
 
@@ -206,7 +207,8 @@ class PlaybackEngine:
         else:
             self.player.set_pitch_bend(channel, 8192)
         self.player.note_on(channel, note.pitch, note.expression.velocity)
-        self._active_notes[note.pitch] = (
+        # Eindeutiger Key: id(note) statt pitch (mehrere gleiche Pitches möglich)
+        self._active_notes[id(note)] = (
             self.transport.current_beat, note, channel
         )
 

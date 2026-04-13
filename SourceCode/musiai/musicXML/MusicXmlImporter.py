@@ -49,14 +49,33 @@ class MusicXmlImporter:
         # Part-Namen aus <part-list>
         part_names = self._parse_part_names(root, ns)
 
-        # Parts parsen
+        # Parts parsen (Multi-Staff Parts aufteilen)
+        channel = 0
         for i, part_elem in enumerate(root.findall(f"{ns}part")):
             pid = part_elem.get("id", f"P{i+1}")
             part_name = part_names.get(pid, f"Part {i+1}")
-            part = self._parse_part(part_elem, part_name, i, ns, piece)
-            piece.add_part(part)
-            logger.info(f"  Part '{part.name}': {len(part.measures)} Takte, "
-                       f"{len(part.get_all_notes())} Noten")
+
+            # Prüfe ob Part mehrere Staves hat
+            n_staves = self._detect_staves(part_elem, ns)
+            if n_staves > 1:
+                # Multi-Staff: aufteilen (z.B. Piano → Treble + Bass)
+                for staff_num in range(1, n_staves + 1):
+                    suffix = "R.H." if staff_num == 1 else "L.H."
+                    sub_name = f"{part_name} ({suffix})"
+                    part = self._parse_part(
+                        part_elem, sub_name, channel, ns, piece,
+                        staff_filter=staff_num,
+                    )
+                    piece.add_part(part)
+                    logger.info(f"  Part '{part.name}': {len(part.measures)} Takte, "
+                               f"{len(part.get_all_notes())} Noten")
+                    channel += 1
+            else:
+                part = self._parse_part(part_elem, part_name, channel, ns, piece)
+                piece.add_part(part)
+                logger.info(f"  Part '{part.name}': {len(part.measures)} Takte, "
+                           f"{len(part.get_all_notes())} Noten")
+                channel += 1
 
         # Doppelte Tempos bereinigen
         self._cleanup_tempos(piece)
@@ -110,13 +129,27 @@ class MusicXmlImporter:
                 names[pid] = name_elem.text if name_elem is not None and name_elem.text else pid
         return names
 
+    def _detect_staves(self, part_elem: ET.Element, ns: str) -> int:
+        """Anzahl der Staves in einem Part erkennen."""
+        for measure_elem in part_elem.findall(f"{ns}measure"):
+            attrs = measure_elem.find(f"{ns}attributes")
+            if attrs is not None:
+                staves = attrs.find(f"{ns}staves")
+                if staves is not None and staves.text:
+                    return int(staves.text)
+        return 1
+
     def _parse_part(self, part_elem: ET.Element, name: str, channel: int,
-                    ns: str, piece: Piece) -> Part:
+                    ns: str, piece: Piece, staff_filter: int = 0) -> Part:
+        """Part parsen. staff_filter > 0: nur Noten mit <staff>N</staff>."""
         part = Part(name=name, channel=channel)
         state = MeasureParseState()
 
         for measure_elem in part_elem.findall(f"{ns}measure"):
-            measure = MeasureParser.parse(measure_elem, ns, state, piece.tempos)
+            measure = MeasureParser.parse(
+                measure_elem, ns, state, piece.tempos,
+                staff_filter=staff_filter,
+            )
             part.add_measure(measure)
             state.abs_beat += measure.duration_beats
 

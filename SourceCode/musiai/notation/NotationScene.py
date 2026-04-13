@@ -5,6 +5,9 @@ from PySide6.QtWidgets import QGraphicsScene, QGraphicsSimpleTextItem
 from PySide6.QtGui import QColor, QPen, QFont, QBrush
 from musiai.model.Piece import Piece
 from musiai.notation.MeasureRenderer import MeasureRenderer
+from musiai.notation.ClefHelper import ClefHelper, TREBLE, BASS
+from musiai.model.Measure import Measure as MeasureModel
+from musiai.model.Note import Note
 from musiai.notation.PlayheadItem import PlayheadItem
 from musiai.notation.CursorItem import CursorItem
 from musiai.notation.NoteItem import NoteItem
@@ -87,12 +90,15 @@ class NotationScene(QGraphicsScene):
                 real_part_idx = self.piece.parts.index(part)
                 x_offset = self.MARGIN_LEFT
 
+                # Schlüssel automatisch bestimmen
+                all_notes = [n for m in part.measures for n in m.notes]
+                clef = ClefHelper.detect_clef(all_notes)
+
                 # Label nur im ersten System
                 if sys_idx == 0:
                     self._draw_part_label(part, real_part_idx, center_y)
 
                 current_tempo = self.piece.initial_tempo
-                # Tempo bis zu diesem System-Start akkumulieren
                 for mi in range(first_measure_idx):
                     if mi < len(part.measures) and part.measures[mi].tempo:
                         current_tempo = part.measures[mi].tempo.bpm
@@ -116,6 +122,7 @@ class NotationScene(QGraphicsScene):
                     renderer = MeasureRenderer(
                         measure, x_offset, center_y, show_clef,
                         display_tempo, first_vel, current_tempo,
+                        clef=clef,
                     )
                     renderer.render(self)
                     self.measure_renderers.append(renderer)

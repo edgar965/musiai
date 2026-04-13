@@ -26,17 +26,18 @@ class MeasureParser:
 
     @staticmethod
     def parse(measure_elem: ET.Element, ns: str, state: MeasureParseState,
-              tempos_list: list[Tempo]) -> Measure:
-        """<measure> Element → Measure mit allen Noten und Attributen."""
+              tempos_list: list[Tempo], staff_filter: int = 0) -> Measure:
+        """<measure> Element → Measure mit allen Noten und Attributen.
+
+        staff_filter: 0 = alle Noten, 1/2/... = nur Noten mit <staff>N</staff>.
+        """
         measure_num = int(measure_elem.get("number", "1"))
         measure = Measure(number=measure_num, time_signature=TimeSignature(
             state.time_signature.numerator, state.time_signature.denominator
         ))
 
-        # Attributes (Taktart, Divisions) — überschreibt ggf. die Taktart
         MeasureParser._parse_attributes(measure_elem, ns, state, measure)
 
-        # Noten und Directions
         current_beat = 0.0
 
         for elem in measure_elem:
@@ -48,6 +49,20 @@ class MeasureParser:
                 )
 
             elif tag == "note":
+                # Staff-Filter: Note überspringen wenn falcher Staff
+                if staff_filter > 0:
+                    staff_elem = elem.find(f"{ns}staff")
+                    note_staff = int(staff_elem.text) if (
+                        staff_elem is not None and staff_elem.text
+                    ) else 1
+                    if note_staff != staff_filter:
+                        # Beat trotzdem vorwärts bewegen (für Timing)
+                        if not NoteParser.is_chord(elem, ns):
+                            dur_ticks = NoteParser.get_duration_ticks(elem, ns)
+                            if dur_ticks is not None:
+                                current_beat += dur_ticks / state.divisions
+                        continue
+
                 current_beat = MeasureParser._handle_note(
                     elem, ns, state, measure, current_beat
                 )
