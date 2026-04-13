@@ -112,15 +112,18 @@ class MeasureRenderer:
             ensure_font()
             glyph = BASS_CLEF if self.clef == BASS else TREBLE_CLEF
             clef_item = QGraphicsSimpleTextItem(glyph)
-            clef_size = int(STAFF_LINE_SPACING * 3.2)
+            # Bravura clef: Größe proportional, Position auf der richtigen Linie
+            clef_size = int(STAFF_LINE_SPACING * 2.2)
             clef_item.setFont(QFont(FONT_NAME, clef_size))
             clef_item.setBrush(QBrush(QColor(30, 30, 60)))
             if self.clef == BASS:
+                # Bass-Clef Baseline auf der 4. Linie (F)
                 clef_item.setPos(self.x_offset + 2,
-                                 self.center_y - sh + STAFF_LINE_SPACING)
+                                 self.center_y - STAFF_LINE_SPACING * 0.5)
             else:
-                clef_item.setPos(self.x_offset,
-                                 self.center_y + sh - STAFF_LINE_SPACING)
+                # Treble-Clef Baseline auf der 2. Linie (G)
+                clef_item.setPos(self.x_offset - 2,
+                                 self.center_y + STAFF_LINE_SPACING * 1.5)
             clef_item.setZValue(3)
             clef_item.setData(0, "clef")
             clef_item.setData(1, self.measure)
@@ -256,9 +259,9 @@ class MeasureRenderer:
                     acc_color = ColorScheme.velocity_to_color(
                         note.expression.velocity)
                     accid = QGraphicsSimpleTextItem(SHARP)
-                    accid.setFont(QFont(FONT_NAME, int(STAFF_LINE_SPACING * 1.8)))
+                    accid.setFont(QFont(FONT_NAME, int(STAFF_LINE_SPACING * 1.2)))
                     accid.setBrush(QBrush(acc_color))
-                    accid.setPos(nx - NOTE_RADIUS - 14, ny - 10)
+                    accid.setPos(nx - NOTE_RADIUS - 10, ny - 6)
                 else:
                     accid = QGraphicsSimpleTextItem("♯")
                     accid.setFont(QFont("Arial", 9))
@@ -280,9 +283,9 @@ class MeasureRenderer:
                     dot_color = ColorScheme.velocity_to_color(
                         note.expression.velocity)
                     dot = QGraphicsSimpleTextItem(DOT)
-                    dot.setFont(QFont(FONT_NAME, int(STAFF_LINE_SPACING * 1.8)))
+                    dot.setFont(QFont(FONT_NAME, int(STAFF_LINE_SPACING * 1.0)))
                     dot.setBrush(QBrush(dot_color))
-                    dot.setPos(nx + NOTE_RADIUS + 3, ny - 8)
+                    dot.setPos(nx + NOTE_RADIUS + 2, ny - 4)
                 else:
                     dot = QGraphicsSimpleTextItem(".")
                     dot.setFont(QFont("Arial", 14, QFont.Weight.Bold))

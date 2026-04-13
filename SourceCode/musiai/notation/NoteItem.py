@@ -60,7 +60,7 @@ class NoteItem(QGraphicsEllipseItem):
             glyph = NOTEHEAD_FILLED
         self._bravura_glyph = QGraphicsSimpleTextItem(glyph, self)
         from musiai.util.Constants import STAFF_LINE_SPACING
-        font_size = int(STAFF_LINE_SPACING * 1.8)
+        font_size = int(STAFF_LINE_SPACING * 1.6)
         self._bravura_glyph.setFont(QFont(FONT_NAME, font_size))
         # Position so dass Glyphe zentriert auf dem Notenkopf sitzt
         br = self._bravura_glyph.boundingRect()
