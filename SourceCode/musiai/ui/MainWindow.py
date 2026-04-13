@@ -82,14 +82,6 @@ class MainWindow(QMainWindow):
             self.render_mode_changed.emit(mode)
 
     def closeEvent(self, event) -> None:
-        """Fenster geschlossen → normale Qt-Shutdown-Kette auslösen.
-
-        Wichtig: KEIN os._exit() hier! Das verhindert dass debugpy
-        (PTVS/Visual Studio) das DAP-terminated-Event senden kann,
-        wodurch VS ewig im Debug-Modus hängenbleibt.
-        aboutToQuit → controller.shutdown() räumt Audio auf.
-        main.py _shutdown_native_audio() erledigt den Rest.
-        """
         event.accept()
 
     @property
