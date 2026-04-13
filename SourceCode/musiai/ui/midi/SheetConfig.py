@@ -41,14 +41,14 @@ class SheetConfig:
         cls._nw = cls.NoteWidth
         cls._lw = cls.LineWidth
 
-    def __init__(self, line_space: int = 12):
+    def __init__(self, line_space: int = 7):
         """Instance-level config for the Python renderer (larger default)."""
         self.line_width = 1
         self.left_margin = 4
         self.line_space = line_space
-        self.staff_height = 4 * line_space
-        self.note_height = line_space
-        self.note_width = int(line_space * 1.3)
+        self.staff_height = 4 * line_space + 5 * self.line_width
+        self.note_height = line_space + self.line_width
+        self.note_width = 3 * line_space // 2
         self.page_width = 1100
         # Set class-level statics to match instance for drawing
         SheetConfig.LineSpace = line_space
@@ -62,11 +62,11 @@ class SheetConfig:
 
     @staticmethod
     def large() -> 'SheetConfig':
-        return SheetConfig(line_space=12)
+        return SheetConfig(line_space=7)
 
     @staticmethod
     def small() -> 'SheetConfig':
-        return SheetConfig(line_space=8)
+        return SheetConfig(line_space=5)
 
     @classmethod
     def key_signature_width(cls, key_accids: list) -> int:
