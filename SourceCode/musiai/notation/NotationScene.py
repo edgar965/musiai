@@ -46,6 +46,14 @@ class NotationScene(QGraphicsScene):
         self.addItem(self.playhead)
         self.cursor = CursorItem()
         self.addItem(self.cursor)
+        self._show_chords = False
+
+    def set_show_chords(self, enabled: bool) -> None:
+        """Akkord-Anzeige aktivieren/deaktivieren und neu rendern."""
+        if enabled != self._show_chords:
+            self._show_chords = enabled
+            if self.piece:
+                self.refresh()
 
     def set_render_mode(self, mode: str) -> None:
         """Render-Modus setzen."""
@@ -162,7 +170,7 @@ class NotationScene(QGraphicsScene):
                     renderer = MeasureRenderer(
                         measure, x_offset, center_y, show_clef,
                         display_tempo, first_vel, current_tempo,
-                        clef=clef,
+                        clef=clef, show_chords=self._show_chords,
                     )
                     renderer.render(self)
                     self.measure_renderers.append(renderer)
@@ -263,18 +271,8 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def beat_to_x(self, global_beat: float) -> float:
-        if not self._primary_renderers:
-            return self.MARGIN_LEFT + global_beat * PIXELS_PER_BEAT
-        cumulative = 0.0
-        for r in self._primary_renderers:
-            dur = r.measure.duration_beats
-            if global_beat < cumulative + dur:
-                local = global_beat - cumulative
-                return r.x_offset + r.header_width + local * r.pixels_per_beat
-            cumulative += dur
-        last = self._primary_renderers[-1]
-        overshoot = global_beat - cumulative
-        return last.x_offset + last.width + overshoot * last.pixels_per_beat
+        x, _ = self._beat_to_pos(global_beat)
+        return x
 
     def x_to_beat(self, x: float) -> float:
         if not self._primary_renderers:
@@ -297,8 +295,31 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def update_playhead(self, beat: float) -> None:
-        x = self.beat_to_x(beat)
+        # Playhead nur in MusicXML-Modus (andere Modi haben kein beat↔x Mapping)
+        if self._render_mode != self.MODE_MUSICXML:
+            return
+        x, y_center = self._beat_to_pos(beat)
+        if y_center is not None:
+            sh = STAFF_LINE_SPACING * 3
+            self.playhead.set_y_range(y_center - sh, y_center + sh)
         self.playhead.show_at(x)
+
+    def _beat_to_pos(self, global_beat: float) -> tuple[float, float | None]:
+        """Beat → (x, center_y) mit korrekter Zeile bei Systemumbrüchen."""
+        if not self._primary_renderers:
+            return self.MARGIN_LEFT + global_beat * PIXELS_PER_BEAT, None
+        cumulative = 0.0
+        for r in self._primary_renderers:
+            dur = r.measure.duration_beats
+            if global_beat < cumulative + dur:
+                local = global_beat - cumulative
+                x = r.x_offset + r.header_width + local * r.pixels_per_beat
+                return x, r.center_y
+            cumulative += dur
+        last = self._primary_renderers[-1]
+        overshoot = global_beat - cumulative
+        x = last.x_offset + last.width + overshoot * last.pixels_per_beat
+        return x, last.center_y
 
     def hide_playhead(self) -> None:
         self.playhead.hide()
