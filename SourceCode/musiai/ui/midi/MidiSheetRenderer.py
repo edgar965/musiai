@@ -32,12 +32,14 @@ class MidiSheetRenderer:
         self.config = config or SheetConfig.large()
 
     def render_from_file(self, file_path: str, scene: QGraphicsScene,
-                         system_width: float = 1100) -> None:
+                         system_width: float = 1100,
+                         interleave: bool = True) -> None:
         """Render a MIDI file using music21 as parser.
 
-        Uses Music21Converter to extract clefs, time signatures, rests,
-        and proper note durations directly from the file, bypassing
-        the Piece model which loses some of this information.
+        Args:
+            interleave: If True, Treble+Bass staves are shown together
+                       per system row (like a piano score). If False,
+                       each track is rendered separately.
         """
         from musiai.ui.midi.Music21Converter import Music21Converter
 
@@ -57,32 +59,65 @@ class MidiSheetRenderer:
             return
 
         track_symbols = [pd['symbols'] for pd in parts_data]
-        track_clefs = [pd['clef'] for pd in parts_data]
 
         # Align symbols across tracks
         widths = SymbolWidths(track_symbols)
         self._align_symbols(track_symbols, widths)
 
-        # Use first part's time signature
-        time_num = parts_data[0]['time_num']
-        time_den = parts_data[0]['time_den']
-        measure_len = parts_data[0]['measure_len']
-        quarter = 480  # TPB
-
-        # Beaming deaktiviert (erzeugt kaputte Dreiecke)
-        # self._create_all_beamed_chords(
-        #     track_symbols, time_num, time_den, quarter, measure_len)
-
-        # Create staffs and render
+        # Create staffs per track
+        all_staffs = []  # list of (track_idx, list[Staff])
         for track_idx, symbols in enumerate(track_symbols):
             pd = parts_data[track_idx]
-
             staffs = self._create_staffs_for_track(
                 symbols, pd['measure_len'],
                 track_idx, len(track_symbols))
-
             for s in staffs:
                 s.calculate_height()
+            all_staffs.append((track_idx, staffs))
+
+        if interleave and len(all_staffs) > 1:
+            y_offset = self._render_interleaved(
+                scene, all_staffs, parts_data, cfg, y_offset, system_width)
+        else:
+            y_offset = self._render_sequential(
+                scene, all_staffs, parts_data, cfg, y_offset, system_width)
+
+        scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
+        logger.info(f"Rendered {len(parts_data)} parts from file via music21")
+
+    def _render_interleaved(self, scene, all_staffs, parts_data, cfg,
+                            y_offset, system_width):
+        """Treble+Bass zusammen pro Zeile (Partitur-Ansicht)."""
+        # Finde die maximale Anzahl Staffs pro Track
+        max_rows = max(len(staffs) for _, staffs in all_staffs)
+
+        # Part-Labels einmal oben
+        for track_idx, _ in all_staffs:
+            pd = parts_data[track_idx]
+            label = scene.addText(pd['part_name'])
+            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            label.setDefaultTextColor(QColor(30, 30, 80))
+            label.setPos(4, y_offset + track_idx * 60)
+
+        # Zeile für Zeile: alle Tracks nebeneinander
+        for row in range(max_rows):
+            for track_idx, staffs in all_staffs:
+                if row >= len(staffs):
+                    continue
+                staff = staffs[row]
+                pixmap = self._render_staff(staff, cfg)
+                item = scene.addPixmap(pixmap)
+                item.setPos(100, y_offset)
+                y_offset += staff.height
+            y_offset += 20  # Abstand zwischen Systemen
+
+        return y_offset
+
+    def _render_sequential(self, scene, all_staffs, parts_data, cfg,
+                           y_offset, system_width):
+        """Jeder Track separat (klassische Ansicht)."""
+        for track_idx, staffs in all_staffs:
+            pd = parts_data[track_idx]
 
             label = scene.addText(pd['part_name'])
             label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
@@ -96,8 +131,7 @@ class MidiSheetRenderer:
                 y_offset += staff.height + 15
             y_offset += 20
 
-        scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
-        logger.info(f"Rendered {len(parts_data)} parts from file via music21")
+        return y_offset
 
     def render(self, piece: Piece, scene: QGraphicsScene,
                system_width: float = 1100) -> None:

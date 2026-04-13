@@ -66,10 +66,11 @@ class MainWindow(QMainWindow):
 
         self._render_mode_combo = QComboBox()
         self._render_mode_combo.addItem("MusicXML", "musicxml")
-        self._render_mode_combo.addItem("MIDI Sheet", "midisheet")
+        self._render_mode_combo.addItem("MIDI Sheet (Partitur)", "midisheet")
+        self._render_mode_combo.addItem("MIDI Sheet (Stimmen)", "midisheet_seq")
         self._render_mode_combo.addItem("SVG (Verovio)", "svg")
         self._render_mode_combo.addItem("Piano Roll", "pianoroll")
-        self._render_mode_combo.setFixedWidth(150)
+        self._render_mode_combo.setFixedWidth(180)
         self._render_mode_combo.setToolTip("Darstellungsmodus wechseln")
         self._render_mode_combo.currentIndexChanged.connect(
             self._on_render_mode_changed

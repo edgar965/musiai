@@ -31,6 +31,7 @@ class NotationScene(QGraphicsScene):
     # Render-Modi
     MODE_MUSICXML = "musicxml"
     MODE_MIDISHEET = "midisheet"
+    MODE_MIDISHEET_SEQ = "midisheet_seq"
     MODE_SVG = "svg"
     MODE_PIANOROLL = "pianoroll"
 
@@ -57,8 +58,9 @@ class NotationScene(QGraphicsScene):
 
     def set_render_mode(self, mode: str) -> None:
         """Render-Modus setzen."""
-        if mode not in (self.MODE_MUSICXML, self.MODE_MIDISHEET,
-                        self.MODE_SVG, self.MODE_PIANOROLL):
+        valid = (self.MODE_MUSICXML, self.MODE_MIDISHEET,
+                 self.MODE_MIDISHEET_SEQ, self.MODE_SVG, self.MODE_PIANOROLL)
+        if mode not in valid:
             logger.warning(f"Unbekannter Render-Modus: {mode}")
             return
         if mode != self._render_mode:
@@ -92,8 +94,8 @@ class NotationScene(QGraphicsScene):
         self.addItem(self.playhead)
         self.addItem(self.cursor)
 
-        # MIDI Sheet can render from file without Piece parts
-        if self._render_mode == self.MODE_MIDISHEET:
+        # MIDI Sheet (Partitur oder Stimmen)
+        if self._render_mode in (self.MODE_MIDISHEET, self.MODE_MIDISHEET_SEQ):
             file_path = getattr(self, '_source_file_path', None)
             if file_path and file_path.lower().endswith(('.mid', '.midi')):
                 self._refresh_midisheet()
@@ -432,19 +434,16 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def _refresh_midisheet(self) -> None:
-        """MIDI-Notenblatt rendern (portiert von MusicExplorer).
-
-        When a source MIDI file path is available, uses music21 to parse
-        the file directly for accurate durations, rests, and clefs.
-        Falls back to the Piece model for non-MIDI sources.
-        """
+        """MIDI-Notenblatt rendern."""
         try:
             from musiai.ui.midi.MidiSheetRenderer import MidiSheetRenderer
             renderer = MidiSheetRenderer()
             file_path = getattr(self, '_source_file_path', None)
+            interleave = self._render_mode == self.MODE_MIDISHEET
             if file_path and file_path.lower().endswith(('.mid', '.midi')):
                 renderer.render_from_file(
-                    file_path, self, self._system_width)
+                    file_path, self, self._system_width,
+                    interleave=interleave)
             else:
                 renderer.render(self.piece, self, self._system_width)
         except Exception as e:
