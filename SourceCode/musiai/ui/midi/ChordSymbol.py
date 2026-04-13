@@ -449,11 +449,12 @@ class ChordSymbol(MusicSymbol):
                     painter, note, xnote, ynote, nh, nw, ls, lw,
                     color_mode=color_mode)
 
-            # Dotted notes
+            # Dotted notes — SMuFL-aware positioning
             if note.duration in (ND.DOTTED_HALF, ND.DOTTED_QUARTER,
                                  ND.DOTTED_EIGHTH):
                 if use_bravura:
                     from musiai.ui.midi.BravuraGlyphs import DOT, FONT_NAME
+                    from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
                     dot_size = max(14, int(ls * 3.5))
                     painter.setFont(QFont(FONT_NAME, dot_size))
                     if color_mode:
@@ -462,11 +463,32 @@ class ChordSymbol(MusicSymbol):
                         painter.setPen(QPen(dc))
                     else:
                         painter.setPen(QPen(QColor(0, 0, 0)))
-                    painter.drawText(xnote + nw + ls, ynote + nh // 2, DOT)
+
+                    # Dot x: notehead width + small gap (SMuFL dotSpacing)
+                    ne_bbox = SMuFLMetadata.get_bbox('noteheadBlack')
+                    ne = ne_bbox.get('bBoxNE', [1.18, 0.5])
+                    notehead_width = ne[0] * ls
+                    dot_gap = SMuFLMetadata.get_engraving_default(
+                        'augmentationDotNoteHeadXOffset', 0.3)
+                    dot_x = int(xnote + notehead_width + dot_gap * ls)
+
+                    # Dot y: if note is ON a staff line, shift up to space
+                    staff_pos = topstaff.dist(note.whitenote)
+                    on_line = (staff_pos % 2 == 0)
+                    if on_line:
+                        dot_y = ynote  # shift up half a space
+                    else:
+                        dot_y = ynote + nh // 2  # center in space
+
+                    painter.drawText(dot_x, dot_y, DOT)
                 else:
                     painter.setBrush(QBrush(QColor(0, 0, 0)))
+                    # Same on-line check for ellipse dots
+                    staff_pos = topstaff.dist(note.whitenote)
+                    on_line = (staff_pos % 2 == 0)
+                    dot_ey = ynote + (ls // 6 if on_line else ls // 3)
                     painter.drawEllipse(
-                        xnote + nw + ls // 2, ynote + ls // 3,
+                        xnote + nw + ls // 2, dot_ey,
                         max(3, ls // 2), max(3, ls // 2))
 
             # Ledger lines
@@ -550,22 +572,22 @@ class ChordSymbol(MusicSymbol):
         pen = QPen(QColor(0, 0, 0), 1)
         painter.setPen(pen)
 
-        # Above staff
+        # Above staff — snap y to pixel grid
         top = topstaff.add(1)
         dist = whitenote.dist(top)
         y = ytop - lw
         if dist >= 2:
             for i in range(2, dist + 1, 2):
                 y -= nh
-                painter.drawLine(xnote - ls // 4, y,
-                                 xnote + nw + ls // 4, y)
+                painter.drawLine(xnote - ls // 4, int(y),
+                                 xnote + nw + ls // 4, int(y))
 
-        # Below staff
+        # Below staff — snap y to pixel grid
         bottom = top.add(-8)
         y = ytop + (ls + lw) * 4 - 1
         dist = bottom.dist(whitenote)
         if dist >= 2:
             for i in range(2, dist + 1, 2):
                 y += nh
-                painter.drawLine(xnote - ls // 4, y,
-                                 xnote + nw + ls // 4, y)
+                painter.drawLine(xnote - ls // 4, int(y),
+                                 xnote + nw + ls // 4, int(y))

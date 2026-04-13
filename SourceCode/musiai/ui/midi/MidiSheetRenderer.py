@@ -623,25 +623,30 @@ class MidiSheetRenderer:
             text_item.setPos(105, y_offset - 28)
 
     def _render_staff(self, staff: Staff, cfg: dict) -> QPixmap:
-        """Render a staff onto a QPixmap at 2x resolution for sharpness."""
+        """Render a staff onto a QPixmap at 2x resolution for sharpness.
+
+        Uses devicePixelRatio so Qt handles the scaling transparently:
+        the pixmap is 2x pixels but reports as 1x logical size, giving
+        crisp rendering on both standard and HiDPI displays without
+        a lossy downscale step.
+        """
         scale = 2  # Retina-like rendering
         width = SheetConfig.PageWidth
-        height = max(staff.height + 20, 120)
+        height = max(staff.height + 40, 140)  # Extra space for flags/ledger lines
 
-        # Render at 2x resolution
+        # Create pixmap at 2x pixel resolution
         pixmap = QPixmap(width * scale, height * scale)
+        pixmap.setDevicePixelRatio(scale)
         pixmap.fill(QColor(255, 255, 255))
+
         painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Disable antialiasing for lines/stems so they stay crisp on grid
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        painter.scale(scale, scale)
+
+        # devicePixelRatio handles the 2x mapping; painter uses logical coords
         staff.draw(painter, 0, cfg)
         painter.end()
 
-        # Scale back to 1x display size with smooth filtering
-        return pixmap.scaled(
-            width, height,
-            aspectMode=Qt.AspectRatioMode.IgnoreAspectRatio,
-            mode=Qt.TransformationMode.SmoothTransformation,
-        )
+        return pixmap

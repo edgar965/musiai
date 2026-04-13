@@ -166,13 +166,12 @@ class Staff:
         # Draw tie curves between tied note pairs
         self._draw_ties(painter, ytop, x_symbols_start)
 
-        # Draw 5 horizontal staff lines
+        # Draw 5 horizontal staff lines — snap to pixel grid for sharpness
         pen = QPen(QColor(0, 0, 0), max(1, lw))
         painter.setPen(pen)
-        y = ytop - lw
         for line in range(5):
+            y = int(ytop - lw + line * (lw + ls))
             painter.drawLine(SC.LeftMargin, y, self.width - 1, y)
-            y += lw + ls
 
         # Draw end lines (left and right vertical bars)
         self._draw_end_lines(painter, ytop, y_offset)

@@ -30,16 +30,20 @@ class Stem:
         return self.receiver or self.pair is not None
 
     def _calculate_end(self) -> WhiteNote:
-        """Stem endpoint: +/-6 white notes, extra for 16th/32nd."""
+        """Stem endpoint: 3.5 staff spaces = 7 white notes, extra for flags.
+
+        Verovio uses 3.5 * staff_space as default stem length.
+        1 staff space = 2 white notes, so 3.5 * 2 = 7 white notes.
+        """
         if self.direction == UP:
-            w = self.top.add(6)
+            w = self.top.add(7)
             if self.duration == ND.SIXTEENTH:
                 w = w.add(2)
             elif self.duration == ND.THIRTYSECOND:
                 w = w.add(4)
             return w
         else:
-            w = self.bottom.add(-6)
+            w = self.bottom.add(-7)
             if self.duration == ND.SIXTEENTH:
                 w = w.add(-2)
             elif self.duration == ND.THIRTYSECOND:
@@ -99,8 +103,16 @@ class Stem:
                             ls, nh, nw):
         use_smufl = self._has_smufl_metadata()
 
+        # Stem thickness from SMuFL engraving defaults
         if use_smufl:
             from musiai.ui.midi.SMuFLMetadata import SMuFLMetadata
+            stem_thickness = SMuFLMetadata.get_engraving_default(
+                'stemThickness', 0.12)
+            stem_w = max(1, int(stem_thickness * ls + 0.5))
+            pen.setWidth(stem_w)
+            painter.setPen(pen)
+
+        if use_smufl:
             if self.direction == UP:
                 se = SMuFLMetadata.stem_up_se()
                 xstart = x + ls // 4 + int(se[0] * ls)
@@ -113,20 +125,26 @@ class Stem:
             else:
                 xstart = x + ls // 4 + nw
 
+        # Snap stem x to pixel grid for crisp rendering
+        xstart = int(xstart)
+
         if self.direction == UP:
             if use_smufl:
                 se = SMuFLMetadata.stem_up_se()
+                # SMuFL y-axis: positive = up; Qt: positive = down
+                # stemUpSE.y is negative (below notehead center)
                 y1 = (ytop + top_staff.dist(self.bottom) * nh // 2
-                       + nh // 2 + int(se[1] * ls))
+                       + nh // 2 - int(se[1] * ls))
             else:
                 y1 = ytop + top_staff.dist(self.bottom) * nh // 2 + nh // 4
             ystem = ytop + top_staff.dist(self.end) * nh // 2
-            painter.drawLine(xstart, y1, xstart, ystem)
+            painter.drawLine(xstart, int(y1), xstart, int(ystem))
         elif self.direction == DOWN:
             if use_smufl:
                 nw_pt = SMuFLMetadata.stem_down_nw()
+                # stemDownNW.y is positive (above notehead center)
                 y1 = (ytop + top_staff.dist(self.top) * nh // 2
-                       + nh // 2 + int(nw_pt[1] * ls))
+                       + nh // 2 - int(nw_pt[1] * ls))
             else:
                 y1 = ytop + top_staff.dist(self.top) * nh // 2 + nh
                 if self.side == LEFT_SIDE:
@@ -134,7 +152,12 @@ class Stem:
                 else:
                     y1 -= nh // 2
             ystem = (ytop + top_staff.dist(self.end) * nh // 2 + nh)
-            painter.drawLine(xstart, y1, xstart, ystem)
+            painter.drawLine(xstart, int(y1), xstart, int(ystem))
+
+        # Reset pen width
+        if use_smufl:
+            pen.setWidth(1)
+            painter.setPen(pen)
 
     @staticmethod
     def _has_smufl_metadata() -> bool:
