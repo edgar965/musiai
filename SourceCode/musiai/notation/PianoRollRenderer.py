@@ -54,7 +54,7 @@ class PianoRollRenderer:
             beat_offset = 0.0
             for measure in part.measures:
                 for note in measure.notes:
-                    if note.is_rest:
+                    if getattr(note, 'is_rest', False):
                         continue
                     x = LABEL_WIDTH + (beat_offset + note.start_beat) * ppb
                     pitch_row = MIDI_MAX_NOTE - note.pitch
