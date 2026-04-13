@@ -56,7 +56,7 @@ class RestSymbol(MusicSymbol):
         if glyph is None:
             return
 
-        size = max(8, int(nh * 2.0))
+        size = max(14, int(ls * 3.5))
         painter.setFont(QFont(BG.FONT_NAME, size))
         painter.setPen(QPen(QColor(0, 0, 0)))
         # Position rest vertically centered on the staff

@@ -190,7 +190,7 @@ class Stem:
         else:
             xstart = x + ls // 4 + nw
 
-        size = max(8, int(nh * 2.0))
+        size = max(14, int(ls * 3.5))
         font = QFont(BG.FONT_NAME, size)
         painter.setFont(font)
         painter.setPen(QPen(QColor(0, 0, 0)))

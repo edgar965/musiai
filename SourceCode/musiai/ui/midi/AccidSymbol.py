@@ -80,7 +80,8 @@ class AccidSymbol(MusicSymbol):
         if glyph is None:
             return
 
-        size = max(6, int(nh * 1.5))
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        size = max(12, int(SC.LineSpace * 3.0))
         painter.setFont(QFont(BG.FONT_NAME, size))
         painter.setPen(QPen(QColor(0, 0, 0)))
         painter.drawText(x, ynote + nh // 2, glyph)

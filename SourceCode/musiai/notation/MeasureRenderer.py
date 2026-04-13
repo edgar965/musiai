@@ -112,13 +112,15 @@ class MeasureRenderer:
             ensure_font()
             glyph = BASS_CLEF if self.clef == BASS else TREBLE_CLEF
             clef_item = QGraphicsSimpleTextItem(glyph)
-            clef_item.setFont(QFont(FONT_NAME, 32))
+            clef_size = int(STAFF_LINE_SPACING * 3.2)
+            clef_item.setFont(QFont(FONT_NAME, clef_size))
             clef_item.setBrush(QBrush(QColor(30, 30, 60)))
-            # Bravura clef baseline alignment
             if self.clef == BASS:
-                clef_item.setPos(self.x_offset + 2, self.center_y - sh - 6)
+                clef_item.setPos(self.x_offset + 2,
+                                 self.center_y - sh + STAFF_LINE_SPACING)
             else:
-                clef_item.setPos(self.x_offset, self.center_y - sh - 20)
+                clef_item.setPos(self.x_offset,
+                                 self.center_y + sh - STAFF_LINE_SPACING)
             clef_item.setZValue(3)
             clef_item.setData(0, "clef")
             clef_item.setData(1, self.measure)

@@ -465,7 +465,7 @@ class ChordSymbol(MusicSymbol):
         """Notenkopf mit Bravura SMuFL Glyph."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
-        size = max(8, int(nh * 1.8))
+        size = max(14, int(ls * 3.5))
         painter.setFont(QFont(BG.FONT_NAME, size))
         painter.setPen(QPen(QColor(0, 0, 0)))
         if note.duration in (ND.WHOLE,):
