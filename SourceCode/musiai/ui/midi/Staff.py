@@ -199,6 +199,51 @@ class Staff:
         painter.drawLine(SC.LeftMargin, ystart, SC.LeftMargin, yend)
         painter.drawLine(self.width - 1, ystart, self.width - 1, yend)
 
+    def _draw_time_signature(self, painter, x, ytop, config):
+        """Draw time signature numerator/denominator after clef+key sig."""
+        from PySide6.QtGui import QFont, QColor, QPen
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+
+        nh = SC.NoteHeight
+        ls = SC.LineSpace
+        lw = SC.LineWidth
+        use_bravura = config.get('use_bravura', False) if isinstance(config, dict) else False
+
+        num_str = str(self.time_num)
+        den_str = str(self.time_den)
+
+        if use_bravura:
+            from musiai.ui.midi import BravuraGlyphs as BG
+            size = max(12, int(ls * 2.8))
+            font = QFont(BG.FONT_NAME, size)
+            painter.setFont(font)
+            painter.setPen(QPen(QColor(0, 0, 0)))
+
+            # Numerator: centered on 2nd staff line from top
+            y_num = ytop + nh
+            # Denominator: centered on 4th staff line from top
+            y_den = ytop + nh + 2 * (lw + ls)
+
+            num_glyph = ''.join(BG.TIME_DIGITS[int(d)] for d in num_str)
+            den_glyph = ''.join(BG.TIME_DIGITS[int(d)] for d in den_str)
+
+            painter.drawText(x + 2, y_num, num_glyph)
+            painter.drawText(x + 2, y_den, den_glyph)
+        else:
+            size = max(10, int(ls * 2.5))
+            font = QFont("Arial", size, QFont.Weight.Bold)
+            painter.setFont(font)
+            painter.setPen(QPen(QColor(0, 0, 0)))
+
+            # Numerator on upper half, denominator on lower half
+            y_num = ytop + nh
+            y_den = ytop + nh + 2 * (lw + ls)
+
+            painter.drawText(x + 2, y_num, num_str)
+            painter.drawText(x + 2, y_den, den_str)
+
+        return x + SC.NoteWidth * 2
+
     def _draw_measure_numbers(self, painter, ytop):
         from PySide6.QtGui import QFont, QColor
         from musiai.ui.midi.SheetConfig import SheetConfig as SC

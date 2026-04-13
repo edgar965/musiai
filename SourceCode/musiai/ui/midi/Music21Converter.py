@@ -356,19 +356,13 @@ class Music21Converter:
         if diff <= 0:
             return []
 
-        dur = ND.from_beats(diff / quarter)
-        if dur is None:
-            return []
+        beats = diff / quarter
+        beat_parts = ND.split_complex(beats)
 
-        if dur in (ND.WHOLE, ND.HALF, ND.QUARTER, ND.EIGHTH):
-            return [RestSymbol(start, dur)]
-        elif dur == ND.DOTTED_HALF:
-            return [RestSymbol(start, ND.HALF),
-                    RestSymbol(start + quarter * 2, ND.QUARTER)]
-        elif dur == ND.DOTTED_QUARTER:
-            return [RestSymbol(start, ND.QUARTER),
-                    RestSymbol(start + quarter, ND.EIGHTH)]
-        elif dur == ND.DOTTED_EIGHTH:
-            return [RestSymbol(start, ND.EIGHTH),
-                    RestSymbol(start + quarter // 2, ND.SIXTEENTH)]
-        return []
+        rests = []
+        current = start
+        for part_beats in beat_parts:
+            dur = ND.from_beats(part_beats)
+            rests.append(RestSymbol(current, dur))
+            current += int(part_beats * quarter)
+        return rests
