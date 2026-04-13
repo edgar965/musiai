@@ -73,20 +73,20 @@ class ClefSymbol(MusicSymbol):
 
         if self.clef == TREBLE:
             if self.small:
-                size = max(12, int(staff_h * 0.7))
+                size = max(10, int(staff_h * 0.55))
                 y = ytop + nh
             else:
-                size = max(18, int(staff_h * 1.0))
-                y = ytop + int(nh * 3.2)
+                size = max(14, int(staff_h * 0.75))
+                y = ytop + int(nh * 3.0)
             font = QFont("Bravura", size)
             painter.setFont(font)
             painter.drawText(dx, y, self.TREBLE_GLYPH)
         else:
             if self.small:
-                size = max(10, int(staff_h * 0.5))
+                size = max(8, int(staff_h * 0.4))
             else:
-                size = max(14, int(staff_h * 0.7))
-            y = ytop + int(nh * 1.5)
+                size = max(10, int(staff_h * 0.55))
+            y = ytop + int(nh * 1.2)
             font = QFont("Bravura", size)
             painter.setFont(font)
             painter.drawText(dx, y, self.BASS_GLYPH)

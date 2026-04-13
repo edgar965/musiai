@@ -149,7 +149,7 @@ class Staff:
             x_current += s.width
 
         # Draw 5 horizontal staff lines
-        pen = QPen(QColor(0, 0, 0), 1)
+        pen = QPen(QColor(0, 0, 0), max(1, lw))
         painter.setPen(pen)
         y = ytop - lw
         for line in range(5):
