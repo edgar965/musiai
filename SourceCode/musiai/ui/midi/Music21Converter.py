@@ -126,9 +126,13 @@ class Music21Converter:
         first_dur = float(measures[0].duration.quarterLength)
         pickup_ticks = 0
         if first_dur < measure_len / TPB - 0.01:
-            # Use second measure's offset as the pickup length
-            if len(measures) > 1:
-                pickup_ticks = int(measures[1].offset * TPB)
+            # Use actual note content duration (ignore rests)
+            first_notes = [el for el in measures[0].recurse().notesAndRests
+                           if not self._is_rest(el)]
+            if first_notes:
+                max_end = max(float(el.offset + el.duration.quarterLength)
+                              for el in first_notes)
+                pickup_ticks = int(max_end * TPB)
             else:
                 pickup_ticks = int(first_dur * TPB)
 
@@ -510,31 +514,28 @@ class Music21Converter:
     # AddRests - fill gaps between notes
     # ------------------------------------------------------------------
     def _add_rests(self, symbols, time_num, time_den) -> list:
-        """Add rest symbols between notes.
-
-        Skips rest-filling inside pickup measures (before first real bar).
-        """
+        """Add rest symbols between notes."""
         quarter = TPB
         prev_time = 0
         result = []
-        seen_second_bar = False
-        bar_count = 0
         for sym in symbols:
-            if isinstance(sym, BarSymbol):
-                bar_count += 1
-                if bar_count >= 2:
-                    seen_second_bar = True
             start = sym.start_time
-            # Only add rests after the pickup (after second barline)
-            if seen_second_bar:
-                rests = self._get_rests(prev_time, start, quarter)
-                if rests:
-                    result.extend(rests)
+            rests = self._get_rests(prev_time, start, quarter)
+            if rests:
+                result.extend(rests)
             result.append(sym)
             if isinstance(sym, ChordSymbol):
                 prev_time = max(sym.end_time, prev_time)
             else:
                 prev_time = max(start, prev_time)
+            # After barline, jump prev_time to next note to skip gaps
+            if isinstance(sym, BarSymbol):
+                # Find next chord's start_time
+                idx = symbols.index(sym)
+                for nxt in symbols[idx + 1:]:
+                    if isinstance(nxt, ChordSymbol):
+                        prev_time = max(prev_time, nxt.start_time)
+                        break
         return result
 
     @staticmethod
