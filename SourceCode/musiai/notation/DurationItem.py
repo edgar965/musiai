@@ -1,4 +1,4 @@
-"""DurationItem - Zeigt Dauer-Abweichung als Zahl über der Note."""
+"""DurationItem - Zeigt Tempo-Abweichung als Text über der Note."""
 
 import logging
 from PySide6.QtWidgets import QGraphicsSimpleTextItem
@@ -8,16 +8,14 @@ logger = logging.getLogger("musiai.notation.DurationItem")
 
 
 class DurationItem(QGraphicsSimpleTextItem):
-    """Zahl über der Note: zeigt Dauer-Abweichung (Faktor - 1).
+    """Text über der Note: zeigt Tempo-Abweichung.
 
-    z.B. +0.2 für Faktor 1.2 (20% länger)
-         -0.1 für Faktor 0.9 (10% kürzer)
+    z.B. ×1.20 für 20% schneller (accel.)
+         ×0.80 für 20% langsamer (rit.)
     """
 
     def __init__(self, deviation: float, x: float, y: float):
-        diff = deviation - 1.0
-        sign = "+" if diff >= 0 else ""
-        super().__init__(f"{sign}{diff:.2f}")
+        super().__init__(f"\u00d7{deviation:.2f}")
         self.setFont(QFont("Arial", 8, QFont.Weight.Bold))
         self.setPos(x - 12, y - 18)
         self.setZValue(15)
@@ -25,8 +23,8 @@ class DurationItem(QGraphicsSimpleTextItem):
 
     def _update_color(self, deviation: float) -> None:
         if deviation < 1.0:
-            # Kürzer → Orange/Rot
+            # Langsamer → Orange (rit.)
             self.setBrush(QBrush(QColor(200, 100, 0)))
         else:
-            # Länger → Blau
+            # Schneller → Blau (accel.)
             self.setBrush(QBrush(QColor(0, 80, 200)))

@@ -39,6 +39,7 @@ class ChordSymbol(MusicSymbol):
         self.stem2: Stem | None = None
         self.hastwostems = False
         self.tied_to_next = False
+        self.drawn_notes: list[tuple] = []  # [(x, y, w, h, NoteData), ...]
 
         if not notedata:
             return
@@ -433,6 +434,7 @@ class ChordSymbol(MusicSymbol):
 
         pen = QPen(QColor(0, 0, 0), 1)
         painter.setPen(pen)
+        self.drawn_notes = []
 
         for note in self.notedata:
             ynote = ytop + topstaff.dist(note.whitenote) * nh // 2
@@ -440,10 +442,13 @@ class ChordSymbol(MusicSymbol):
             if not note.left_side:
                 xnote += nw
 
+            # Store hit rect for click detection
+            self.drawn_notes.append((xnote, ynote - nh // 2, nw, nh, note))
+
             if use_bravura:
                 self._draw_note_bravura(
                     painter, note, xnote, ynote, nh, nw, ls,
-                    color_mode=color_mode)
+                    color_mode=color_mode, lw=lw)
             else:
                 self._draw_note_ellipse(
                     painter, note, xnote, ynote, nh, nw, ls, lw,
@@ -499,7 +504,7 @@ class ChordSymbol(MusicSymbol):
 
     @staticmethod
     def _draw_note_bravura(painter, note, xnote, ynote, nh, nw, ls,
-                           color_mode=False):
+                           color_mode=False, lw=1):
         """Notenkopf mit Bravura SMuFL Glyph, positioned via metadata."""
         from PySide6.QtGui import QFont, QPen, QColor
         from musiai.ui.midi import BravuraGlyphs as BG
@@ -525,16 +530,15 @@ class ChordSymbol(MusicSymbol):
             glyph_name = 'noteheadBlack'
 
         # Use SMuFL bounding box for precise vertical centering.
-        # SMuFL y-axis: positive = up; Qt y-axis: positive = down.
-        # For noteheadBlack: bBoxNE=(1.18, 0.5), bBoxSW=(0, -0.5)
-        # center_y = 0.0 (perfectly centered on baseline).
-        # drawText baseline = ynote + nh//2 places glyph center on the
-        # staff position.  Adjust by glyph center offset * font_scale.
+        # Staff line y = ytop - lw + line * (lw + ls).
+        # ynote = ytop + dist * nh // 2.
+        # Glyph baseline must place center on staff line/space.
+        # Adjust by -lw to align with staff line grid.
         bbox = SMuFLMetadata.get_bbox(glyph_name)
         ne = bbox.get('bBoxNE', [0, 0])
         sw = bbox.get('bBoxSW', [0, 0])
         glyph_center_y = (ne[1] + sw[1]) / 2.0
-        y_draw = ynote + nh // 2 + int(glyph_center_y * sc)
+        y_draw = ynote - lw + nh // 2 + int(glyph_center_y * sc)
 
         painter.drawText(xnote, y_draw, glyph)
 

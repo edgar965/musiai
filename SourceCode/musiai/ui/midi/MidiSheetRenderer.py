@@ -5,7 +5,7 @@ AlignSymbols, CreateStaffs, CreateAllBeamedChords.
 """
 
 import logging
-from PySide6.QtWidgets import QGraphicsScene
+from PySide6.QtWidgets import QGraphicsScene, QGraphicsSimpleTextItem
 from PySide6.QtGui import QColor, QPen, QFont, QBrush, QPixmap, QPainter
 from PySide6.QtCore import Qt
 from musiai.model.Piece import Piece
@@ -116,6 +116,11 @@ class MidiSheetRenderer:
 
         # Pass staff layout to scene for playhead positioning
         self._store_staff_layout(scene)
+
+        # Draw tempo change and deviation markers
+        y_offsets = getattr(self, '_first_track_y_offsets', [])
+        self._draw_tempo_markers(scene, all_staffs, parts_data, y_offsets)
+
         logger.info(f"Rendered {len(parts_data)} parts from file via music21")
 
     def _render_interleaved(self, scene, all_staffs, parts_data, cfg,
@@ -131,7 +136,8 @@ class MidiSheetRenderer:
                 s.show_measures = (track_idx == all_staffs[0][0])
 
         # Track staff y-positions for playhead map
-        self._staff_y_positions = []  # (staff, y_scene_offset)
+        self._staff_y_positions = []
+        self._first_track_y_offsets = []  # y per staff row (first track)
 
         for row in range(max_rows):
             system_top = y_offset
@@ -144,16 +150,17 @@ class MidiSheetRenderer:
                 staff = staffs[row]
 
                 # Part-Label links neben dem Staff (jede Zeile)
-                if row == 0 or True:
-                    pd = parts_data[track_idx]
-                    lbl = scene.addText(pd['part_name'])
-                    lbl.setFont(QFont("Arial", 8))
-                    lbl.setDefaultTextColor(QColor(50, 50, 100))
-                    lbl.setPos(4, y_offset + 15)
+                pd = parts_data[track_idx]
+                self._draw_part_label(
+                    scene, pd['part_name'], track_idx,
+                    4, y_offset + 15, font_size=8)
 
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
+                item.setData(0, "staff_pixmap")
+                item.setData(1, staff)
+                item.setData(2, track_idx)
 
                 # Remember first track's staff for x-lookup
                 if track_idx == all_staffs[0][0]:
@@ -165,6 +172,7 @@ class MidiSheetRenderer:
             if first_track_staff is not None:
                 self._staff_y_positions.append(
                     (first_track_staff, system_top, y_offset))
+                self._first_track_y_offsets.append(system_top)
 
             # Klammer links (verbindet die Staves im System)
             if n_tracks > 1:
@@ -188,15 +196,17 @@ class MidiSheetRenderer:
         for track_idx, staffs in all_staffs:
             pd = parts_data[track_idx]
 
-            label = scene.addText(pd['part_name'])
-            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            label.setDefaultTextColor(QColor(30, 30, 80))
-            label.setPos(4, y_offset)
+            self._draw_part_label(
+                scene, pd['part_name'], track_idx,
+                4, y_offset, font_size=10)
 
             for staff in staffs:
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
+                item.setData(0, "staff_pixmap")
+                item.setData(1, staff)
+                item.setData(2, track_idx)
                 if first_track:
                     self._staff_y_positions.append(
                         (staff, y_offset, y_offset + staff.height))
@@ -254,6 +264,8 @@ class MidiSheetRenderer:
             track_symbols, time_num, time_den, quarter, measure_len)
         # Create staffs and render
         self._staff_y_positions = []
+        self._first_track_y_offsets = []
+        all_staffs_list = []  # for tempo markers
         first_track = True
         for track_idx, symbols in enumerate(track_symbols):
             clef = track_clefs[track_idx]
@@ -261,30 +273,38 @@ class MidiSheetRenderer:
 
             staffs = self._create_staffs_for_track(
                 symbols, measure_len, track_idx, len(track_symbols))
+            all_staffs_list.append((track_idx, staffs))
 
             # Recalculate heights after beaming
             for s in staffs:
                 s.calculate_height()
 
             # Part label
-            label = scene.addText(part.name if part else f"Track {track_idx}")
-            label.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            label.setDefaultTextColor(QColor(30, 30, 80))
-            label.setPos(4, y_offset)
+            self._draw_part_label(
+                scene, part.name if part else f"Track {track_idx}",
+                track_idx, 4, y_offset, font_size=10)
 
             for staff in staffs:
                 pixmap = self._render_staff(staff, cfg)
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
+                item.setData(0, "staff_pixmap")
+                item.setData(1, staff)
+                item.setData(2, track_idx)
                 if first_track:
                     self._staff_y_positions.append(
                         (staff, y_offset, y_offset + staff.height))
+                    self._first_track_y_offsets.append(y_offset)
                 y_offset += staff.height + 15
             y_offset += 20
             first_track = False
 
         scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
         self._store_staff_layout(scene)
+
+        # Draw tempo markers
+        self._draw_tempo_markers(
+            scene, all_staffs_list, [], self._first_track_y_offsets)
 
     # ------------------------------------------------------------------
     # Symbol creation
@@ -597,6 +617,95 @@ class MidiSheetRenderer:
             i = chord_indexes[0] + 1
             continue
 
+    def _draw_tempo_markers(self, scene, all_staffs, parts_data, y_offsets):
+        """Draw tempo change and deviation markers above notes.
+
+        Shows:
+        - Measure tempo changes (♩= 45) in green
+        - Per-note tempo deviations (×0.80) in orange/blue
+        """
+        from PySide6.QtWidgets import QGraphicsSimpleTextItem
+
+        if not all_staffs:
+            return
+        first_track_idx, first_staffs = all_staffs[0]
+
+        piece = getattr(scene, 'piece', None)
+        note_parts = []
+        if piece:
+            note_parts = [p for p in piece.parts
+                          if not (p.audio_track and p.audio_track.blocks)]
+
+        tpb = 480
+
+        # 1) Measure tempo changes from model
+        if note_parts:
+            part = note_parts[0]
+            abs_beat = 0.0
+            prev_tempo = piece.initial_tempo
+            for m in part.measures:
+                if m.tempo and abs(m.tempo.bpm - prev_tempo) >= 0.5:
+                    tick = int(abs_beat * tpb)
+                    bpm = int(round(m.tempo.bpm))
+                    for staff_i, staff in enumerate(first_staffs):
+                        if staff_i >= len(y_offsets):
+                            break
+                        x = staff.find_x_for_pulse(tick)
+                        if x is not None:
+                            scene_x = 100 + x
+                            scene_y = y_offsets[staff_i] + 2
+                            item = QGraphicsSimpleTextItem(
+                                f"\u2669= {bpm}")
+                            item.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+                            item.setBrush(QBrush(QColor(20, 120, 20)))
+                            item.setPos(scene_x - 5, scene_y)
+                            item.setZValue(20)
+                            scene.addItem(item)
+                            break
+                    prev_tempo = m.tempo.bpm
+                abs_beat += m.duration_beats
+
+        # 2) Per-note tempo deviations from model
+        if note_parts:
+            part = note_parts[0]
+            abs_beat = 0.0
+            for m in part.measures:
+                for n in m.notes:
+                    dev = n.expression.duration_deviation
+                    if abs(dev - 1.0) >= 0.01:
+                        tick = int((abs_beat + n.start_beat) * tpb)
+                        for staff_i, staff in enumerate(first_staffs):
+                            if staff_i >= len(y_offsets):
+                                break
+                            x = staff.find_x_for_pulse(tick)
+                            if x is not None:
+                                scene_x = 100 + x
+                                scene_y = y_offsets[staff_i] - 5
+                                item = QGraphicsSimpleTextItem(
+                                    f"\u00d7{dev:.2f}")
+                                item.setFont(QFont(
+                                    "Arial", 8, QFont.Weight.Bold))
+                                color = (QColor(200, 100, 0) if dev < 1.0
+                                         else QColor(0, 80, 200))
+                                item.setBrush(QBrush(color))
+                                item.setPos(scene_x - 10, scene_y)
+                                item.setZValue(20)
+                                scene.addItem(item)
+                                break
+                abs_beat += m.duration_beats
+
+        # 3) Tempo from parts_data (music21 file-based rendering)
+        if not note_parts and parts_data:
+            tempo = parts_data[0].get('tempo_bpm')
+            if tempo and tempo > 0:
+                item = QGraphicsSimpleTextItem(
+                    f"\u2669= {int(round(tempo))}")
+                item.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+                item.setBrush(QBrush(QColor(20, 120, 20)))
+                item.setPos(105, y_offsets[0] + 2 if y_offsets else 40)
+                item.setZValue(20)
+                scene.addItem(item)
+
     def _store_staff_layout(self, scene):
         """Store staff layout on the scene for playhead positioning.
 
@@ -650,6 +759,27 @@ class MidiSheetRenderer:
                 return p
             midi_idx += 1
         return None
+
+    @staticmethod
+    def _draw_part_label(scene, name: str, track_idx: int,
+                         x: float, y: float, font_size: int = 8):
+        """Draw part label + mute icon with data tags for click handling."""
+        lbl = QGraphicsSimpleTextItem(name)
+        lbl.setFont(QFont("Arial", font_size, QFont.Weight.Bold))
+        lbl.setBrush(QBrush(QColor(30, 30, 80)))
+        lbl.setPos(x, y)
+        lbl.setZValue(5)
+        lbl.setData(0, "part_label")
+        lbl.setData(1, track_idx)
+        scene.addItem(lbl)
+
+        mute = QGraphicsSimpleTextItem("\U0001F50A")
+        mute.setFont(QFont("Segoe UI Emoji", 12))
+        mute.setPos(x, y + 18)
+        mute.setZValue(5)
+        mute.setData(0, "part_mute")
+        mute.setData(1, track_idx)
+        scene.addItem(mute)
 
     def _draw_tempo_marking(self, scene, tempo_bpm, y_offset):
         """Draw tempo marking (quarter note = BPM) above first system."""

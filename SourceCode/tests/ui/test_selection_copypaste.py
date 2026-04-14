@@ -37,7 +37,24 @@ def make_piece():
     return piece
 
 
+_orig_bravura = None
+
+def _save_bravura():
+    global _orig_bravura
+    from PySide6.QtCore import QSettings
+    s = QSettings("MusiAI", "MusiAI")
+    if _orig_bravura is None:
+        _orig_bravura = s.value("ui/musicxml_bravura", "true")
+    return s
+
+def _restore_bravura():
+    from PySide6.QtCore import QSettings
+    QSettings("MusiAI", "MusiAI").setValue(
+        "ui/musicxml_bravura", _orig_bravura or "true")
+
 def make_env():
+    s = _save_bravura()
+    s.setValue("ui/musicxml_bravura", "false")
     bus = SignalBus()
     scene = NotationScene()
     ctrl = EditController(scene, bus)
@@ -51,7 +68,11 @@ def make_env():
 # Einzelauswahl
 # ==============================================================
 
-class TestSingleSelection(unittest.TestCase):
+class _RestoreMixin:
+    def tearDown(self):
+        _restore_bravura()
+
+class TestSingleSelection(_RestoreMixin, unittest.TestCase):
     def test_select_one_note(self):
         ctrl, scene, piece, items = make_env()
         ctrl.select_note(items[0])
@@ -75,7 +96,7 @@ class TestSingleSelection(unittest.TestCase):
 # Ctrl+Click Mehrfachauswahl
 # ==============================================================
 
-class TestCtrlClickSelection(unittest.TestCase):
+class TestCtrlClickSelection(_RestoreMixin, unittest.TestCase):
     def test_ctrl_adds_note(self):
         ctrl, scene, piece, items = make_env()
         ctrl.select_note(items[0])
@@ -107,7 +128,7 @@ class TestCtrlClickSelection(unittest.TestCase):
 # Shift+Click Range-Auswahl
 # ==============================================================
 
-class TestShiftClickSelection(unittest.TestCase):
+class TestShiftClickSelection(_RestoreMixin, unittest.TestCase):
     def test_shift_selects_range(self):
         ctrl, scene, piece, items = make_env()
         ctrl.select_note(items[0])
@@ -126,7 +147,7 @@ class TestShiftClickSelection(unittest.TestCase):
 # Takt-Auswahl
 # ==============================================================
 
-class TestMeasureSelection(unittest.TestCase):
+class TestMeasureSelection(_RestoreMixin, unittest.TestCase):
     def test_select_measure(self):
         ctrl, scene, piece, items = make_env()
         m1 = piece.parts[0].measures[0]
@@ -152,7 +173,7 @@ class TestMeasureSelection(unittest.TestCase):
 # Copy/Paste Noten
 # ==============================================================
 
-class TestCopyPasteNotes(unittest.TestCase):
+class TestCopyPasteNotes(_RestoreMixin, unittest.TestCase):
     def test_copy_single_note(self):
         ctrl, scene, piece, items = make_env()
         ctrl.select_note(items[0])
@@ -206,7 +227,7 @@ class TestCopyPasteNotes(unittest.TestCase):
 # Copy/Paste Takte
 # ==============================================================
 
-class TestCopyPasteMeasures(unittest.TestCase):
+class TestCopyPasteMeasures(_RestoreMixin, unittest.TestCase):
     def test_copy_measure(self):
         ctrl, scene, piece, items = make_env()
         m1 = piece.parts[0].measures[0]
@@ -267,7 +288,7 @@ class TestCopyPasteMeasures(unittest.TestCase):
 # Mehrfachauswahl + Bulk Edit
 # ==============================================================
 
-class TestBulkEdit(unittest.TestCase):
+class TestBulkEdit(_RestoreMixin, unittest.TestCase):
     def test_change_velocity_all_selected(self):
         ctrl, scene, piece, items = make_env()
         ctrl.select_note(items[0])
@@ -306,7 +327,7 @@ class TestBulkEdit(unittest.TestCase):
 # Edge Cases
 # ==============================================================
 
-class TestEdgeCases(unittest.TestCase):
+class TestEdgeCases(_RestoreMixin, unittest.TestCase):
     def test_copy_empty_selection(self):
         ctrl, scene, piece, items = make_env()
         ctrl.copy()  # Nichts selektiert
@@ -335,6 +356,85 @@ class TestEdgeCases(unittest.TestCase):
         # Note-Referenz überlebt Refresh
         self.assertIsNotNone(ctrl.selected_note)
         self.assertEqual(ctrl.selected_note, note)
+
+
+# ==============================================================
+# Bravura / MidiSheet Mode Tests
+# ==============================================================
+
+def make_env_bravura():
+    """Create test env with Bravura rendering (pixmap-based)."""
+    s = _save_bravura()
+    s.setValue("ui/musicxml_bravura", "true")
+    bus = SignalBus()
+    scene = NotationScene()
+    ctrl = EditController(scene, bus)
+    piece = make_piece()
+    scene.set_piece(piece)
+    return ctrl, scene, piece
+
+
+class TestBravuraRendering(_RestoreMixin, unittest.TestCase):
+    """Verify selection/edit tests' scene works in Bravura mode."""
+
+    def test_scene_renders_pixmaps(self):
+        from PySide6.QtWidgets import QGraphicsPixmapItem
+        ctrl, scene, piece = make_env_bravura()
+        pixmaps = [i for i in scene.items()
+                   if isinstance(i, QGraphicsPixmapItem)]
+        self.assertGreater(len(pixmaps), 0,
+                           "Bravura mode should produce pixmaps")
+
+    def test_staff_layout_for_playhead(self):
+        ctrl, scene, piece = make_env_bravura()
+        self.assertGreater(len(scene._staff_layout), 0,
+                           "Staff layout needed for playhead")
+
+    def test_refresh_stable(self):
+        ctrl, scene, piece = make_env_bravura()
+        scene.refresh()
+        from PySide6.QtWidgets import QGraphicsPixmapItem
+        pixmaps = [i for i in scene.items()
+                   if isinstance(i, QGraphicsPixmapItem)]
+        self.assertGreater(len(pixmaps), 0)
+
+    def test_part_labels_have_data_tags(self):
+        """Part labels should have data tags for click handling."""
+        from PySide6.QtWidgets import QGraphicsSimpleTextItem
+        ctrl, scene, piece = make_env_bravura()
+        labels = [i for i in scene.items()
+                  if isinstance(i, QGraphicsSimpleTextItem)
+                  and i.data(0) == "part_label"]
+        self.assertGreater(len(labels), 0,
+                           "Part labels must have 'part_label' data tag")
+
+    def test_mute_icons_present(self):
+        """Mute icons should be present in Bravura mode."""
+        from PySide6.QtWidgets import QGraphicsSimpleTextItem
+        ctrl, scene, piece = make_env_bravura()
+        mutes = [i for i in scene.items()
+                 if isinstance(i, QGraphicsSimpleTextItem)
+                 and i.data(0) == "part_mute"]
+        self.assertGreater(len(mutes), 0,
+                           "Mute icons must be present")
+
+    def test_copy_paste_model_level(self):
+        """Copy/paste at model level works regardless of render mode."""
+        ctrl, scene, piece = make_env_bravura()
+        m1 = piece.parts[0].measures[0]
+        m2 = piece.parts[0].measures[1]
+        ctrl.select_measure(m1)
+        ctrl.copy()
+        count_before = len(piece.parts[0].measures)
+        ctrl.paste()
+        self.assertEqual(len(piece.parts[0].measures), count_before + 1)
+
+    def test_measure_select_populates_notes(self):
+        """select_measure populates selected_notes from model."""
+        ctrl, scene, piece = make_env_bravura()
+        m1 = piece.parts[0].measures[0]
+        ctrl.select_measure(m1)
+        self.assertEqual(len(ctrl.selected_notes), 4)
 
 
 if __name__ == "__main__":

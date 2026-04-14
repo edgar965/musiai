@@ -187,14 +187,23 @@ class PlaybackEngine:
             if self._last_beat <= abs_beat < current_beat:
                 if not part.muted:
                     self._play_note(note, channel)
+                # Apply tempo deviation (affects all voices)
+                dev = note.expression.duration_deviation
+                if abs(dev - 1.0) >= 0.01:
+                    base = self.piece.initial_tempo if self.piece else 120
+                    self.transport.tempo_bpm = base * dev
 
         finished = []
         for key, note_data in self._active_notes.items():
             abs_beat, note, channel = note_data
-            eff_dur = note.duration_beats * note.expression.duration_deviation
-            if current_beat >= abs_beat + eff_dur:
+            if current_beat >= abs_beat + note.duration_beats:
                 self.player.note_off(channel, note.pitch)
                 finished.append(key)
+                # Reset tempo after note with deviation ends
+                dev = note.expression.duration_deviation
+                if abs(dev - 1.0) >= 0.01:
+                    base = self.piece.initial_tempo if self.piece else 120
+                    self.transport.tempo_bpm = base
         for key in finished:
             del self._active_notes[key]
 

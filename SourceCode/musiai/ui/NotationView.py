@@ -15,6 +15,7 @@ class NotationView(QGraphicsView):
     """Scrollbare, zoombare Ansicht der Notation."""
 
     note_clicked = Signal(object, bool, bool)  # NoteItem, ctrl, shift
+    staff_note_clicked = Signal(object, object, int, bool, bool)  # ChordSym, NoteData, track, ctrl, shift
     measure_clicked = Signal(object)           # Measure
     clef_clicked = Signal(object)              # Measure (containing clef)
     time_sig_clicked = Signal(object)          # Measure (containing time sig)
@@ -33,6 +34,12 @@ class NotationView(QGraphicsView):
     # Edit Mode
     edit_mode_changed = Signal(bool)           # True=entered, False=exited
     cursor_moved = Signal(float)               # new global beat position
+    interaction_mode_requested = Signal(str)   # "view", "edit", "midi_input"
+
+    # Interaction modes
+    MODE_VIEW = "view"
+    MODE_EDIT = "edit"
+    MODE_MIDI_INPUT = "midi_input"
 
     def __init__(self, scene: NotationScene):
         super().__init__(scene)
@@ -44,15 +51,18 @@ class NotationView(QGraphicsView):
         self._zoom_level = 1.0
         self._edit_mode = False
         self._cursor_beat = 0.0
+        self._interaction_mode = self.MODE_EDIT
 
-        # Edit Mode Label (oben links im View)
-        self._edit_label = QLabel("EDIT MODE  (Esc = beenden)", self)
-        self._edit_label.setStyleSheet(
+        # Mode Label (oben links im View)
+        self._mode_label = QLabel("", self)
+        self._mode_label.setStyleSheet(
             "background: #0070e0; color: white; font-weight: bold; "
             "font-size: 12px; padding: 4px 12px; border-radius: 4px;"
         )
-        self._edit_label.move(10, 10)
-        self._edit_label.setVisible(False)
+        self._mode_label.move(10, 10)
+        self._mode_label.setVisible(False)
+        # Legacy alias
+        self._edit_label = self._mode_label
 
         # Zoom widget bottom-right
         self._zoom_widget = ZoomWidget(self)
@@ -127,19 +137,28 @@ class NotationView(QGraphicsView):
 
     def keyPressEvent(self, event):
         key = event.key()
+        mods = event.modifiers()
 
-        if key == Qt.Key.Key_E and not self._edit_mode:
-            self._enter_edit_mode()
-            return
+        # Mode switching: V / E / I (without modifiers)
+        if not mods:
+            if key == Qt.Key.Key_V:
+                self.interaction_mode_requested.emit(self.MODE_VIEW)
+                return
+            if key == Qt.Key.Key_E:
+                self.interaction_mode_requested.emit(self.MODE_EDIT)
+                return
+            if key == Qt.Key.Key_I:
+                self.interaction_mode_requested.emit(self.MODE_MIDI_INPUT)
+                return
 
         if key == Qt.Key.Key_Escape:
-            if self._edit_mode:
-                self._exit_edit_mode()
+            if self._interaction_mode != self.MODE_VIEW:
+                self.interaction_mode_requested.emit(self.MODE_VIEW)
             else:
                 self.deselect_requested.emit()
             return
 
-        if self._edit_mode:
+        if self._interaction_mode == self.MODE_EDIT:
             if key == Qt.Key.Key_Right:
                 self._cursor_beat = max(0.0, self._cursor_beat + 1.0)
                 self.cursor_moved.emit(self._cursor_beat)
@@ -148,36 +167,69 @@ class NotationView(QGraphicsView):
                 self._cursor_beat = max(0.0, self._cursor_beat - 1.0)
                 self.cursor_moved.emit(self._cursor_beat)
                 return
-            if key == Qt.Key.Key_C and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_C and mods & Qt.KeyboardModifier.ControlModifier:
                 self.copy_requested.emit()
                 return
-            if key == Qt.Key.Key_V and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if key == Qt.Key.Key_V and mods & Qt.KeyboardModifier.ControlModifier:
                 self.paste_requested.emit()
                 return
 
-        # Non-edit-mode: Ctrl+C/V do nothing (no copy/paste outside edit mode)
-        if key == Qt.Key.Key_C and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            return  # blocked
-        if key == Qt.Key.Key_V and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            return  # blocked
+        # Non-edit-mode: Ctrl+C/V blocked
+        if key == Qt.Key.Key_C and mods & Qt.KeyboardModifier.ControlModifier:
+            return
+        if key == Qt.Key.Key_V and mods & Qt.KeyboardModifier.ControlModifier:
+            return
 
         super().keyPressEvent(event)
 
-    def _enter_edit_mode(self) -> None:
-        self._edit_mode = True
-        self._edit_label.setVisible(True)
+    def set_interaction_mode(self, mode: str) -> None:
+        """Set the interaction mode (called by controller)."""
+        old = self._interaction_mode
+        self._interaction_mode = mode
+        self._edit_mode = (mode == self.MODE_EDIT)
+
+        # Update label
+        labels = {
+            self.MODE_VIEW: "",
+            self.MODE_EDIT: "EDIT MODE  (V = View, I = MidiInput)",
+            self.MODE_MIDI_INPUT: "MIDI INPUT  (V = View, E = Edit)",
+        }
+        colors = {
+            self.MODE_VIEW: "",
+            self.MODE_EDIT: "background: #0070e0;",
+            self.MODE_MIDI_INPUT: "background: #e05000;",
+        }
+        text = labels.get(mode, "")
+        if text:
+            self._mode_label.setText(text)
+            self._mode_label.setStyleSheet(
+                f"{colors.get(mode, '')} color: white; font-weight: bold; "
+                "font-size: 12px; padding: 4px 12px; border-radius: 4px;"
+            )
+            self._mode_label.adjustSize()
+            self._mode_label.setVisible(True)
+        else:
+            self._mode_label.setVisible(False)
+
         self.setDragMode(QGraphicsView.DragMode.NoDrag)
-        self.setFocus()
-        self.edit_mode_changed.emit(True)
-        self.cursor_moved.emit(self._cursor_beat)
-        logger.info("Edit Mode aktiviert")
+        if mode == self.MODE_EDIT:
+            self.setFocus()
+            self.edit_mode_changed.emit(True)
+            self.cursor_moved.emit(self._cursor_beat)
+        elif old == self.MODE_EDIT:
+            self.edit_mode_changed.emit(False)
+
+        logger.info(f"Interaction mode: {mode}")
+
+    @property
+    def interaction_mode(self) -> str:
+        return self._interaction_mode
+
+    def _enter_edit_mode(self) -> None:
+        self.set_interaction_mode(self.MODE_EDIT)
 
     def _exit_edit_mode(self) -> None:
-        self._edit_mode = False
-        self._edit_label.setVisible(False)
-        self.setDragMode(QGraphicsView.DragMode.NoDrag)
-        self.edit_mode_changed.emit(False)
-        logger.info("Edit Mode deaktiviert")
+        self.set_interaction_mode(self.MODE_VIEW)
 
     def contextMenuEvent(self, event):
         """Rechtsklick-Menü für Stimm-Labels, Waveforms, Mute-Icons."""
@@ -229,13 +281,7 @@ class NotationView(QGraphicsView):
         ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         shift = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
 
-        # Note angeklickt?
-        for item in scene.items(scene_pos):
-            if isinstance(item, NoteItem):
-                self.note_clicked.emit(item, ctrl, shift)
-                return
-
-        # Schlüssel, Taktart oder Tempo angeklickt?
+        # Schlüssel, Taktart, Tempo, Labels — immer klickbar
         for item in scene.items(scene_pos):
             tag = item.data(0)
             if tag == "clef":
@@ -253,6 +299,27 @@ class NotationView(QGraphicsView):
             if tag == "part_mute":
                 self.part_mute_clicked.emit(item.data(1))
                 return
+
+        # Note angeklickt? (nicht im View-Modus)
+        if self._interaction_mode != self.MODE_VIEW:
+            for item in scene.items(scene_pos):
+                if isinstance(item, NoteItem):
+                    self.note_clicked.emit(item, ctrl, shift)
+                    return
+            # Staff pixmap hit-test (Bravura/MidiSheet mode)
+            for item in scene.items(scene_pos):
+                if item.data(0) == "staff_pixmap":
+                    staff = item.data(1)
+                    track_idx = item.data(2)
+                    if staff is not None:
+                        local = item.mapFromScene(scene_pos)
+                        chord, note_data = staff.find_note_at(
+                            int(local.x()), int(local.y()))
+                        if chord is not None:
+                            self.staff_note_clicked.emit(
+                                chord, note_data, track_idx, ctrl, shift)
+                            return
+                    break
 
         # Edit Mode: Klick setzt Cursor-Position
         if self._edit_mode:

@@ -35,11 +35,17 @@ class MidiExporter:
             for measure in part.measures:
                 for note in measure.notes:
                     tick_start = abs_tick + int(note.start_beat * 480)
-                    tick_duration = int(
-                        note.duration_beats * note.expression.duration_deviation * 480
-                    )
+                    tick_duration = int(note.duration_beats * 480)
                     vel = note.expression.velocity
                     cents = note.expression.cent_offset
+                    dev = note.expression.duration_deviation
+
+                    # Tempo change before note (deviation != 1.0)
+                    if abs(dev - 1.0) >= 0.01:
+                        new_tempo = piece.initial_tempo * dev
+                        tempo_us = int(60_000_000 / new_tempo)
+                        events.append((tick_start, "set_tempo",
+                                      {"tempo": tempo_us, "time": 0}))
 
                     # Pitch Bend vor der Note
                     if abs(cents) > 0.5:
@@ -57,6 +63,12 @@ class MidiExporter:
                                   {"channel": part.channel, "note": note.pitch,
                                    "velocity": 0, "time": 0}))
 
+                    # Tempo reset after note
+                    if abs(dev - 1.0) >= 0.01:
+                        base_us = int(60_000_000 / piece.initial_tempo)
+                        events.append((tick_start + tick_duration, "set_tempo",
+                                      {"tempo": base_us, "time": 0}))
+
                     # Pitch Bend Reset
                     if abs(cents) > 0.5:
                         events.append((tick_start + tick_duration, "pitchwheel",
@@ -70,7 +82,10 @@ class MidiExporter:
             for abs_t, msg_type, kwargs in events:
                 delta = abs_t - last_tick
                 kwargs["time"] = max(0, delta)
-                track.append(mido.Message(msg_type, **kwargs))
+                if msg_type == "set_tempo":
+                    track.append(mido.MetaMessage(msg_type, **kwargs))
+                else:
+                    track.append(mido.Message(msg_type, **kwargs))
                 last_tick = abs_t
 
         mid.save(path)

@@ -49,7 +49,8 @@ class TestMidiSheetBrahms(unittest.TestCase):
     def test_both_parts_have_pixmaps(self):
         """Beide Parts müssen Pixmaps erzeugen."""
         from musiai.notation.NotationScene import NotationScene
-        from PySide6.QtWidgets import QGraphicsPixmapItem, QGraphicsTextItem
+        from PySide6.QtWidgets import (QGraphicsPixmapItem, QGraphicsTextItem,
+                                       QGraphicsSimpleTextItem)
         scene = NotationScene()
         scene._source_file_path = BRAHMS
         scene.set_render_mode('midisheet')
@@ -58,7 +59,8 @@ class TestMidiSheetBrahms(unittest.TestCase):
         scene.refresh()
 
         labels = [i for i in scene.items()
-                  if isinstance(i, QGraphicsTextItem) and i.pos().x() < 50]
+                  if isinstance(i, (QGraphicsTextItem, QGraphicsSimpleTextItem))
+                  and i.pos().x() < 50]
         pixmaps = [i for i in scene.items()
                    if isinstance(i, QGraphicsPixmapItem)]
 

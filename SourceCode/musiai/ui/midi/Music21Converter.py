@@ -262,6 +262,7 @@ class Music21Converter:
         key_sharps < 0: flats  in order B E A D G C F
         """
         # WhiteNote letters: A=0, B=1, C=2, D=3, E=4, F=5, G=6
+        # Internal octaves: A/B are +1 vs standard (A4 intern = A3 standard)
         # Treble clef sharp order: F5 C5 G5 D5 A4 E5 B4
         # Treble clef flat order:  B4 E5 A4 D5 G4 C5 F4
         # Bass clef: same letters, 2 octaves lower
@@ -271,9 +272,9 @@ class Music21Converter:
                 WhiteNote(2, 5),  # C5
                 WhiteNote(6, 5),  # G5
                 WhiteNote(3, 5),  # D5
-                WhiteNote(0, 5),  # A5 (drawn on A4 line visually)
+                WhiteNote(0, 5),  # A (intern 5 = standard 4)
                 WhiteNote(4, 5),  # E5
-                WhiteNote(1, 5),  # B5 (drawn on B4 line visually)
+                WhiteNote(1, 5),  # B (intern 5 = standard 4)
             ]
             flat_notes = [
                 WhiteNote(1, 4),  # B4

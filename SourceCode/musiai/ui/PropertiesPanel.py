@@ -96,17 +96,19 @@ class PropertiesPanel(QDockWidget):
         cent_lay.addRow("Typ:", self._glide_combo)
         layout.addWidget(cent_group)
 
-        dur_group = QGroupBox("Dauer-Abweichung")
+        dur_group = QGroupBox("Tempo-Abweichung")
         dur_lay = QFormLayout(dur_group)
         self._dur_spin = QDoubleSpinBox()
         self._dur_spin.setRange(0.10, 10.0)
         self._dur_spin.setValue(1.0)
-        self._dur_spin.setSingleStep(0.10)  # Pfeiltasten: ±0.10
+        self._dur_spin.setSingleStep(0.05)
         self._dur_spin.setDecimals(2)
         self._dur_spin.setKeyboardTracking(False)
         self._dur_spin.setToolTip(
-            "Dauer-Faktor: 1.0 = Standard\n"
-            "Pfeiltasten: ±0.10 pro Schritt"
+            "Tempo-Faktor ab dieser Note:\n"
+            "1.0 = Standard-Tempo\n"
+            "0.8 = 20% langsamer (rit.)\n"
+            "1.2 = 20% schneller (accel.)"
         )
         self._dur_spin.valueChanged.connect(self._on_duration_changed)
         dur_lay.addRow("Faktor:", self._dur_spin)

@@ -154,6 +154,8 @@ class AppController:
             (view.copy_requested, ec.copy),
             (view.paste_requested, self._on_paste),
             (view.play_from_beat_requested, self._play_from_beat),
+            (view.interaction_mode_requested, self._on_interaction_mode_changed),
+            (view.staff_note_clicked, self._on_staff_note_clicked),
         ]
         for signal, slot in pairs:
             getattr(signal, op)(slot)
@@ -220,6 +222,10 @@ class AppController:
 
         # --- Akkord-Anzeige ---
         self.main_window.chord_display_changed.connect(self._on_chord_display_changed)
+
+        # --- Interaktionsmodus ---
+        self.main_window.interaction_mode_changed.connect(
+            self._on_interaction_mode_changed)
 
         # --- Audio Backend ---
         self.main_window._backend_gm_action.triggered.connect(
@@ -306,6 +312,58 @@ class AppController:
         state = "ein" if enabled else "aus"
         self.signal_bus.status_message.emit(f"Akkorde: {state}")
         logger.info(f"Akkord-Anzeige: {state}")
+
+    def _on_staff_note_clicked(self, chord, note_data, track_idx,
+                               ctrl, shift) -> None:
+        """Handle note click in Bravura/MidiSheet mode.
+
+        Finds the corresponding model Note and shows its properties.
+        """
+        piece = self._active_piece()
+        if not piece:
+            return
+        midi = note_data.number
+        tick = chord.start_time
+        beat = tick / 480.0  # TPB = 480
+
+        # Find model note by matching pitch + beat in the track's part
+        note_parts = [p for p in piece.parts
+                      if not (p.audio_track and p.audio_track.blocks)]
+        if track_idx >= len(note_parts):
+            return
+        part = note_parts[track_idx]
+
+        best = None
+        best_dist = float('inf')
+        abs_beat = 0.0
+        for m in part.measures:
+            for n in m.notes:
+                n_beat = abs_beat + n.start_beat
+                if n.pitch == midi:
+                    dist = abs(n_beat - beat)
+                    if dist < best_dist:
+                        best = n
+                        best_dist = dist
+            abs_beat += m.duration_beats
+
+        if best and best_dist < 1.0:
+            self.main_window.properties_panel.show_note(best)
+            self.signal_bus.status_message.emit(
+                f"Note: {best.name} (MIDI {best.pitch}, "
+                f"Vel {best.expression.velocity})")
+        else:
+            self.signal_bus.status_message.emit(
+                f"Note: MIDI {midi}, Vel {note_data.velocity}")
+
+    def _on_interaction_mode_changed(self, mode: str) -> None:
+        """Interaktionsmodus für den aktiven Tab setzen."""
+        if self._active_tab:
+            self._active_tab.notation_view.set_interaction_mode(mode)
+        self.main_window.set_interaction_mode(mode)
+        labels = {"view": "View", "edit": "Edit", "midi_input": "MidiInput"}
+        self.signal_bus.status_message.emit(
+            f"Modus: {labels.get(mode, mode)}")
+        logger.info(f"Interaktionsmodus: {mode}")
 
     def _active_edit_controller(self):
         return self._active_tab.edit_controller if self._active_tab else None
@@ -567,7 +625,10 @@ class AppController:
             new_level = dialog.log_level
             apply_log_level(new_level)
             logger.info(f"Log-Level geändert: {new_level}")
-            # Refresh notation to apply chord font changes
+            # Reload velocity colors from settings
+            from musiai.notation.ColorScheme import ColorScheme
+            ColorScheme.reload_colors()
+            # Refresh notation to apply changes
             if self._active_tab and self._active_tab.notation_scene:
                 self._active_tab.notation_scene.refresh()
 
@@ -1016,6 +1077,15 @@ class AppController:
             self.signal_bus.status_message.emit("SoundFont konnte nicht geladen werden")
 
     def _on_clef_clicked(self, measure) -> None:
+        """Notenschlüssel-Klick: Stimm-Eigenschaften anzeigen."""
+        piece = self._active_piece()
+        if piece:
+            for idx, part in enumerate(piece.parts):
+                if measure in part.measures:
+                    self.main_window.properties_panel.show_part(part, idx)
+                    self.signal_bus.status_message.emit(
+                        f"Stimme '{part.name}' — Schlüssel ausgewählt")
+                    return
         self.main_window.properties_panel.show_clef()
         self.signal_bus.status_message.emit("Notenschlüssel ausgewählt")
 

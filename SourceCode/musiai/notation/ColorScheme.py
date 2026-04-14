@@ -2,6 +2,7 @@
 
 import logging
 from PySide6.QtGui import QColor
+from PySide6.QtCore import QSettings
 from musiai.util.Constants import DEFAULT_VELOCITY
 
 logger = logging.getLogger("musiai.notation.ColorScheme")
@@ -10,40 +11,57 @@ logger = logging.getLogger("musiai.notation.ColorScheme")
 class ColorScheme:
     """Berechnet Farben aus Expression-Werten.
 
-    Velocity: Gelb(0) → Rot(80/Standard) → Blau(127)
+    Velocity: Leise(0) → Standard(80) → Laut(127)
+    Farben konfigurierbar über Einstellungen > MusicXML.
     Dauer: Rot-Gelb(kürzer) → Grau(exakt) → Blau(länger)
     """
 
-    @staticmethod
-    def velocity_to_color(velocity: int) -> QColor:
+    # Cached colors (loaded once, refreshed on settings change)
+    _color_std: QColor | None = None
+    _color_soft: QColor | None = None
+    _color_loud: QColor | None = None
+
+    @classmethod
+    def _load_colors(cls) -> None:
+        """Load velocity colors from QSettings."""
+        settings = QSettings("MusiAI", "MusiAI")
+        cls._color_std = QColor(
+            settings.value("musicxml/vel_color_std", "#FF0000"))
+        cls._color_soft = QColor(
+            settings.value("musicxml/vel_color_soft", "#FFFF00"))
+        cls._color_loud = QColor(
+            settings.value("musicxml/vel_color_loud", "#0000FF"))
+
+    @classmethod
+    def reload_colors(cls) -> None:
+        """Force reload from settings (call after settings change)."""
+        cls._load_colors()
+
+    @classmethod
+    def velocity_to_color(cls, velocity: int) -> QColor:
         """Velocity (0-127) → QColor.
 
-        0=Gelb, 80=Rot (Standard), 127=Blau
+        Interpoliert zwischen soft(0), standard(80), loud(127).
         """
+        if cls._color_std is None:
+            cls._load_colors()
+
         velocity = max(0, min(127, velocity))
 
         if velocity <= DEFAULT_VELOCITY:
-            # Gelb(0) → Rot(80)
             t = velocity / DEFAULT_VELOCITY
-            r = 255
-            g = int(255 * (1 - t))
-            b = 0
+            return _lerp_color(cls._color_soft, cls._color_std, t)
         else:
-            # Rot(80) → Blau(127)
             t = (velocity - DEFAULT_VELOCITY) / (127 - DEFAULT_VELOCITY)
-            r = int(255 * (1 - t))
-            g = 0
-            b = int(255 * t)
-
-        return QColor(r, g, b)
+            return _lerp_color(cls._color_std, cls._color_loud, t)
 
     @staticmethod
     def duration_to_color(deviation: float) -> QColor:
-        """Dauer-Abweichung (0.8-1.2) → QColor.
+        """Tempo-Abweichung (0.8-1.2) → QColor.
 
-        <1.0: Rot-Gelb (kürzer)
-        =1.0: Grau (Standard)
-        >1.0: Blau (länger)
+        <1.0: Rot-Gelb (langsamer / rit.)
+        =1.0: Grau (Standard-Tempo)
+        >1.0: Blau (schneller / accel.)
         """
         if abs(deviation - 1.0) < 0.01:
             return QColor(100, 100, 100)  # Grau = Standard
@@ -65,3 +83,11 @@ class ColorScheme:
     def cent_marker_color() -> QColor:
         """Farbe für Cent-Offset Marker (Zacken/Bögen)."""
         return QColor(255, 180, 50)
+
+
+def _lerp_color(c1: QColor, c2: QColor, t: float) -> QColor:
+    """Linear interpolation between two colors."""
+    r = int(c1.red() + (c2.red() - c1.red()) * t)
+    g = int(c1.green() + (c2.green() - c1.green()) * t)
+    b = int(c1.blue() + (c2.blue() - c1.blue()) * t)
+    return QColor(r, g, b)

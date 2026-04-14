@@ -56,6 +56,17 @@ class TestColorScheme(unittest.TestCase):
 
 
 class TestNotationScene(unittest.TestCase):
+    def setUp(self):
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        self._orig_bravura = s.value("ui/musicxml_bravura", "true")
+        s.setValue("ui/musicxml_bravura", "false")
+
+    def tearDown(self):
+        from PySide6.QtCore import QSettings
+        QSettings("MusiAI", "MusiAI").setValue(
+            "ui/musicxml_bravura", self._orig_bravura)
+
     def _make_piece(self, num_measures=2, notes_per_measure=3):
         from musiai.model.Piece import Piece
         from musiai.model.Part import Part
@@ -101,6 +112,77 @@ class TestNotationScene(unittest.TestCase):
         self.assertTrue(scene.playhead.isVisible())
         scene.hide_playhead()
         self.assertFalse(scene.playhead.isVisible())
+
+
+class TestNotationSceneBravura(unittest.TestCase):
+    """Same tests as TestNotationScene but with Bravura/MidiSheet pipeline."""
+
+    def setUp(self):
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        self._orig_bravura = s.value("ui/musicxml_bravura", "true")
+        s.setValue("ui/musicxml_bravura", "true")
+
+    def tearDown(self):
+        from PySide6.QtCore import QSettings
+        QSettings("MusiAI", "MusiAI").setValue(
+            "ui/musicxml_bravura", self._orig_bravura)
+
+    def _make_piece(self, num_measures=2, notes_per_measure=3):
+        from musiai.model.Piece import Piece
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+        from musiai.model.Note import Note
+        from musiai.model.Expression import Expression
+
+        piece = Piece("Test")
+        part = Part("Piano")
+        for i in range(num_measures):
+            m = Measure(i + 1)
+            for j in range(notes_per_measure):
+                expr = Expression(velocity=40 + j * 30, cent_offset=j * 5.0,
+                                  glide_type="zigzag" if j == 1 else "none")
+                m.add_note(Note(60 + j * 4, j, 1.0, expr))
+            part.add_measure(m)
+        piece.add_part(part)
+        return piece
+
+    def test_render_creates_pixmaps(self):
+        """Bravura mode renders pixmaps instead of NoteItems."""
+        from musiai.notation.NotationScene import NotationScene
+        from PySide6.QtWidgets import QGraphicsPixmapItem
+        scene = NotationScene()
+        piece = self._make_piece(2, 3)
+        scene.set_piece(piece)
+        pixmaps = [i for i in scene.items()
+                   if isinstance(i, QGraphicsPixmapItem)]
+        self.assertGreater(len(pixmaps), 0)
+
+    def test_refresh_no_crash(self):
+        """Bravura refresh does not crash."""
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        piece = self._make_piece(1, 2)
+        scene.set_piece(piece)
+        scene.refresh()
+        # Should have items after refresh
+        self.assertGreater(len(list(scene.items())), 0)
+
+    def test_playhead(self):
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        scene.set_piece(self._make_piece())
+        scene.update_playhead(2.0)
+        self.assertTrue(scene.playhead.isVisible())
+        scene.hide_playhead()
+        self.assertFalse(scene.playhead.isVisible())
+
+    def test_staff_layout_populated(self):
+        """Bravura mode populates _staff_layout for playhead."""
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        scene.set_piece(self._make_piece(4, 3))
+        self.assertGreater(len(scene._staff_layout), 0)
 
 
 class TestNoteItem(unittest.TestCase):
@@ -152,7 +234,7 @@ class TestDurationItem(unittest.TestCase):
     def test_text_when_standard(self):
         from musiai.notation.DurationItem import DurationItem
         d = DurationItem(1.0, 50, 50)
-        self.assertEqual(d.text(), "+0.00")
+        self.assertEqual(d.text(), "\u00d71.00")
 
 
 if __name__ == "__main__":

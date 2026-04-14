@@ -20,6 +20,7 @@ class MainWindow(QMainWindow):
 
     render_mode_changed = Signal(str)
     chord_display_changed = Signal(bool)
+    interaction_mode_changed = Signal(str)  # "view", "edit", "midi_input"
 
     def __init__(self):
         super().__init__()
@@ -86,10 +87,41 @@ class MainWindow(QMainWindow):
         self._chord_toggle.clicked.connect(self._on_chord_toggle)
         tb.addWidget(self._chord_toggle)
 
+        tb.addSeparator()
+
+        mode_lbl = QLabel(" Modus: ")
+        mode_lbl.setStyleSheet("color: #555; font-size: 12px;")
+        tb.addWidget(mode_lbl)
+
+        self._interaction_mode_combo = QComboBox()
+        self._interaction_mode_combo.addItem("View (V)", "view")
+        self._interaction_mode_combo.addItem("Edit (E)", "edit")
+        self._interaction_mode_combo.addItem("MidiInput (I)", "midi_input")
+        self._interaction_mode_combo.setCurrentIndex(1)  # Edit default
+        self._interaction_mode_combo.setFixedWidth(130)
+        self._interaction_mode_combo.setToolTip(
+            "Interaktionsmodus (V/E/I zum Umschalten)")
+        self._interaction_mode_combo.currentIndexChanged.connect(
+            self._on_interaction_mode_changed
+        )
+        tb.addWidget(self._interaction_mode_combo)
+
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, tb)
 
     def _on_chord_toggle(self, checked: bool) -> None:
         self.chord_display_changed.emit(checked)
+
+    def _on_interaction_mode_changed(self, index: int) -> None:
+        mode = self._interaction_mode_combo.itemData(index)
+        if mode:
+            self.interaction_mode_changed.emit(mode)
+
+    def set_interaction_mode(self, mode: str) -> None:
+        """Set combo box from external source (keyboard shortcut)."""
+        for i in range(self._interaction_mode_combo.count()):
+            if self._interaction_mode_combo.itemData(i) == mode:
+                self._interaction_mode_combo.setCurrentIndex(i)
+                return
 
     def _on_render_mode_changed(self, index: int) -> None:
         mode = self._render_mode_combo.itemData(index)

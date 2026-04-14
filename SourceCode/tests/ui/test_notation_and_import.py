@@ -172,6 +172,16 @@ class TestSystemBreaks(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         _ensure_qapp()
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        cls._orig_bravura = s.value("ui/musicxml_bravura", "true")
+        s.setValue("ui/musicxml_bravura", "false")
+
+    @classmethod
+    def tearDownClass(cls):
+        from PySide6.QtCore import QSettings
+        QSettings("MusiAI", "MusiAI").setValue(
+            "ui/musicxml_bravura", cls._orig_bravura)
 
     def _make_piece_with_measures(self, n_measures, n_parts=1):
         from musiai.model.Piece import Piece
@@ -246,6 +256,77 @@ class TestSystemBreaks(unittest.TestCase):
 # =============================================================================
 # System Bracket
 # =============================================================================
+
+class TestSystemBreaksBravura(unittest.TestCase):
+    """SystemBreaks tests with Bravura/MidiSheet rendering."""
+
+    @classmethod
+    def setUpClass(cls):
+        _ensure_qapp()
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        cls._orig_bravura = s.value("ui/musicxml_bravura", "true")
+        s.setValue("ui/musicxml_bravura", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        from PySide6.QtCore import QSettings
+        QSettings("MusiAI", "MusiAI").setValue(
+            "ui/musicxml_bravura", cls._orig_bravura)
+
+    def _make_piece_with_measures(self, n_measures, n_parts=1):
+        from musiai.model.Piece import Piece
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+        from musiai.model.Note import Note
+        from musiai.model.TimeSignature import TimeSignature
+
+        piece = Piece("Test")
+        for p in range(n_parts):
+            part = Part(name=f"Part {p+1}", channel=p)
+            for i in range(n_measures):
+                m = Measure(i + 1, TimeSignature(4, 4))
+                m.add_note(Note(60 + p, 0.0, 1.0))
+                part.add_measure(m)
+            piece.add_part(part)
+        return piece
+
+    def test_renders_without_error(self):
+        """Bravura rendering of multi-measure piece does not crash."""
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        piece = self._make_piece_with_measures(8)
+        scene.set_piece(piece)
+        self.assertGreater(len(list(scene.items())), 0)
+
+    def test_multi_part_renders_pixmaps(self):
+        """Multi-part Bravura rendering produces pixmaps."""
+        from musiai.notation.NotationScene import NotationScene
+        from PySide6.QtWidgets import QGraphicsPixmapItem
+        scene = NotationScene()
+        piece = self._make_piece_with_measures(8, n_parts=2)
+        scene.set_piece(piece)
+        pixmaps = [i for i in scene.items()
+                   if isinstance(i, QGraphicsPixmapItem)]
+        self.assertGreater(len(pixmaps), 0)
+
+    def test_staff_layout_populated(self):
+        """Bravura mode populates staff layout for playhead."""
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        piece = self._make_piece_with_measures(10)
+        scene.set_piece(piece)
+        self.assertGreater(len(scene._staff_layout), 0)
+
+    def test_playhead_positioning(self):
+        """Playhead can be positioned in Bravura mode."""
+        from musiai.notation.NotationScene import NotationScene
+        scene = NotationScene()
+        piece = self._make_piece_with_measures(8)
+        scene.set_piece(piece)
+        scene.update_playhead(2.0)
+        self.assertTrue(scene.playhead.isVisible())
+
 
 class TestSystemBracket(unittest.TestCase):
 

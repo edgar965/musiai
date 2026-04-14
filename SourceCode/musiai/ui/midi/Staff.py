@@ -149,6 +149,25 @@ class Staff:
             return xpos + offset + accid_w
         return xpos
 
+    def find_note_at(self, x: int, y: int):
+        """Find NoteData at pixel position within this staff's pixmap.
+
+        Returns (ChordSymbol, NoteData) or (None, None).
+        Uses drawn_notes stored during draw().
+        """
+        from musiai.ui.midi.SheetConfig import SheetConfig as SC
+        nh = SC.NoteHeight
+        tolerance = max(nh, 8)
+
+        for sym in self.symbols:
+            if not isinstance(sym, ChordSymbol):
+                continue
+            for nx, ny, nw, h, note_data in sym.drawn_notes:
+                if (nx - 4 <= x <= nx + nw + 4
+                        and ny - tolerance // 2 <= y <= ny + h + tolerance // 2):
+                    return sym, note_data
+        return None, None
+
     def _full_justify(self):
         """Expand symbols to fill page width."""
         from musiai.ui.midi.SheetConfig import SheetConfig as SC
@@ -415,13 +434,13 @@ class Staff:
                     x2 = x_positions[j] + nh // 2
 
                     # Curve below if stem up, above if stem down
-                    # Use ls*3 for a smooth, visible arc (Verovio-like)
+                    # Flat arc: max 1 line space height
                     if sym.stem1 and sym.stem1.direction == UP:
                         curve_y = y_note + nh
-                        ctrl_offset = ls * 3
+                        ctrl_offset = ls
                     else:
                         curve_y = y_note - nh // 2
-                        ctrl_offset = -ls * 3
+                        ctrl_offset = -ls
 
                     # Two control points offset by 1/3 and 2/3 for
                     # a smooth parabolic arc instead of a peak

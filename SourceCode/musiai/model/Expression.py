@@ -10,7 +10,7 @@ class Expression:
     Attributes:
         velocity: Lautstärke 0-127 (80=Standard, <80=leiser/gelb, >80=lauter/blau)
         cent_offset: Tonhöhen-Abweichung in Cent (-50 bis +50)
-        duration_deviation: Dauer-Abweichung als Faktor (1.0=exakt, 0.9=10% kürzer)
+        duration_deviation: Tempo-Faktor ab dieser Note (1.0=Standard, 0.8=20% langsamer, 1.2=20% schneller)
         glide_type: Art der Cent-Visualisierung ('none', 'zigzag', 'curve')
     """
 

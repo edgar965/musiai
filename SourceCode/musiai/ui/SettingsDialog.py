@@ -36,6 +36,7 @@ class SettingsDialog(QDialog):
         self._tabs.addTab(self._build_detection_tab(), "Notenerkennung")
         self._tabs.addTab(self._build_audio_tab(), "Audio")
         self._tabs.addTab(self._build_ui_tab(), "UI")
+        self._tabs.addTab(self._build_musicxml_tab(), "MusicXML")
         self._tabs.addTab(self._build_pdf_tab(), "PDF")
         self._tabs.addTab(self._build_logging_tab(), "Logging")
 
@@ -168,6 +169,75 @@ class SettingsDialog(QDialog):
         if color.isValid():
             self._chord_color_hex = color.name()
             self._update_color_button()
+
+    # ---- MusicXML Tab ----
+
+    def _build_musicxml_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        settings = QSettings("MusiAI", "MusiAI")
+
+        group = QGroupBox("Lautstärke-Farben (Velocity)")
+        form = QFormLayout(group)
+
+        info = QLabel(
+            "Velocity 0-127 (Standard=80, mf).\n"
+            "Noten werden zwischen diesen drei Farben interpoliert."
+        )
+        info.setStyleSheet("color: #666; font-size: 10px;")
+        form.addRow(info)
+
+        # Standard color (velocity = 80)
+        self._vel_color_std_hex = settings.value(
+            "musicxml/vel_color_std", "#FF0000")
+        self._vel_color_std_btn = QPushButton()
+        self._update_vel_btn(self._vel_color_std_btn, self._vel_color_std_hex)
+        self._vel_color_std_btn.clicked.connect(
+            lambda: self._pick_vel_color("std"))
+        form.addRow("Standard (mf, Vel 80):", self._vel_color_std_btn)
+
+        # Soft color (velocity = 0)
+        self._vel_color_soft_hex = settings.value(
+            "musicxml/vel_color_soft", "#FFFF00")
+        self._vel_color_soft_btn = QPushButton()
+        self._update_vel_btn(self._vel_color_soft_btn, self._vel_color_soft_hex)
+        self._vel_color_soft_btn.clicked.connect(
+            lambda: self._pick_vel_color("soft"))
+        form.addRow("Leiser (pp, Vel 0):", self._vel_color_soft_btn)
+
+        # Loud color (velocity = 127)
+        self._vel_color_loud_hex = settings.value(
+            "musicxml/vel_color_loud", "#0000FF")
+        self._vel_color_loud_btn = QPushButton()
+        self._update_vel_btn(self._vel_color_loud_btn, self._vel_color_loud_hex)
+        self._vel_color_loud_btn.clicked.connect(
+            lambda: self._pick_vel_color("loud"))
+        form.addRow("Lauter (ff, Vel 127):", self._vel_color_loud_btn)
+
+        layout.addWidget(group)
+        layout.addStretch()
+        return page
+
+    @staticmethod
+    def _update_vel_btn(btn: QPushButton, hex_color: str) -> None:
+        btn.setStyleSheet(
+            f"background-color: {hex_color}; "
+            f"min-width: 60px; min-height: 24px; border: 1px solid #888;"
+        )
+        btn.setText(hex_color)
+
+    def _pick_vel_color(self, which: str) -> None:
+        mapping = {
+            "std": (self._vel_color_std_btn, "_vel_color_std_hex"),
+            "soft": (self._vel_color_soft_btn, "_vel_color_soft_hex"),
+            "loud": (self._vel_color_loud_btn, "_vel_color_loud_hex"),
+        }
+        btn, attr = mapping[which]
+        current = getattr(self, attr)
+        color = QColorDialog.getColor(QColor(current), self, "Farbe wählen")
+        if color.isValid():
+            setattr(self, attr, color.name())
+            self._update_vel_btn(btn, color.name())
 
     # ---- PDF Tab ----
 
@@ -419,5 +489,9 @@ class SettingsDialog(QDialog):
         settings.setValue("ui/chord_font_color", self._chord_color_hex)
         settings.setValue("ui/chords_default",
                           "true" if self._chords_default.isChecked() else "false")
+        # MusicXML velocity colors
+        settings.setValue("musicxml/vel_color_std", self._vel_color_std_hex)
+        settings.setValue("musicxml/vel_color_soft", self._vel_color_soft_hex)
+        settings.setValue("musicxml/vel_color_loud", self._vel_color_loud_hex)
         settings.setValue("logging/level", self._log_level_slider.value())
         super().accept()
