@@ -81,9 +81,19 @@ class Music21Converter:
                 part_name = "Treble"
 
         chords = []
+        current_clef = clef
         for m_idx, m21_measure in enumerate(measures):
             abs_offset = m21_measure.offset  # in quarter-note beats
-            m_chords = self._convert_measure(m21_measure, abs_offset, clef)
+            # Check for mid-piece clef changes
+            measure_clefs = list(m21_measure.getElementsByClass('Clef'))
+            if measure_clefs:
+                from musiai.music21 import clef as m21_clef
+                if isinstance(measure_clefs[-1], m21_clef.BassClef):
+                    current_clef = BASS
+                else:
+                    current_clef = TREBLE
+            m_chords = self._convert_measure(
+                m21_measure, abs_offset, current_clef)
             chords.extend(m_chords)
 
         if not chords:
@@ -113,16 +123,39 @@ class Music21Converter:
         # Collect all notes and chords (recurse handles Voices)
         elements = list(m21_measure.recurse().notesAndRests)
 
-        # Group notes/chords by their absolute tick offset
-        time_groups: dict[int, list] = {}
+        # Separate grace notes from regular notes, then group by tick
+        regular_elements = []
+        grace_groups: dict[int, list] = {}  # main_tick → [grace elements]
         for el in elements:
             if self._is_rest(el):
-                continue  # rests handled later by _add_rests
-            offset_beats = abs_offset + el.offset
-            tick = int(offset_beats * TPB)
+                continue
+            is_grace = (float(el.duration.quarterLength) == 0)
+            if is_grace:
+                main_tick = int((abs_offset + el.offset) * TPB)
+                if main_tick not in grace_groups:
+                    grace_groups[main_tick] = []
+                grace_groups[main_tick].append(el)
+            else:
+                regular_elements.append(el)
+
+        # Group regular notes by tick
+        time_groups: dict[int, list] = {}
+        for el in regular_elements:
+            tick = int((abs_offset + el.offset) * TPB)
             if tick not in time_groups:
                 time_groups[tick] = []
             time_groups[tick].append(el)
+
+        # Insert grace notes before their main tick
+        for main_tick, graces in grace_groups.items():
+            grace_dur = TPB // 8  # 32nd note = 60 ticks
+            for i, gel in enumerate(graces):
+                g_tick = main_tick - grace_dur + i * (TPB // 16)
+                g_tick = max(0, g_tick)
+                # Avoid collision with existing ticks
+                while g_tick in time_groups:
+                    g_tick += 1
+                time_groups[g_tick] = [gel]
 
         for tick in sorted(time_groups):
             group = time_groups[tick]
@@ -132,6 +165,9 @@ class Music21Converter:
             dur_beats = 0.0
             for el in group:
                 el_dur = float(el.duration.quarterLength)
+                if el_dur == 0:
+                    # Grace note: render as 32nd note (0.125 beats)
+                    el_dur = 0.125
                 dur_beats = max(dur_beats, el_dur)
                 vel_obj = getattr(el, 'volume', None)
                 vel = int(vel_obj.velocity) if vel_obj and vel_obj.velocity else 80
@@ -261,48 +297,49 @@ class Music21Converter:
         key_sharps > 0: sharps in order F C G D A E B
         key_sharps < 0: flats  in order B E A D G C F
         """
-        # WhiteNote letters: A=0, B=1, C=2, D=3, E=4, F=5, G=6
-        # Internal octaves: A/B are +1 vs standard (A4 intern = A3 standard)
+        # Letters: C=0, D=1, E=2, F=3, G=4, A=5, B=6
+        # Standard octaves: C4=60, A4=69
         # Treble clef sharp order: F5 C5 G5 D5 A4 E5 B4
         # Treble clef flat order:  B4 E5 A4 D5 G4 C5 F4
         # Bass clef: same letters, 2 octaves lower
+        from musiai.ui.midi.WhiteNote import C, D, E, F, G, A, B
         if clef == TREBLE:
             sharp_notes = [
-                WhiteNote(5, 5),  # F5
-                WhiteNote(2, 5),  # C5
-                WhiteNote(6, 5),  # G5
-                WhiteNote(3, 5),  # D5
-                WhiteNote(0, 5),  # A (intern 5 = standard 4)
-                WhiteNote(4, 5),  # E5
-                WhiteNote(1, 5),  # B (intern 5 = standard 4)
+                WhiteNote(F, 5),  # F5
+                WhiteNote(C, 5),  # C5
+                WhiteNote(G, 5),  # G5
+                WhiteNote(D, 5),  # D5
+                WhiteNote(A, 4),  # A4
+                WhiteNote(E, 5),  # E5
+                WhiteNote(B, 4),  # B4
             ]
             flat_notes = [
-                WhiteNote(1, 4),  # B4
-                WhiteNote(4, 5),  # E5
-                WhiteNote(0, 4),  # A4
-                WhiteNote(3, 5),  # D5
-                WhiteNote(6, 4),  # G4
-                WhiteNote(2, 5),  # C5
-                WhiteNote(5, 4),  # F4
+                WhiteNote(B, 4),  # B4
+                WhiteNote(E, 5),  # E5
+                WhiteNote(A, 4),  # A4
+                WhiteNote(D, 5),  # D5
+                WhiteNote(G, 4),  # G4
+                WhiteNote(C, 5),  # C5
+                WhiteNote(F, 4),  # F4
             ]
         else:
             sharp_notes = [
-                WhiteNote(5, 3),  # F3
-                WhiteNote(2, 3),  # C3
-                WhiteNote(6, 3),  # G3
-                WhiteNote(3, 3),  # D3
-                WhiteNote(0, 3),  # A3
-                WhiteNote(4, 3),  # E3
-                WhiteNote(1, 3),  # B3
+                WhiteNote(F, 3),  # F3
+                WhiteNote(C, 3),  # C3
+                WhiteNote(G, 3),  # G3
+                WhiteNote(D, 3),  # D3
+                WhiteNote(A, 2),  # A2
+                WhiteNote(E, 3),  # E3
+                WhiteNote(B, 2),  # B2
             ]
             flat_notes = [
-                WhiteNote(1, 2),  # B2
-                WhiteNote(4, 3),  # E3
-                WhiteNote(0, 2),  # A2
-                WhiteNote(3, 3),  # D3
-                WhiteNote(6, 2),  # G2
-                WhiteNote(2, 3),  # C3
-                WhiteNote(5, 2),  # F2
+                WhiteNote(B, 2),  # B2
+                WhiteNote(E, 3),  # E3
+                WhiteNote(A, 2),  # A2
+                WhiteNote(D, 3),  # D3
+                WhiteNote(G, 2),  # G2
+                WhiteNote(C, 3),  # C3
+                WhiteNote(F, 2),  # F2
             ]
 
         accids = []

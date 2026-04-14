@@ -64,10 +64,10 @@ class TestWhiteNote(unittest.TestCase):
         self.assertEqual(c4.dist(e4), -2)
 
     def test_add(self):
-        from musiai.ui.midi.WhiteNote import WhiteNote, C
+        from musiai.ui.midi.WhiteNote import WhiteNote, C, D
         c4 = WhiteNote(C, 4)
         d4 = c4.add(1)
-        self.assertEqual(d4.letter, 3)  # D
+        self.assertEqual(d4.letter, D)
 
     def test_to_midi_roundtrip(self):
         from musiai.ui.midi.WhiteNote import WhiteNote

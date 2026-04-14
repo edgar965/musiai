@@ -1,34 +1,37 @@
-"""WhiteNote - Diatonische Notenposition (portiert von MusicExplorer)."""
+"""WhiteNote - Diatonische Notenposition (portiert von MusicExplorer).
 
-# Noten-Buchstaben (wie im C# Original)
-A, B, C, D, E, F, G = 0, 1, 2, 3, 4, 5, 6
+Standard-MIDI-Oktaven: C4 = MIDI 60, A4 = MIDI 69.
+Buchstaben C-basiert: C=0, D=1, E=2, F=3, G=4, A=5, B=6.
+"""
 
-# NoteScale: Chromatische Halbton-Offsets (A=0, A#=1, B=2, C=3, ...)
-_NOTESCALE = {A: 0, B: 2, C: 3, D: 5, E: 7, F: 8, G: 10}
+# Noten-Buchstaben (C-basiert, Standard-Oktaven)
+C, D, E, F, G, A, B = 0, 1, 2, 3, 4, 5, 6
+
+# Chromatische Halbton-Offsets ab C
+_NOTESCALE = {C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11}
 
 
 class NoteScale:
-    """Chromatische Skala (portiert von NoteScale in C#)."""
-    A = 0; Asharp = 1; Bflat = 1; B = 2; C = 3
-    Csharp = 4; Dflat = 4; D = 5; Dsharp = 6; Eflat = 6
-    E = 7; F = 8; Fsharp = 9; Gflat = 9; G = 10
-    Gsharp = 11; Aflat = 11
+    """Chromatische Skala (C-basiert)."""
+    C = 0; Csharp = 1; Dflat = 1; D = 2; Dsharp = 3; Eflat = 3
+    E = 4; F = 5; Fsharp = 6; Gflat = 6; G = 7
+    Gsharp = 8; Aflat = 8; A = 9; Asharp = 10; Bflat = 10; B = 11
 
     @staticmethod
     def to_number(notescale: int, octave: int) -> int:
-        return 9 + notescale + octave * 12
+        return 12 + notescale + octave * 12
 
     @staticmethod
     def from_number(number: int) -> int:
-        return (number + 3) % 12
+        return number % 12
 
     @staticmethod
     def is_black_key(notescale: int) -> bool:
-        return notescale in (1, 4, 6, 9, 11)
+        return notescale in (1, 3, 6, 8, 10)
 
 
 class WhiteNote:
-    """Diatonische Note mit Buchstabe (A-G) und Oktave."""
+    """Diatonische Note mit Buchstabe (C-B) und Oktave."""
 
     __slots__ = ('letter', 'octave')
 
@@ -57,8 +60,11 @@ class WhiteNote:
 
     @staticmethod
     def from_midi(midi_note: int) -> 'WhiteNote':
-        """MIDI-Notennummer -> naechste weisse Note."""
-        adjusted = midi_note - 9  # A0 = MIDI 21
+        """MIDI-Notennummer -> naechste weisse Note.
+
+        Standard-Oktaven: C4=60, A4=69.
+        """
+        adjusted = midi_note - 12  # C0 = MIDI 12
         octave = adjusted // 12
         remainder = adjusted % 12
         best_letter = 0
@@ -93,7 +99,7 @@ class WhiteNote:
         return a if a.dist(b) < 0 else b
 
     def __repr__(self) -> str:
-        names = "ABCDEFG"
+        names = "CDEFGAB"
         return f"{names[self.letter]}{self.octave}"
 
     def __eq__(self, other):
@@ -105,9 +111,11 @@ class WhiteNote:
         return hash((self.letter, self.octave))
 
 
-# Standard-Positionen (exakt wie C#)
-MIDDLE_C = WhiteNote(C, 4)
-TOP_TREBLE = WhiteNote(E, 5)
-BOTTOM_TREBLE = WhiteNote(F, 4)
-TOP_BASS = WhiteNote(G, 3)
-BOTTOM_BASS = WhiteNote(A, 3)
+# Standard-Positionen (Standard-MIDI-Oktaven)
+# Treble staff: bottom line E4, top line F5, top space above = E5 reference
+# Bass staff: bottom line G2, top line A3, top space = G3 reference
+MIDDLE_C = WhiteNote(C, 4)     # MIDI 60
+TOP_TREBLE = WhiteNote(E, 5)   # MIDI 76
+BOTTOM_TREBLE = WhiteNote(F, 4)  # MIDI 65
+TOP_BASS = WhiteNote(G, 3)     # MIDI 55
+BOTTOM_BASS = WhiteNote(A, 2)  # MIDI 45
