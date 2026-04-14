@@ -59,51 +59,37 @@ class WhiteNote:
         return self.number()
 
     @staticmethod
-    def from_midi(midi_note: int) -> 'WhiteNote':
-        """MIDI-Notennummer -> naechste weisse Note.
-
-        Standard-Oktaven: C4=60, A4=69.
-        """
-        adjusted = midi_note - 12  # C0 = MIDI 12
-        octave = adjusted // 12
-        remainder = adjusted % 12
-        best_letter = 0
-        best_dist = 99
-        for letter, offset in _NOTESCALE.items():
-            d = abs(offset - remainder)
-            if d < best_dist:
-                best_dist = d
-                best_letter = letter
-        return WhiteNote(best_letter, octave)
-
-    @staticmethod
-    def from_midi_in_key(midi_note: int, key_sharps: int = 0) -> 'WhiteNote':
+    def from_midi(midi_note: int, key_sharps: int = 0) -> 'WhiteNote':
         """MIDI-Notennummer -> WhiteNote basierend auf Tonart.
 
-        In flat keys (key_sharps < 0), black keys map to flats (Gb, Db, etc.).
-        In sharp keys (key_sharps > 0), black keys map to sharps (F#, C#, etc.).
-        For key_sharps == 0, black keys default to sharps (same as from_midi).
+        key_sharps < 0: schwarze Tasten als Flats (Gb, Db, etc.)
+        key_sharps > 0: schwarze Tasten als Sharps (F#, C#, etc.)
+        key_sharps = 0: schwarze Tasten als Sharps (Default)
         """
         adjusted = midi_note - 12  # C0 = MIDI 12
         octave = adjusted // 12
         remainder = adjusted % 12
 
         if not NoteScale.is_black_key(remainder):
-            # White key: same as from_midi
-            return WhiteNote.from_midi(midi_note)
+            # Weiße Taste: direkt aus Skala
+            best_letter = 0
+            best_dist = 99
+            for letter, offset in _NOTESCALE.items():
+                d = abs(offset - remainder)
+                if d < best_dist:
+                    best_dist = d
+                    best_letter = letter
+            return WhiteNote(best_letter, octave)
 
         if key_sharps < 0:
-            # Flat key: black keys map to the note ABOVE (flat of upper note)
-            # e.g. remainder=1 (C#/Db) -> D, remainder=6 (F#/Gb) -> G
             _FLAT_MAP = {1: D, 3: E, 6: G, 8: A, 10: B}
-            letter = _FLAT_MAP[remainder]
-            return WhiteNote(letter, octave)
+            return WhiteNote(_FLAT_MAP[remainder], octave)
         else:
-            # Sharp key (or C major): black keys map to note BELOW (sharp)
-            # e.g. remainder=1 (C#) -> C, remainder=6 (F#) -> F
             _SHARP_MAP = {1: C, 3: D, 6: F, 8: G, 10: A}
-            letter = _SHARP_MAP[remainder]
-            return WhiteNote(letter, octave)
+            return WhiteNote(_SHARP_MAP[remainder], octave)
+
+    # Alias für Kompatibilität
+    from_midi_in_key = from_midi
 
     @staticmethod
     def top(clef: int) -> 'WhiteNote':
