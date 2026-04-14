@@ -846,17 +846,16 @@ class MidiSheetRenderer:
 
     @staticmethod
     def _draw_waveform(scene, part, y_offset, system_width, tempo):
-        """Draw audio waveform for an audio part."""
+        """Draw audio waveform matching staff width."""
         from musiai.notation.WaveformItem import WaveformItem
-        ppb = 40  # pixels per beat for waveform
+        # Use same width as staff pixmaps (PageWidth)
+        staff_width = SheetConfig.PageWidth
         for i, block in enumerate(part.audio_track.blocks):
-            dur_beats = block.duration_beats(tempo)
-            width = min(dur_beats * ppb, system_width - 120)
-            x = 100 + block.start_beat * ppb
+            width = staff_width
+            x = 100  # same x as staff pixmaps
             item = WaveformItem(block.samples, block.sr, width, x,
                                 y_offset + 10, i)
             item.setData(0, "waveform")
-            # Store part index for context menu
             piece = getattr(scene, 'piece', None)
             part_idx = piece.parts.index(part) if piece and part in piece.parts else 0
             item.setData(1, part_idx)
