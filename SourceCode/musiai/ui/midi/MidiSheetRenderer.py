@@ -837,17 +837,32 @@ class MidiSheetRenderer:
         """Draw waveform segments below each staff row, synced with beats."""
         from musiai.notation.WaveformItem import WaveformItem
         layout = getattr(self, '_staff_y_positions', [])
-        if not layout:
-            return
 
         audio_parts = [p for p in piece.parts
                        if p.audio_track and p.audio_track.blocks]
         if not audio_parts:
             return
 
+        staff_width = SheetConfig.PageWidth
+
+        # Fallback: no staff rows → draw full waveform at y_after_staffs
+        if not layout:
+            for audio_part in audio_parts:
+                part_idx = piece.parts.index(audio_part)
+                block = audio_part.audio_track.blocks[0]
+                self._draw_part_label(
+                    scene, audio_part.name, part_idx,
+                    4, y_after_staffs, font_size=10)
+                item = WaveformItem(block.samples, block.sr,
+                                    staff_width, 100,
+                                    y_after_staffs + 10, 0)
+                item.setData(0, "waveform")
+                item.setData(1, part_idx)
+                scene.addItem(item)
+            return
+
         bpm = piece.initial_tempo
         tpb = 480
-        staff_width = SheetConfig.PageWidth
 
         for audio_part in audio_parts:
             part_idx = piece.parts.index(audio_part)
@@ -857,15 +872,13 @@ class MidiSheetRenderer:
             total_samples = len(samples)
             total_sec = total_samples / sr
 
-            for staff, y_top, y_bot in layout:
-                # Time range for this staff row
+            for si, (staff, y_top, y_bot) in enumerate(layout):
                 start_sec = staff.start_time / tpb * 60.0 / bpm
                 end_sec = staff.end_time / tpb * 60.0 / bpm
                 end_sec = min(end_sec, total_sec)
                 if start_sec >= total_sec:
                     continue
 
-                # Extract sample range
                 s_start = int(start_sec * sr)
                 s_end = int(end_sec * sr)
                 s_end = min(s_end, total_samples)
@@ -873,7 +886,6 @@ class MidiSheetRenderer:
                     continue
                 segment = samples[s_start:s_end]
 
-                # Draw below this staff row
                 wave_y = y_bot + 5
                 item = WaveformItem(segment, sr, staff_width,
                                     100, wave_y, 0)
@@ -881,8 +893,7 @@ class MidiSheetRenderer:
                 item.setData(1, part_idx)
                 scene.addItem(item)
 
-                # Label only on first row
-                if staff is layout[0][0]:
+                if si == 0:
                     self._draw_part_label(
                         scene, audio_part.name, part_idx,
                         4, wave_y, font_size=8)
