@@ -56,11 +56,22 @@ class SheetMusicRecognizer:
     @staticmethod
     def _find_audiveris() -> str | None:
         """Find Audiveris installation."""
+        # Project-local install (A:\MusiAI\tools\audiveris\Audiveris\)
+        project_root = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         paths = [
+            os.path.join(project_root, "tools", "audiveris",
+                         "Audiveris", "Audiveris.exe"),
+            os.path.join(project_root, "tools", "audiveris",
+                         "Audiveris", "bin", "Audiveris.bat"),
             os.path.join(os.environ.get("PROGRAMFILES", ""),
                          "Audiveris", "bin", "Audiveris.bat"),
+            os.path.join(os.environ.get("PROGRAMFILES", ""),
+                         "Audiveris", "Audiveris.exe"),
             os.path.join(os.environ.get("LOCALAPPDATA", ""),
                          "Audiveris", "Audiveris.bat"),
+            os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                         "Audiveris", "Audiveris.exe"),
         ]
         for p in paths:
             if os.path.exists(p):

@@ -22,7 +22,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Einstellungen")
-        self.setMinimumSize(500, 420)
+        self.setMinimumSize(600, 420)
         self._selected_engine = "pyin"
         self._setup_ui()
         self._detect_engines()
@@ -31,6 +31,8 @@ class SettingsDialog(QDialog):
     def _setup_ui(self) -> None:
         layout = QVBoxLayout(self)
         self._tabs = QTabWidget()
+        self._tabs.setElideMode(Qt.TextElideMode.ElideNone)
+        self._tabs.setUsesScrollButtons(False)
         layout.addWidget(self._tabs)
 
         self._tabs.addTab(self._build_detection_tab(), "Notenerkennung")
@@ -348,6 +350,42 @@ class SettingsDialog(QDialog):
         pitch_form.addRow("Tiefer (-Cent):", self._pitch_color_low_btn)
 
         layout.addWidget(pitch_group)
+
+        # Duration deviation colors
+        dur_group = QGroupBox("Notenlängen-Farben (Tempo-Abweichung)")
+        dur_form = QFormLayout(dur_group)
+
+        dur_info = QLabel(
+            "Farben für Notenlängen-Abweichung (Faktor)."
+        )
+        dur_info.setStyleSheet("color: #666; font-size: 10px;")
+        dur_form.addRow(dur_info)
+
+        self._dur_color_std_hex = settings.value(
+            "musicxml/dur_color_std", "#808080")
+        self._dur_color_std_btn = QPushButton()
+        self._update_vel_btn(self._dur_color_std_btn, self._dur_color_std_hex)
+        self._dur_color_std_btn.clicked.connect(
+            lambda: self._pick_dur_color("std"))
+        dur_form.addRow("Standard (\u00d71.0):", self._dur_color_std_btn)
+
+        self._dur_color_longer_hex = settings.value(
+            "musicxml/dur_color_longer", "#0050CC")
+        self._dur_color_longer_btn = QPushButton()
+        self._update_vel_btn(self._dur_color_longer_btn, self._dur_color_longer_hex)
+        self._dur_color_longer_btn.clicked.connect(
+            lambda: self._pick_dur_color("longer"))
+        dur_form.addRow("L\u00e4nger (Faktor > 1):", self._dur_color_longer_btn)
+
+        self._dur_color_shorter_hex = settings.value(
+            "musicxml/dur_color_shorter", "#CC5000")
+        self._dur_color_shorter_btn = QPushButton()
+        self._update_vel_btn(self._dur_color_shorter_btn, self._dur_color_shorter_hex)
+        self._dur_color_shorter_btn.clicked.connect(
+            lambda: self._pick_dur_color("shorter"))
+        dur_form.addRow("K\u00fcrzer (Faktor < 1):", self._dur_color_shorter_btn)
+
+        layout.addWidget(dur_group)
         layout.addStretch()
         return page
 
@@ -356,6 +394,19 @@ class SettingsDialog(QDialog):
             "std": (self._pitch_color_std_btn, "_pitch_color_std_hex"),
             "high": (self._pitch_color_high_btn, "_pitch_color_high_hex"),
             "low": (self._pitch_color_low_btn, "_pitch_color_low_hex"),
+        }
+        btn, attr = mapping[which]
+        current = getattr(self, attr)
+        color = QColorDialog.getColor(QColor(current), self, "Farbe wählen")
+        if color.isValid():
+            setattr(self, attr, color.name())
+            self._update_vel_btn(btn, color.name())
+
+    def _pick_dur_color(self, which: str) -> None:
+        mapping = {
+            "std": (self._dur_color_std_btn, "_dur_color_std_hex"),
+            "longer": (self._dur_color_longer_btn, "_dur_color_longer_hex"),
+            "shorter": (self._dur_color_shorter_btn, "_dur_color_shorter_hex"),
         }
         btn, attr = mapping[which]
         current = getattr(self, attr)
@@ -646,6 +697,10 @@ class SettingsDialog(QDialog):
         settings.setValue("musicxml/pitch_color_std", self._pitch_color_std_hex)
         settings.setValue("musicxml/pitch_color_high", self._pitch_color_high_hex)
         settings.setValue("musicxml/pitch_color_low", self._pitch_color_low_hex)
+        # Duration deviation colors
+        settings.setValue("musicxml/dur_color_std", self._dur_color_std_hex)
+        settings.setValue("musicxml/dur_color_longer", self._dur_color_longer_hex)
+        settings.setValue("musicxml/dur_color_shorter", self._dur_color_shorter_hex)
         # UI
         settings.setValue("ui/reopen_last_project",
                           "true" if self._reopen_last.isChecked() else "false")
