@@ -135,6 +135,7 @@ class MidiSheetRenderer:
 
         for row in range(max_rows):
             system_top = y_offset
+            first_track_staff = None
 
             # Alle Tracks dieser Zeile direkt untereinander
             for i, (track_idx, staffs) in enumerate(all_staffs):
@@ -154,12 +155,16 @@ class MidiSheetRenderer:
                 item = scene.addPixmap(pixmap)
                 item.setPos(100, y_offset)
 
-                # Remember first track's staff positions for playhead
+                # Remember first track's staff for x-lookup
                 if track_idx == all_staffs[0][0]:
-                    self._staff_y_positions.append(
-                        (staff, y_offset, y_offset + staff.height))
+                    first_track_staff = staff
 
                 y_offset += staff.height - 8  # Eng zusammen
+
+            # Store full system row extent (all voices)
+            if first_track_staff is not None:
+                self._staff_y_positions.append(
+                    (first_track_staff, system_top, y_offset))
 
             # Klammer links (verbindet die Staves im System)
             if n_tracks > 1:

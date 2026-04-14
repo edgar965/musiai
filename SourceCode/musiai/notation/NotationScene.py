@@ -298,7 +298,7 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def beat_to_x(self, global_beat: float) -> float:
-        x, _ = self._beat_to_pos(global_beat)
+        x, _, _ = self._beat_to_pos(global_beat)
         return x
 
     def x_to_beat(self, x: float) -> float:
@@ -322,18 +322,16 @@ class NotationScene(QGraphicsScene):
     # ------------------------------------------------------------------
 
     def update_playhead(self, beat: float) -> None:
-        x, y_center = self._beat_to_pos(beat)
-        if y_center is not None:
-            sh = STAFF_LINE_SPACING * 3
-            self.playhead.set_y_range(y_center - sh, y_center + sh)
+        x, y_top, y_bot = self._beat_to_pos(beat)
+        if y_top is not None and y_bot is not None:
+            self.playhead.set_y_range(y_top, y_bot)
         else:
-            # Volle Scene-Höhe für Modi ohne MeasureRenderers
             sr = self.sceneRect()
             self.playhead.set_y_range(0, sr.height())
         self.playhead.show_at(x)
 
-    def _beat_to_pos(self, global_beat: float) -> tuple[float, float | None]:
-        """Beat → (x, center_y) mit korrekter Zeile bei Systemumbrüchen.
+    def _beat_to_pos(self, global_beat: float) -> tuple[float, float | None, float | None]:
+        """Beat → (x, y_top, y_bot) mit korrekter Zeile bei Systemumbrüchen.
 
         Uses MidiSheetMusic-style Staff.find_x_for_pulse() when available.
         """
@@ -350,12 +348,14 @@ class NotationScene(QGraphicsScene):
                 if global_beat < cumulative + dur:
                     local = global_beat - cumulative
                     x = r.x_offset + r.header_width + local * r.pixels_per_beat
-                    return x, r.center_y
+                    sh = STAFF_LINE_SPACING * 3
+                    return x, r.center_y - sh, r.center_y + sh
                 cumulative += dur
             last = self._primary_renderers[-1]
             overshoot = global_beat - cumulative
             x = last.x_offset + last.width + overshoot * last.pixels_per_beat
-            return x, last.center_y
+            sh = STAFF_LINE_SPACING * 3
+            return x, last.center_y - sh, last.center_y + sh
 
         # Last resort: linear across scene width
         total_beats = self._get_total_beats()
@@ -363,23 +363,24 @@ class NotationScene(QGraphicsScene):
             sr = self.sceneRect()
             frac = global_beat / total_beats
             x = self.MARGIN_LEFT + frac * (sr.width() - self.MARGIN_LEFT * 2)
-            return x, None
-        return self.MARGIN_LEFT + global_beat * PIXELS_PER_BEAT, None
+            return x, None, None
+        return self.MARGIN_LEFT + global_beat * PIXELS_PER_BEAT, None, None
 
     def _beat_to_pos_staff(self, global_beat, staff_layout):
         """MidiSheet playhead: find x via Staff.find_x_for_pulse().
 
         Converts beats to ticks (TPB=480) and iterates staffs just like
         MidiSheetMusic's ShadeNotes method.
+        Returns (x, y_top, y_bot) spanning all voices in the system row.
         """
         pulse_time = int(global_beat * 480)
         x_offset = getattr(self, '_staff_x_offset', 100)
+        TOP_EXTRA = 40  # ~1cm above top staff
 
         for staff, y_top, y_bot in staff_layout:
             x = staff.find_x_for_pulse(pulse_time)
             if x is not None:
-                y_center = (y_top + y_bot) / 2
-                return x_offset + x, y_center
+                return x_offset + x, y_top - TOP_EXTRA, y_bot
 
         # Past all staffs: return end of last staff
         if staff_layout:
@@ -387,9 +388,9 @@ class NotationScene(QGraphicsScene):
             x = staff.find_x_for_pulse(staff.end_time)
             if x is None:
                 x = staff.width
-            return x_offset + x, (y_top + y_bot) / 2
+            return x_offset + x, y_top - TOP_EXTRA, y_bot
 
-        return self.MARGIN_LEFT, None
+        return self.MARGIN_LEFT, None, None
 
     def _get_total_beats(self) -> float:
         """Gesamtdauer des Stücks in Beats."""
@@ -526,7 +527,8 @@ class NotationScene(QGraphicsScene):
             interleave = self._render_mode in (
                 self.MODE_MIDISHEET, self.MODE_MIDISHEET_BRAVURA,
                 self.MODE_MUSICXML)
-            if file_path and file_path.lower().endswith(('.mid', '.midi')):
+            if file_path and file_path.lower().endswith(
+                    ('.mid', '.midi', '.xml', '.musicxml', '.mxl')):
                 renderer.render_from_file(
                     file_path, self, self._system_width,
                     interleave=interleave)

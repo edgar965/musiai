@@ -101,10 +101,8 @@ class Staff:
         """
         if pulse_time < self.start_time or pulse_time > self.end_time:
             return None
-        from musiai.ui.midi.SheetConfig import SheetConfig as SC
-        xpos = self.keysig_width + SC.LeftMargin + 5 + self.clefsym.width
-        if self.time_num > 0 and self.time_den > 0:
-            xpos += SC.NoteWidth * 2
+        # keysig_width already includes LeftMargin+5, clef width, and time sig
+        xpos = self.keysig_width
 
         for i, sym in enumerate(self.symbols):
             if isinstance(sym, BarSymbol):
@@ -123,11 +121,32 @@ class Staff:
                 break
 
             if start <= pulse_time < end:
-                return xpos
+                return self._notehead_x(sym, xpos)
             if start > pulse_time:
-                return xpos
+                return self._notehead_x(sym, xpos)
 
             xpos += sym.width
+        return xpos
+
+    @staticmethod
+    def _notehead_x(sym, xpos: int) -> int:
+        """Return x at the notehead center, not the symbol left edge."""
+        if isinstance(sym, ChordSymbol):
+            # Use precomputed stem position (exact notehead x)
+            st = sym.stem1 or sym.stem2
+            if st and getattr(st, 'drawn_x', None) is not None:
+                return st.drawn_x
+            # Fallback: skip accidentals + justification padding
+            offset = sym.width - sym.min_width
+            accid_w = 0
+            prev = None
+            for ac in sym.accidsymbols:
+                if prev is not None and ac.note.dist(prev.note) < 6:
+                    accid_w += ac.width
+                prev = ac
+            if prev is not None:
+                accid_w += prev.width
+            return xpos + offset + accid_w
         return xpos
 
     def _full_justify(self):

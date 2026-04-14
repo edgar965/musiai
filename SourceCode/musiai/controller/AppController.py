@@ -1035,7 +1035,10 @@ class AppController:
     def _load_default_file(self) -> None:
         import os
 
-        default_file = os.path.abspath("../media/music/midi/Brahms_Valse_15.mid")
+        default_file = os.path.abspath(
+            "../media/music/musicXML/_Echte/"
+            "Beethoven - Sonata 30, Mvt.3. "
+            "{Professional production score.}.mxl")
         if os.path.exists(default_file):
             try:
                 if default_file.endswith((".mid", ".midi")):
