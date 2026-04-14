@@ -41,8 +41,7 @@ class SheetMusicRecognizer:
         result = {}
         for key, info in SheetMusicRecognizer.ENGINES.items():
             if key == "audiveris":
-                # Check for Audiveris JAR or CLI
-                result[key] = SheetMusicRecognizer._find_audiveris() is not None
+                result[key] = SheetMusicRecognizer._find_audiveris_dir() is not None
             elif info["module"]:
                 try:
                     __import__(info["module"])
@@ -76,6 +75,20 @@ class SheetMusicRecognizer:
         for p in paths:
             if os.path.exists(p):
                 return p
+        return None
+
+    @staticmethod
+    def _find_audiveris_dir() -> str | None:
+        """Find Audiveris installation directory (with app/ and runtime/)."""
+        project_root = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        candidates = [
+            os.path.join(project_root, "tools", "audiveris", "Audiveris"),
+            os.path.join(os.environ.get("PROGRAMFILES", ""), "Audiveris"),
+        ]
+        for d in candidates:
+            if os.path.isdir(os.path.join(d, "app")):
+                return d
         return None
 
     @staticmethod
@@ -154,8 +167,8 @@ class SheetMusicRecognizer:
         result = OMRResult()
         result.engine = "audiveris"
 
-        audiveris = SheetMusicRecognizer._find_audiveris()
-        if not audiveris:
+        audiveris_dir = SheetMusicRecognizer._find_audiveris_dir()
+        if not audiveris_dir:
             result.error = "Audiveris nicht gefunden"
             return result
 
@@ -163,13 +176,29 @@ class SheetMusicRecognizer:
             output_dir = tempfile.mkdtemp(prefix="musiai_omr_")
             logger.info(f"Audiveris: {image_path} → {output_dir}")
 
+            # Use bundled JRE + classpath
+            java = os.path.join(audiveris_dir, "runtime", "bin", "java.exe")
+            app_dir = os.path.join(audiveris_dir, "app", "*")
+            if not os.path.exists(java):
+                java = "java"  # fallback to system Java
+
             proc = subprocess.run(
-                [audiveris, "-batch", "-export",
+                [java, "-cp", app_dir, "Audiveris",
+                 "-batch", "-export",
                  "-output", output_dir, image_path],
-                capture_output=True, text=True, timeout=120)
+                capture_output=True, text=True, timeout=180)
 
             if proc.returncode != 0:
-                result.error = f"Audiveris Fehler: {proc.stderr}"
+                # Extract useful error from stdout (Audiveris logs to stdout)
+                err_msg = proc.stdout or proc.stderr or ""
+                if "too low" in err_msg or "NOT RELIABLE" in err_msg:
+                    result.error = ("Bildauflösung zu niedrig. "
+                                    "Bitte 300 DPI Scan verwenden.")
+                elif "not complete" in err_msg:
+                    result.error = "Audiveris: Erkennung fehlgeschlagen"
+                else:
+                    result.error = f"Audiveris Fehler: {err_msg[-300:]}"
+                logger.warning(f"Audiveris exit {proc.returncode}")
                 return result
 
             # Find generated MusicXML
