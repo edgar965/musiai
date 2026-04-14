@@ -915,15 +915,22 @@ class AppController:
         scene = self._active_scene()
         self._beat_progress_item = None
         if scene:
-            from PySide6.QtGui import QFont, QColor
+            from PySide6.QtGui import QFont, QColor, QBrush
+            from PySide6.QtWidgets import QGraphicsSimpleTextItem
+            item = QGraphicsSimpleTextItem(
+                f"⏳ Beat-Erkennung läuft ({engine})...")
+            item.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+            item.setBrush(QBrush(QColor(0, 100, 200)))
+            item.setZValue(100)
+            # Position below waveform or in center
             rect = scene.sceneRect()
-            y_pos = rect.bottom() + 20
-            item = scene.addSimpleText("Beat-Erkennung läuft...")
-            font = QFont("Segoe UI", 14)
-            item.setFont(font)
-            item.setBrush(QColor(180, 180, 180))
-            item.setPos(rect.left() + 20, y_pos)
+            item.setPos(120, max(rect.height() - 40, 100))
+            scene.addItem(item)
             self._beat_progress_item = item
+            # Scroll to show it
+            view = self.main_window.notation_view
+            if view:
+                view.ensureVisible(item)
 
         self._beat_worker = BeatDetectWorker(path, engine)
         self._beat_detect_path = path
