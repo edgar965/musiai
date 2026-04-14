@@ -88,8 +88,6 @@ class WhiteNote:
             _SHARP_MAP = {1: C, 3: D, 6: F, 8: G, 10: A}
             return WhiteNote(_SHARP_MAP[remainder], octave)
 
-    # Alias für Kompatibilität
-    from_midi_in_key = from_midi
 
     @staticmethod
     def top(clef: int) -> 'WhiteNote':

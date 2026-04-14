@@ -371,7 +371,7 @@ class MidiSheetRenderer:
         notes_sorted = sorted(notes, key=lambda n: n.pitch)
         result = []
         for i, n in enumerate(notes_sorted):
-            wn = WhiteNote.from_midi_in_key(n.pitch, key_sharps)
+            wn = WhiteNote.from_midi(n.pitch, key_sharps)
             dur = ND.from_beats(n.duration_beats)
             pc = n.pitch % 12
             if pc in (1, 3, 6, 8, 10):
