@@ -126,15 +126,8 @@ class Music21Converter:
         first_dur = float(measures[0].duration.quarterLength)
         pickup_ticks = 0
         if first_dur < measure_len / TPB - 0.01:
-            # Use actual note content duration (ignore rests)
-            first_notes = [el for el in measures[0].recurse().notesAndRests
-                           if not self._is_rest(el)]
-            if first_notes:
-                max_end = max(float(el.offset + el.duration.quarterLength)
-                              for el in first_notes)
-                pickup_ticks = int(max_end * TPB)
-            else:
-                pickup_ticks = int(first_dur * TPB)
+            # Full pickup duration (including rests)
+            pickup_ticks = int(first_dur * TPB)
 
         last_tick = int(last_measure.offset * TPB) + measure_len
         symbols = self._add_bars(
