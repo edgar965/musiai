@@ -528,14 +528,6 @@ class Music21Converter:
                 prev_time = max(sym.end_time, prev_time)
             else:
                 prev_time = max(start, prev_time)
-            # After barline, jump prev_time to next note to skip gaps
-            if isinstance(sym, BarSymbol):
-                # Find next chord's start_time
-                idx = symbols.index(sym)
-                for nxt in symbols[idx + 1:]:
-                    if isinstance(nxt, ChordSymbol):
-                        prev_time = max(prev_time, nxt.start_time)
-                        break
         return result
 
     @staticmethod
