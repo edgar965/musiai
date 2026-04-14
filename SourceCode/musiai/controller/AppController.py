@@ -885,13 +885,19 @@ class AppController:
 
         try:
             from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
-            import tempfile, os
-            tmp = tempfile.mktemp(suffix=".musicxml")
+            import os
+            # Save to persistent temp folder for debugging
+            omr_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                             "media", "omr_output"))
+            os.makedirs(omr_dir, exist_ok=True)
+            base = os.path.splitext(os.path.basename(path))[0]
+            tmp = os.path.join(omr_dir, f"{base}_omr.musicxml")
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(result.musicxml)
+            logger.info(f"OMR XML gespeichert: {tmp}")
 
             piece = MusicXmlImporter().import_file(tmp)
-            os.unlink(tmp)
 
             piece.source_file = path
             self.project.add_piece(piece)
