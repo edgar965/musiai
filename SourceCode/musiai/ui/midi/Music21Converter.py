@@ -122,8 +122,19 @@ class Music21Converter:
             if has_notes:
                 last_measure = m
                 break
+        # Detect pickup (anacrusis): first measure shorter than time sig
+        first_dur = float(measures[0].duration.quarterLength)
+        pickup_ticks = 0
+        if first_dur < measure_len / TPB - 0.01:
+            # Use second measure's offset as the pickup length
+            if len(measures) > 1:
+                pickup_ticks = int(measures[1].offset * TPB)
+            else:
+                pickup_ticks = int(first_dur * TPB)
+
         last_tick = int(last_measure.offset * TPB) + measure_len
-        symbols = self._add_bars(chords, measure_len, last_tick)
+        symbols = self._add_bars(
+            chords, measure_len, last_tick, pickup_ticks)
         symbols = self._add_rests(symbols, time_num, time_den)
 
         return {
@@ -465,10 +476,19 @@ class Music21Converter:
     # AddBars - insert BarSymbols at measure boundaries
     # ------------------------------------------------------------------
     @staticmethod
-    def _add_bars(chords, measure_len, last_tick) -> list:
-        """Add bar symbols at each measure boundary."""
+    def _add_bars(chords, measure_len, last_tick,
+                  pickup_ticks=0) -> list:
+        """Add bar symbols at each measure boundary.
+
+        pickup_ticks: length of pickup measure (0 = no pickup).
+        First barline at pickup_ticks, then every measure_len.
+        """
         symbols = []
-        measure_time = 0
+        # First barline after pickup (or at 0 if no pickup)
+        measure_time = pickup_ticks if pickup_ticks > 0 else 0
+        if pickup_ticks > 0:
+            symbols.append(BarSymbol(0))  # Start barline
+
         i = 0
         while i < len(chords):
             if measure_len > 0 and measure_time <= chords[i].start_time:
@@ -490,15 +510,26 @@ class Music21Converter:
     # AddRests - fill gaps between notes
     # ------------------------------------------------------------------
     def _add_rests(self, symbols, time_num, time_den) -> list:
-        """Add rest symbols between notes."""
+        """Add rest symbols between notes.
+
+        Skips rest-filling inside pickup measures (before first real bar).
+        """
         quarter = TPB
         prev_time = 0
         result = []
+        seen_second_bar = False
+        bar_count = 0
         for sym in symbols:
+            if isinstance(sym, BarSymbol):
+                bar_count += 1
+                if bar_count >= 2:
+                    seen_second_bar = True
             start = sym.start_time
-            rests = self._get_rests(prev_time, start, quarter)
-            if rests:
-                result.extend(rests)
+            # Only add rests after the pickup (after second barline)
+            if seen_second_bar:
+                rests = self._get_rests(prev_time, start, quarter)
+                if rests:
+                    result.extend(rests)
             result.append(sym)
             if isinstance(sym, ChordSymbol):
                 prev_time = max(sym.end_time, prev_time)
