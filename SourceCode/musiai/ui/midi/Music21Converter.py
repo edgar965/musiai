@@ -108,7 +108,7 @@ class Music21Converter:
                     current_clef = new_clef
                     clef_changed = True
             m_chords = self._convert_measure(
-                m21_measure, abs_offset, current_clef)
+                m21_measure, abs_offset, current_clef, key_sharps)
             chords.extend(m_chords)
 
         if not chords:
@@ -140,7 +140,8 @@ class Music21Converter:
     # ------------------------------------------------------------------
     # Measure conversion
     # ------------------------------------------------------------------
-    def _convert_measure(self, m21_measure, abs_offset, clef) -> list:
+    def _convert_measure(self, m21_measure, abs_offset, clef,
+                         key_sharps=0) -> list:
         """Extract ChordSymbols from a single music21 Measure."""
         chords = []
         # Collect all notes and chords (recurse handles Voices)
@@ -227,7 +228,8 @@ class Music21Converter:
 
                 note_data_list = []
                 for p, vel in pitches:
-                    nd = self._pitch_to_notedata(p, part_beats, vel)
+                    nd = self._pitch_to_notedata(
+                        p, part_beats, vel, key_sharps)
                     if nd is not None:
                         note_data_list.append(nd)
 
@@ -259,7 +261,8 @@ class Music21Converter:
     # ------------------------------------------------------------------
     @staticmethod
     def _pitch_to_notedata(m21_pitch, dur_beats: float,
-                           velocity: int = 80) -> NoteData | None:
+                           velocity: int = 80,
+                           key_sharps: int = 0) -> NoteData | None:
         """Convert a music21 Pitch to a NoteData."""
         midi = m21_pitch.midi
         if midi < 0 or midi > 127:
@@ -268,14 +271,29 @@ class Music21Converter:
         wn = WhiteNote.from_midi(midi)
         dur = ND.from_beats(dur_beats)
 
-        # Determine accidental from music21
+        # Key signature: which notes are already sharp/flat
+        # Sharps order: F C G D A E B, Flats order: B E A D G C F
+        sharp_letters = ['F', 'C', 'G', 'D', 'A', 'E', 'B']
+        flat_letters = ['B', 'E', 'A', 'D', 'G', 'C', 'F']
+        key_accids_set = set()
+        if key_sharps > 0:
+            for i in range(min(key_sharps, 7)):
+                key_accids_set.add((sharp_letters[i], 'sharp'))
+        elif key_sharps < 0:
+            for i in range(min(-key_sharps, 7)):
+                key_accids_set.add((flat_letters[i], 'flat'))
+
+        # Determine accidental — only show if NOT implied by key sig
         accid = ACCID_NONE
         if m21_pitch.accidental is not None:
             alter = m21_pitch.accidental.alter
+            step = m21_pitch.step  # 'C', 'D', etc.
             if alter > 0:
-                accid = SHARP
+                if (step, 'sharp') not in key_accids_set:
+                    accid = SHARP
             elif alter < 0:
-                accid = FLAT
+                if (step, 'flat') not in key_accids_set:
+                    accid = FLAT
 
         return NoteData(midi, wn, dur, True, accid, velocity)
 
