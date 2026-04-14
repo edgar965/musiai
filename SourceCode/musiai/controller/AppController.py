@@ -903,9 +903,11 @@ class AppController:
 
             piece = MusicXmlImporter().import_file(tmp)
 
-            piece.source_file = path
+            piece.source_file = tmp  # MusicXML path, not image path
             self.project.add_piece(piece)
-            self._open_piece_in_tab(piece, path, "musicxml")
+            self.file_controller._source_path = tmp
+            self.file_controller._source_type = "musicxml"
+            self._open_piece_in_tab(piece, tmp, "musicxml")
             self.signal_bus.status_message.emit(
                 f"Noten erkannt: {len(piece.parts)} Stimmen, "
                 f"{piece.total_measures} Takte")
