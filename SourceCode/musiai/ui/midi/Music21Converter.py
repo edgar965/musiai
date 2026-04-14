@@ -86,6 +86,7 @@ class Music21Converter:
 
         chords = []
         current_clef = clef
+        octave_shift = 0  # from clef-octave-change (e.g. -1 for 8vb)
         for m_idx, m21_measure in enumerate(measures):
             abs_offset = m21_measure.offset  # in quarter-note beats
             # Check for mid-piece clef changes
@@ -93,13 +94,16 @@ class Music21Converter:
             measure_clefs = list(m21_measure.getElementsByClass('Clef'))
             if measure_clefs:
                 from musiai.music21 import clef as m21_clef
-                new_clef = BASS if isinstance(
-                    measure_clefs[-1], m21_clef.BassClef) else TREBLE
+                mc = measure_clefs[-1]
+                new_clef = BASS if isinstance(mc, m21_clef.BassClef) else TREBLE
+                # Detect octave-transposing clefs (e.g. Treble8vb)
+                oct_change = getattr(mc, 'octaveChange', 0)
+                if oct_change != octave_shift:
+                    octave_shift = oct_change
                 if new_clef != current_clef:
                     from musiai.ui.midi.ClefSymbol import ClefSymbol
                     tick = int(abs_offset * TPB)
                     chords.append(ClefSymbol(new_clef, tick, small=True))
-                    # Add key signature after clef change
                     accids = self._create_key_accid_symbols(
                         key_sharps, new_clef)
                     for ac in accids:
@@ -108,7 +112,8 @@ class Music21Converter:
                     current_clef = new_clef
                     clef_changed = True
             m_chords = self._convert_measure(
-                m21_measure, abs_offset, current_clef, key_sharps)
+                m21_measure, abs_offset, current_clef, key_sharps,
+                octave_shift)
             chords.extend(m_chords)
 
         if not chords:
@@ -149,7 +154,7 @@ class Music21Converter:
     # Measure conversion
     # ------------------------------------------------------------------
     def _convert_measure(self, m21_measure, abs_offset, clef,
-                         key_sharps=0) -> list:
+                         key_sharps=0, octave_shift=0) -> list:
         """Extract ChordSymbols from a single music21 Measure."""
         chords = []
         # Collect all notes and chords (recurse handles Voices)
@@ -237,7 +242,7 @@ class Music21Converter:
                 note_data_list = []
                 for p, vel in pitches:
                     nd = self._pitch_to_notedata(
-                        p, part_beats, vel, key_sharps)
+                        p, part_beats, vel, key_sharps, octave_shift)
                     if nd is not None:
                         note_data_list.append(nd)
 
@@ -270,13 +275,19 @@ class Music21Converter:
     @staticmethod
     def _pitch_to_notedata(m21_pitch, dur_beats: float,
                            velocity: int = 80,
-                           key_sharps: int = 0) -> NoteData | None:
+                           key_sharps: int = 0,
+                           octave_shift: int = 0) -> NoteData | None:
         """Convert a music21 Pitch to a NoteData."""
         midi = m21_pitch.midi
         if midi < 0 or midi > 127:
             return None
 
-        wn = WhiteNote.from_midi(midi, key_sharps)
+        # For transposing clefs: display at written pitch, not sounding
+        # octave_shift=-1 means sounds 1 oct lower → display 1 oct higher
+        display_midi = midi - octave_shift * 12
+        display_midi = max(0, min(127, display_midi))
+
+        wn = WhiteNote.from_midi(display_midi, key_sharps)
         dur = ND.from_beats(dur_beats)
 
         # Key signature: which notes are already sharp/flat
