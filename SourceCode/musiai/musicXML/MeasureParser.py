@@ -83,9 +83,10 @@ class MeasureParser:
                     elem, ns, state, measure, current_beat
                 )
 
-        # For pickup measures, set actual duration from content
-        if is_implicit and current_beat > 0:
-            measure._actual_beats = current_beat
+        # For pickup measures, set actual duration from notes only (ignore rests)
+        if is_implicit and measure.notes:
+            max_end = max(n.start_beat + n.duration_beats for n in measure.notes)
+            measure._actual_beats = max_end
 
         return measure
 
