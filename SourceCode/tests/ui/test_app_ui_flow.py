@@ -353,6 +353,12 @@ class TestBeatDetectionUIFlow(unittest.TestCase):
         if audio_idx is not None:
             ctrl._on_beat_detect_part(audio_idx)
 
+        # 4) Wait for async worker to finish and process signals
+        from PySide6.QtWidgets import QApplication
+        if hasattr(ctrl, '_beat_worker') and ctrl._beat_worker:
+            ctrl._beat_worker.wait()
+            QApplication.processEvents()
+
         return ctrl, ctrl._active_piece()
 
     def test_librosa_creates_audio_and_beat_parts(self):

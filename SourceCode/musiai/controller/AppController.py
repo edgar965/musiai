@@ -435,7 +435,14 @@ class AppController:
 
     def _on_piece_loaded(self, piece) -> None:
         logger.info(f"Piece geladen: '{piece.title}'")
-        self._open_piece_in_tab(piece)
+        source = getattr(piece, 'source_file', None)
+        file_type = None
+        if source:
+            if source.endswith(('.mid', '.midi')):
+                file_type = "midi"
+            else:
+                file_type = "musicxml"
+        self._open_piece_in_tab(piece, source, file_type)
 
     def _play_from_beat(self, beat: float) -> None:
         """Wiedergabe ab einer bestimmten Beat-Position starten."""
@@ -529,6 +536,7 @@ class AppController:
         try:
             from musiai.midi.MusicXmlImporterCompat import MusicXmlImporter
             piece = MusicXmlImporter().import_file(musicxml_path)
+            piece.source_file = self._pdf_source_path
             self.project.add_piece(piece)
             self._open_piece_in_tab(
                 piece, file_path=self._pdf_source_path, file_type="pdf"
@@ -890,16 +898,55 @@ class AppController:
         self._run_beat_detection_on_file(path)
 
     def _run_beat_detection_on_file(self, path: str) -> None:
-        """Beat-Erkennung auf eine Datei: Beats erkennen → Stimme anlegen."""
-        from PySide6.QtWidgets import QMessageBox
+        """Beat-Erkennung auf eine Datei: async Beats erkennen → Stimme anlegen."""
+        if (hasattr(self, '_beat_worker') and self._beat_worker
+                and self._beat_worker.isRunning()):
+            self.signal_bus.status_message.emit(
+                "Beat-Erkennung läuft bereits...")
+            return
 
-        from PySide6.QtCore import Qt
-        from PySide6.QtWidgets import QApplication
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        QApplication.processEvents()
+        from musiai.audio.BeatDetectWorker import BeatDetectWorker
+
+        engine = self._beat_engine or "librosa"
+        self.signal_bus.status_message.emit(
+            f"Beat-Erkennung läuft ({engine})...")
+
+        # Show progress text on the scene below existing content
+        scene = self._active_scene()
+        self._beat_progress_item = None
+        if scene:
+            from PySide6.QtGui import QFont, QColor
+            rect = scene.sceneRect()
+            y_pos = rect.bottom() + 20
+            item = scene.addSimpleText("Beat-Erkennung läuft...")
+            font = QFont("Segoe UI", 14)
+            item.setFont(font)
+            item.setBrush(QColor(180, 180, 180))
+            item.setPos(rect.left() + 20, y_pos)
+            self._beat_progress_item = item
+
+        self._beat_worker = BeatDetectWorker(path, engine)
+        self._beat_detect_path = path
+        self._beat_worker.finished.connect(self._on_beat_detect_finished)
+        self._beat_worker.error.connect(self._on_beat_detect_error)
+        self._beat_worker.start()
+
+    def _remove_beat_progress_item(self) -> None:
+        """Entfernt den Fortschritts-Text von der Szene."""
+        item = getattr(self, '_beat_progress_item', None)
+        if item:
+            scene = item.scene()
+            if scene:
+                scene.removeItem(item)
+            self._beat_progress_item = None
+
+    def _on_beat_detect_finished(self, result) -> None:
+        """Callback nach erfolgreicher Beat-Erkennung (Main-Thread)."""
+        from PySide6.QtWidgets import QMessageBox
+        self._remove_beat_progress_item()
+        path = self._beat_detect_path
 
         try:
-            from musiai.audio.BeatDetector import BeatDetector, BeatResult
             from musiai.model.AudioTrack import AudioTrack
             from musiai.model.Part import Part
             from musiai.model.Measure import Measure
@@ -909,22 +956,15 @@ class AppController:
             import os
 
             engine = self._beat_engine or "librosa"
-            self.signal_bus.status_message.emit(
-                f"Beat-Erkennung läuft ({engine})...")
-            QApplication.processEvents()
 
-            # 1) Detect beats
-            result = BeatDetector.detect(path, engine)
-
-            # 2) Load audio track
+            # 1) Load audio track
             audio_track = AudioTrack()
             if not audio_track.load(path):
-                QApplication.restoreOverrideCursor()
                 QMessageBox.warning(self.main_window, "Fehler",
                                     "Audio laden fehlgeschlagen")
                 return
 
-            # 3) Create or use active piece
+            # 2) Create or use active piece
             piece = self._active_piece()
             scene = self._active_scene()
             if not piece:
@@ -934,7 +974,7 @@ class AppController:
                 self._open_piece_in_tab(piece)
                 scene = self._active_scene()
 
-            # 4) Map beat times to piece beats
+            # 3) Map beat times to piece beats
             #    Each detected beat = 1 beat in the piece.
             #    Group into measures by time signature.
             ts_num, ts_den = result.time_signature
@@ -946,7 +986,7 @@ class AppController:
             max_beats = max(total_beats, int(audio_total_beats) + 1)
             n_measures = max(1, max_beats // beats_per_measure + 1)
 
-            # 5) Audio part — only add if not already present
+            # 4) Audio part — only add if not already present
             existing_audio = [p for p in piece.parts
                               if p.audio_track and
                               p.audio_track.file_path == path]
@@ -960,7 +1000,7 @@ class AppController:
                     audio_part.add_measure(Measure(i + 1, ts))
                 piece.add_part(audio_part)
 
-            # 6) Beat part — one note per detected beat,
+            # 5) Beat part — one note per detected beat,
             #    duration = time until next beat (variable lengths)
             beat_part = Part(
                 name=f"Beats ({engine})", channel=len(piece.parts))
@@ -993,7 +1033,7 @@ class AppController:
                 beat_part.add_measure(m)
             piece.add_part(beat_part)
 
-            # 7) Set tempo from detected BPM
+            # 6) Set tempo from detected BPM
             piece.tempos = [Tempo(result.bpm, 0.0)]
 
             # Add per-beat tempo variations as duration_deviation
@@ -1009,12 +1049,10 @@ class AppController:
                                 n.expression.duration_deviation = dev
                         beat_idx += 1
 
-            # 8) Refresh
+            # 7) Refresh
             self.playback_engine.set_piece(piece)
             if scene:
                 scene.refresh()
-
-            QApplication.restoreOverrideCursor()
 
             total_beat_notes = sum(len(m.notes) for m in beat_part.measures)
             self.signal_bus.status_message.emit(
@@ -1024,11 +1062,19 @@ class AppController:
                         f"{total_beat_notes} Beats, engine={engine}")
 
         except Exception as e:
-            QApplication.restoreOverrideCursor()
             logger.error(f"Beat-Erkennung fehlgeschlagen: {e}", exc_info=True)
             QMessageBox.warning(
                 self.main_window, "Fehler",
                 f"Beat-Erkennung fehlgeschlagen:\n{e}")
+
+    def _on_beat_detect_error(self, msg: str) -> None:
+        """Callback bei Fehler in der Beat-Erkennung (Main-Thread)."""
+        from PySide6.QtWidgets import QMessageBox
+        self._remove_beat_progress_item()
+        logger.error(f"Beat-Erkennung fehlgeschlagen: {msg}")
+        QMessageBox.warning(
+            self.main_window, "Fehler",
+            f"Beat-Erkennung fehlgeschlagen:\n{msg}")
 
     def _new_project(self) -> None:
         """Neues leeres Projekt in neuem Tab."""

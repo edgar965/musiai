@@ -37,6 +37,7 @@ class FileController:
 
         try:
             piece = self._midi_importer.import_file(path)
+            piece.source_file = path
             self.project.add_piece(piece)
             self._source_path = path
             self._source_type = "midi"
@@ -61,6 +62,7 @@ class FileController:
 
         try:
             piece = self._musicxml_importer.import_file(path)
+            piece.source_file = path
             self.project.add_piece(piece)
             self._source_path = path
             self._source_type = "musicxml"

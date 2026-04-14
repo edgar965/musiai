@@ -184,6 +184,39 @@ class TestProject(unittest.TestCase):
         self.assertAlmostEqual(n.expression.cent_offset, 5.0)
         os.unlink(path)
 
+    def test_source_file_roundtrip(self):
+        """source_file is preserved through project save/load."""
+        from musiai.model.Project import Project
+        from musiai.model.Piece import Piece
+        from musiai.model.Part import Part
+        from musiai.model.Measure import Measure
+        import tempfile, os
+
+        proj = Project()
+        piece = Piece("SourceTest")
+        piece.source_file = "/path/to/song.mid"
+        part = Part("Piano")
+        part.add_measure(Measure(1))
+        piece.add_part(part)
+        proj.add_piece(piece)
+
+        path = os.path.join(tempfile.gettempdir(), "test_source.musiai")
+        proj.save(path)
+        proj2 = Project()
+        proj2.load(path)
+        self.assertEqual(proj2.current_piece.source_file, "/path/to/song.mid")
+        os.unlink(path)
+
+    def test_source_file_none_roundtrip(self):
+        """source_file=None is preserved (not stored in JSON)."""
+        from musiai.model.Piece import Piece
+        piece = Piece("NoSource")
+        self.assertIsNone(piece.source_file)
+        d = piece.to_dict()
+        self.assertNotIn("source_file", d)
+        piece2 = Piece.from_dict(d)
+        self.assertIsNone(piece2.source_file)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -117,18 +117,10 @@ class MidiSheetRenderer:
             y_offset = self._render_sequential(
                 scene, all_staffs, parts_data, cfg, y_offset, system_width)
 
-        # Draw audio waveforms if piece has audio parts
+        # Draw audio waveforms per system row
         piece = getattr(scene, 'piece', None)
         if piece:
-            for part in piece.parts:
-                if part.audio_track and part.audio_track.blocks:
-                    self._draw_part_label(
-                        scene, part.name, piece.parts.index(part),
-                        4, y_offset, font_size=10)
-                    self._draw_waveform(
-                        scene, part, y_offset, system_width,
-                        piece.initial_tempo)
-                    y_offset += 80
+            self._draw_waveforms_per_row(scene, piece, y_offset)
 
         scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
 
@@ -314,16 +306,13 @@ class MidiSheetRenderer:
                 scene, all_staffs_list, parts_data, cfg, y_offset,
                 system_width)
 
-        # Draw audio waveforms for audio parts
-        for part in piece.parts:
-            if part.audio_track and part.audio_track.blocks:
-                self._draw_part_label(
-                    scene, part.name, piece.parts.index(part),
-                    4, y_offset, font_size=10)
-                self._draw_waveform(
-                    scene, part, y_offset, system_width,
-                    piece.initial_tempo)
-                y_offset += 80
+        # Draw audio waveforms per system row (synced with beat staves)
+        has_audio = any(p.audio_track and p.audio_track.blocks
+                        for p in piece.parts)
+        if has_audio:
+            self._draw_waveforms_per_row(scene, piece, y_offset)
+            # Add space for waveforms already drawn inline
+            y_offset += 0  # rows already accounted for in _render methods
 
         scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
         self._store_staff_layout(scene)
@@ -843,6 +832,60 @@ class MidiSheetRenderer:
         item.setPen(pen)
         item.setZValue(20)
         scene.addItem(item)
+
+    def _draw_waveforms_per_row(self, scene, piece, y_after_staffs):
+        """Draw waveform segments below each staff row, synced with beats."""
+        from musiai.notation.WaveformItem import WaveformItem
+        layout = getattr(self, '_staff_y_positions', [])
+        if not layout:
+            return
+
+        audio_parts = [p for p in piece.parts
+                       if p.audio_track and p.audio_track.blocks]
+        if not audio_parts:
+            return
+
+        bpm = piece.initial_tempo
+        tpb = 480
+        staff_width = SheetConfig.PageWidth
+
+        for audio_part in audio_parts:
+            part_idx = piece.parts.index(audio_part)
+            block = audio_part.audio_track.blocks[0]
+            samples = block.samples
+            sr = block.sr
+            total_samples = len(samples)
+            total_sec = total_samples / sr
+
+            for staff, y_top, y_bot in layout:
+                # Time range for this staff row
+                start_sec = staff.start_time / tpb * 60.0 / bpm
+                end_sec = staff.end_time / tpb * 60.0 / bpm
+                end_sec = min(end_sec, total_sec)
+                if start_sec >= total_sec:
+                    continue
+
+                # Extract sample range
+                s_start = int(start_sec * sr)
+                s_end = int(end_sec * sr)
+                s_end = min(s_end, total_samples)
+                if s_end <= s_start:
+                    continue
+                segment = samples[s_start:s_end]
+
+                # Draw below this staff row
+                wave_y = y_bot + 5
+                item = WaveformItem(segment, sr, staff_width,
+                                    100, wave_y, 0)
+                item.setData(0, "waveform")
+                item.setData(1, part_idx)
+                scene.addItem(item)
+
+                # Label only on first row
+                if staff is layout[0][0]:
+                    self._draw_part_label(
+                        scene, audio_part.name, part_idx,
+                        4, wave_y, font_size=8)
 
     @staticmethod
     def _draw_waveform(scene, part, y_offset, system_width, tempo):
