@@ -99,7 +99,16 @@ class BeatDetector:
 
         result = BeatResult()
         result.engine = "librosa"
-        result.bpm = float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo)
+        raw_bpm = float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo)
+
+        # Fix octave error: if BPM > 140, likely double tempo
+        if raw_bpm > 140:
+            raw_bpm /= 2
+            # Merge adjacent beats (keep every other)
+            beat_times = beat_times[::2]
+            logger.info(f"Octave correction: {raw_bpm*2:.0f} → {raw_bpm:.0f} BPM")
+
+        result.bpm = raw_bpm
         result.beat_times = beat_times.tolist()
 
         # Estimate time signature from beat spacing
@@ -135,7 +144,14 @@ class BeatDetector:
 
         result = BeatResult()
         result.engine = "librosa_dynamic"
-        result.bpm = float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo)
+        raw_bpm = float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo)
+
+        # Fix octave error
+        if raw_bpm > 140:
+            raw_bpm /= 2
+            beat_times = beat_times[::2]
+
+        result.bpm = raw_bpm
         result.beat_times = beat_times.tolist()
         result.time_signature = BeatDetector._estimate_time_sig(
             beat_times, result.bpm)
