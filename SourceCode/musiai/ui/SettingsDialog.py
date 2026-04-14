@@ -122,11 +122,15 @@ class SettingsDialog(QDialog):
         for key, available in avail.items():
             self._set_engine_status(
                 self._beat_status[key], self._beat_engines[key], available)
-        # Select first available
-        for key in BeatDetector.ENGINES:
-            if self._beat_engines[key].isEnabled():
-                self._beat_engines[key].setChecked(True)
-                break
+        # Saved or first available
+        saved_beat = QSettings("MusiAI", "MusiAI").value("engines/beat", "")
+        if saved_beat and self._beat_engines.get(saved_beat) and self._beat_engines[saved_beat].isEnabled():
+            self._beat_engines[saved_beat].setChecked(True)
+        else:
+            for key in BeatDetector.ENGINES:
+                if self._beat_engines[key].isEnabled():
+                    self._beat_engines[key].setChecked(True)
+                    break
 
         layout.addStretch()
         return page
@@ -168,10 +172,14 @@ class SettingsDialog(QDialog):
         for key, available in avail.items():
             self._set_engine_status(
                 self._omr_status[key], self._omr_engines[key], available)
-        for key in SheetMusicRecognizer.ENGINES:
-            if self._omr_engines[key].isEnabled():
-                self._omr_engines[key].setChecked(True)
-                break
+        saved_omr = QSettings("MusiAI", "MusiAI").value("engines/omr", "")
+        if saved_omr and self._omr_engines.get(saved_omr) and self._omr_engines[saved_omr].isEnabled():
+            self._omr_engines[saved_omr].setChecked(True)
+        else:
+            for key in SheetMusicRecognizer.ENGINES:
+                if self._omr_engines[key].isEnabled():
+                    self._omr_engines[key].setChecked(True)
+                    break
 
         layout.addStretch()
         return page
@@ -578,11 +586,19 @@ class SettingsDialog(QDialog):
                 self._status_labels[key], self._engines[key], available
             )
 
-        for pref in ["basic-pitch", "demucs+pyin", "pyin"]:
-            if self._engines.get(pref) and self._engines[pref].isEnabled():
-                self._engines[pref].setChecked(True)
-                self._selected_engine = pref
-                break
+        # Select saved engine, fallback to first available
+        saved = QSettings("MusiAI", "MusiAI").value("engines/detection", "")
+        selected = False
+        if saved and self._engines.get(saved) and self._engines[saved].isEnabled():
+            self._engines[saved].setChecked(True)
+            self._selected_engine = saved
+            selected = True
+        if not selected:
+            for pref in ["basic-pitch", "demucs+pyin", "pyin"]:
+                if self._engines.get(pref) and self._engines[pref].isEnabled():
+                    self._engines[pref].setChecked(True)
+                    self._selected_engine = pref
+                    break
 
     def _detect_pdf_engines(self) -> None:
         """Prüft welche PDF-Engines installiert sind."""
@@ -596,11 +612,15 @@ class SettingsDialog(QDialog):
                 available,
             )
 
-        # Erste verfügbare Import-Engine selektieren
-        for key in PdfEngineConfig.IMPORT_ENGINES:
-            if self._pdf_import_engines[key].isEnabled():
-                self._pdf_import_engines[key].setChecked(True)
-                break
+        # Saved or first available import engine
+        saved_imp = QSettings("MusiAI", "MusiAI").value("engines/pdf_import", "")
+        if saved_imp and self._pdf_import_engines.get(saved_imp) and self._pdf_import_engines[saved_imp].isEnabled():
+            self._pdf_import_engines[saved_imp].setChecked(True)
+        else:
+            for key in PdfEngineConfig.IMPORT_ENGINES:
+                if self._pdf_import_engines[key].isEnabled():
+                    self._pdf_import_engines[key].setChecked(True)
+                    break
 
         export_avail = PdfEngineConfig.detect_export_engines()
         for key, available in export_avail.items():
@@ -610,10 +630,14 @@ class SettingsDialog(QDialog):
                 available,
             )
 
-        for key in PdfEngineConfig.EXPORT_ENGINES:
-            if self._pdf_export_engines[key].isEnabled():
-                self._pdf_export_engines[key].setChecked(True)
-                break
+        saved_exp = QSettings("MusiAI", "MusiAI").value("engines/pdf_export", "")
+        if saved_exp and self._pdf_export_engines.get(saved_exp) and self._pdf_export_engines[saved_exp].isEnabled():
+            self._pdf_export_engines[saved_exp].setChecked(True)
+        else:
+            for key in PdfEngineConfig.EXPORT_ENGINES:
+                if self._pdf_export_engines[key].isEnabled():
+                    self._pdf_export_engines[key].setChecked(True)
+                    break
 
     @staticmethod
     def _set_engine_status(label: QLabel, radio: QRadioButton,

@@ -645,6 +645,10 @@ class AppController:
         if hasattr(dialog, '_beat_engines'):
             if dialog._beat_engines.get(self._beat_engine):
                 dialog._beat_engines[self._beat_engine].setChecked(True)
+        # OMR engine vorselektieren
+        if hasattr(dialog, '_omr_engines'):
+            if dialog._omr_engines.get(self._omr_engine):
+                dialog._omr_engines[self._omr_engine].setChecked(True)
         if dialog.exec():
             self._detection_engine = dialog.selected_engine
             self._beat_engine = dialog.selected_beat_engine
