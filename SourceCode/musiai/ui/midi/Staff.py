@@ -358,11 +358,11 @@ class Staff:
             painter.setFont(font)
             painter.setPen(QPen(QColor(0, 0, 0)))
 
-            # SMuFL time sig digits: baseline at bottom of the digit.
-            # Numerator fills top 2 spaces (lines 0-2), baseline at line 2
-            # Denominator fills bottom 2 spaces (lines 2-4), baseline at line 4
-            y_num = ytop - lw + 2 * (lw + ls)
-            y_den = ytop - lw + 4 * (lw + ls)
+            # SMuFL time sig digits: baseline at center of the digit.
+            # Numerator centered in top half (lines 0-2), baseline at line 1
+            # Denominator centered in bottom half (lines 2-4), baseline at line 3
+            y_num = ytop - lw + 1 * (lw + ls)
+            y_den = ytop - lw + 3 * (lw + ls)
 
             num_glyph = ''.join(BG.TIME_DIGITS[int(d)] for d in num_str)
             den_glyph = ''.join(BG.TIME_DIGITS[int(d)] for d in den_str)

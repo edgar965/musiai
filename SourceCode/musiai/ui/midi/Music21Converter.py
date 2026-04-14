@@ -88,10 +88,14 @@ class Music21Converter:
             measure_clefs = list(m21_measure.getElementsByClass('Clef'))
             if measure_clefs:
                 from musiai.music21 import clef as m21_clef
-                if isinstance(measure_clefs[-1], m21_clef.BassClef):
-                    current_clef = BASS
-                else:
-                    current_clef = TREBLE
+                new_clef = BASS if isinstance(
+                    measure_clefs[-1], m21_clef.BassClef) else TREBLE
+                if new_clef != current_clef:
+                    # Insert a clef change symbol
+                    from musiai.ui.midi.ClefSymbol import ClefSymbol
+                    tick = int(abs_offset * TPB)
+                    chords.append(ClefSymbol(new_clef, tick, small=True))
+                    current_clef = new_clef
             m_chords = self._convert_measure(
                 m21_measure, abs_offset, current_clef)
             chords.extend(m_chords)
@@ -146,13 +150,13 @@ class Music21Converter:
                 time_groups[tick] = []
             time_groups[tick].append(el)
 
-        # Insert grace notes before their main tick
+        # Insert grace notes just before their main tick (within same measure)
+        measure_start_tick = int(abs_offset * TPB)
         for main_tick, graces in grace_groups.items():
-            grace_dur = TPB // 8  # 32nd note = 60 ticks
             for i, gel in enumerate(graces):
-                g_tick = main_tick - grace_dur + i * (TPB // 16)
-                g_tick = max(0, g_tick)
-                # Avoid collision with existing ticks
+                # Place 1-2 ticks before main note, never before measure start
+                g_tick = main_tick - len(graces) + i
+                g_tick = max(measure_start_tick, g_tick)
                 while g_tick in time_groups:
                     g_tick += 1
                 time_groups[g_tick] = [gel]
@@ -176,6 +180,16 @@ class Music21Converter:
                         pitches.append((p, vel))
                 elif self._is_note(el):
                     pitches.append((el.pitch, vel))
+
+            # Deduplicate same MIDI pitch (multi-voice same notes)
+            seen = {}
+            unique_pitches = []
+            for p, vel in pitches:
+                midi = p.midi
+                if midi not in seen:
+                    seen[midi] = len(unique_pitches)
+                    unique_pitches.append((p, vel))
+            pitches = unique_pitches
 
             if not pitches:
                 continue

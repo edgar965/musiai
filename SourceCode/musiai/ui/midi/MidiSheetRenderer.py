@@ -653,14 +653,9 @@ class MidiSheetRenderer:
                         x = staff.find_x_for_pulse(tick)
                         if x is not None:
                             scene_x = 100 + x
-                            scene_y = y_offsets[staff_i] + 2
-                            item = QGraphicsSimpleTextItem(
-                                f"\u2669= {bpm}")
-                            item.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-                            item.setBrush(QBrush(QColor(20, 120, 20)))
-                            item.setPos(scene_x - 5, scene_y)
-                            item.setZValue(20)
-                            scene.addItem(item)
+                            scene_y = y_offsets[staff_i] - 5
+                            self._add_tempo_label(
+                                scene, bpm, scene_x, scene_y)
                             break
                     prev_tempo = m.tempo.bpm
                 abs_beat += m.duration_beats
@@ -698,13 +693,8 @@ class MidiSheetRenderer:
         if not note_parts and parts_data:
             tempo = parts_data[0].get('tempo_bpm')
             if tempo and tempo > 0:
-                item = QGraphicsSimpleTextItem(
-                    f"\u2669= {int(round(tempo))}")
-                item.setFont(QFont("Arial", 9, QFont.Weight.Bold))
-                item.setBrush(QBrush(QColor(20, 120, 20)))
-                item.setPos(105, y_offsets[0] + 2 if y_offsets else 40)
-                item.setZValue(20)
-                scene.addItem(item)
+                y = y_offsets[0] - 5 if y_offsets else 40
+                self._add_tempo_label(scene, int(round(tempo)), 105, y)
 
     def _store_staff_layout(self, scene):
         """Store staff layout on the scene for playhead positioning.
@@ -783,24 +773,31 @@ class MidiSheetRenderer:
 
     def _draw_tempo_marking(self, scene, tempo_bpm, y_offset):
         """Draw tempo marking (quarter note = BPM) above first system."""
-        bpm_int = int(round(tempo_bpm))
-        if self.use_bravura:
-            from musiai.ui.midi import BravuraGlyphs as BG
-            # Use Bravura quarter note glyph + text
-            note_item = scene.addText(BG.NOTEHEAD_FILLED)
-            note_item.setFont(QFont("Bravura", 12))
-            note_item.setDefaultTextColor(QColor(0, 0, 0))
-            note_item.setPos(105, y_offset - 30)
+        self._add_tempo_label(scene, int(round(tempo_bpm)), 105, y_offset - 28)
 
-            text_item = scene.addText(f"= {bpm_int}")
-            text_item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+    def _add_tempo_label(self, scene, bpm: int, x: float, y: float):
+        """Draw ♩= BPM with Bravura quarter note glyph + stem."""
+        if self.use_bravura:
+            # noteQuarterUp (U+E1D5) renders correctly via addText
+            note_item = scene.addText("\uE1D5")
+            note_item.setFont(QFont("Bravura", 14))
+            note_item.setDefaultTextColor(QColor(0, 0, 0))
+            note_item.setPos(x, y - 6)
+            note_item.setZValue(20)
+
+            text_item = scene.addText(f"= {bpm}")
+            text_item.setFont(QFont("Arial", 11, QFont.Weight.Bold))
             text_item.setDefaultTextColor(QColor(0, 0, 0))
-            text_item.setPos(120, y_offset - 28)
+            text_item.setPos(x + 9, y - 1)
+            text_item.setZValue(20)
         else:
-            text_item = scene.addText(f"\u2669 = {bpm_int}")
-            text_item.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-            text_item.setDefaultTextColor(QColor(0, 0, 0))
-            text_item.setPos(105, y_offset - 28)
+            from PySide6.QtWidgets import QGraphicsSimpleTextItem
+            item = QGraphicsSimpleTextItem(f"\u2669 = {bpm}")
+            item.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+            item.setBrush(QBrush(QColor(0, 0, 0)))
+            item.setPos(x, y)
+            item.setZValue(20)
+            scene.addItem(item)
 
     def _render_staff(self, staff: Staff, cfg: dict) -> QPixmap:
         """Render a staff onto a QPixmap at 2x resolution for sharpness.
