@@ -153,6 +153,10 @@ class MusicXmlImporter:
             part.add_measure(measure)
             state.abs_beat += measure.duration_beats
 
+        # Set key signature on piece from first part's parsed state
+        if piece.key_sharps == 0 and state.key_sharps != 0:
+            piece.key_sharps = state.key_sharps
+
         return part
 
     def _cleanup_tempos(self, piece: Piece) -> None:

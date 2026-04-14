@@ -19,6 +19,7 @@ class MeasureParseState:
         self.tempo = 120.0
         self.abs_beat = 0.0
         self.time_signature = TimeSignature(4, 4)
+        self.key_sharps = 0  # Key signature (+ = sharps, - = flats)
 
 
 class MeasureParser:
@@ -92,6 +93,12 @@ class MeasureParser:
         div_elem = attrs.find(f"{ns}divisions")
         if div_elem is not None and div_elem.text:
             state.divisions = int(div_elem.text)
+
+        key_elem = attrs.find(f"{ns}key")
+        if key_elem is not None:
+            fifths_elem = key_elem.find(f"{ns}fifths")
+            if fifths_elem is not None and fifths_elem.text:
+                state.key_sharps = int(fifths_elem.text)
 
         time_elem = attrs.find(f"{ns}time")
         if time_elem is not None:

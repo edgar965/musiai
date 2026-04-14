@@ -259,7 +259,8 @@ class MidiSheetRenderer:
             clef_str = ClefHelper.detect_clef(all_notes)
             clef = TREBLE if clef_str == "treble" else BASS
 
-            symbols = self._create_symbols_for_part(part, clef, tpb)
+            symbols = self._create_symbols_for_part(
+                part, clef, tpb, piece.key_sharps)
             track_symbols.append(symbols)
             track_clefs.append(clef)
 
@@ -325,9 +326,10 @@ class MidiSheetRenderer:
     # ------------------------------------------------------------------
     # Symbol creation
     # ------------------------------------------------------------------
-    def _create_symbols_for_part(self, part, clef, tpb) -> list:
+    def _create_symbols_for_part(self, part, clef, tpb,
+                                key_sharps: int = 0) -> list:
         """Create chords + bars + rests for one part."""
-        chords = self._create_chords(part, clef, tpb)
+        chords = self._create_chords(part, clef, tpb, key_sharps)
         measure_len = self._get_measure_length_from_part(part, tpb)
         time_num, time_den = self._get_time_sig_from_part(part)
         last_start = self._get_last_start(part, tpb)
@@ -336,7 +338,8 @@ class MidiSheetRenderer:
         symbols = self._add_rests(symbols, tpb, time_num, time_den)
         return symbols
 
-    def _create_chords(self, part, clef, tpb) -> list[ChordSymbol]:
+    def _create_chords(self, part, clef, tpb,
+                       key_sharps: int = 0) -> list[ChordSymbol]:
         """Create ChordSymbols from part measures."""
         chords = []
         abs_tick = 0
@@ -351,7 +354,8 @@ class MidiSheetRenderer:
 
             for tick in sorted(time_groups):
                 notes = time_groups[tick]
-                note_data = self._create_note_data(notes, tick, tpb)
+                note_data = self._create_note_data(
+                    notes, tick, tpb, key_sharps)
                 if note_data:
                     end_time = max(
                         tick + int(n.duration_beats * tpb) for n in notes)
@@ -361,15 +365,19 @@ class MidiSheetRenderer:
             abs_tick += measure_ticks
         return chords
 
-    def _create_note_data(self, notes, tick, tpb) -> list[NoteData]:
+    def _create_note_data(self, notes, tick, tpb,
+                          key_sharps: int = 0) -> list[NoteData]:
         """Create NoteData list from model notes, sorted by pitch."""
         notes_sorted = sorted(notes, key=lambda n: n.pitch)
         result = []
         for i, n in enumerate(notes_sorted):
-            wn = WhiteNote.from_midi(n.pitch)
+            wn = WhiteNote.from_midi_in_key(n.pitch, key_sharps)
             dur = ND.from_beats(n.duration_beats)
             pc = n.pitch % 12
-            accid = SHARP if pc in (1, 3, 6, 8, 10) else ACCID_NONE
+            if pc in (1, 3, 6, 8, 10):
+                accid = FLAT if key_sharps < 0 else SHARP
+            else:
+                accid = ACCID_NONE
             left_side = True
             # Adjacent notes alternate sides
             if i > 0 and result:

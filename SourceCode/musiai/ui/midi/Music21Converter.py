@@ -268,7 +268,7 @@ class Music21Converter:
         if midi < 0 or midi > 127:
             return None
 
-        wn = WhiteNote.from_midi(midi)
+        wn = WhiteNote.from_midi_in_key(midi, key_sharps)
         dur = ND.from_beats(dur_beats)
 
         # Key signature: which notes are already sharp/flat

@@ -19,6 +19,7 @@ class Piece:
         self.parts: list[Part] = []
         self.tempos: list[Tempo] = [Tempo(120.0, 0.0)]
         self.source_file: str | None = None  # Original file path
+        self.key_sharps: int = 0  # Key signature (+ = sharps, - = flats)
 
     def add_part(self, part: Part) -> None:
         self.parts.append(part)
@@ -51,6 +52,8 @@ class Piece:
         }
         if self.source_file:
             d["source_file"] = self.source_file
+        if self.key_sharps != 0:
+            d["key_sharps"] = self.key_sharps
         return d
 
     @classmethod
@@ -58,6 +61,7 @@ class Piece:
         piece = cls(title=data.get("title", "Unbenannt"))
         piece.tempos = [Tempo.from_dict(t) for t in data.get("tempos", [])]
         piece.source_file = data.get("source_file")
+        piece.key_sharps = data.get("key_sharps", 0)
         for part_data in data.get("parts", []):
             piece.parts.append(Part.from_dict(part_data))
         return piece
