@@ -99,22 +99,34 @@ class SheetMusicRecognizer:
                 save_cache=False,
                 without_deskew=False,
             )
-            xml_str = extract(args)
-            if xml_str:
+            output = extract(args)
+
+            # extract() may return XML string, file path, or None
+            xml_str = None
+            if output and isinstance(output, str):
+                if output.strip().startswith("<?xml") or "<score" in output:
+                    xml_str = output
+                elif os.path.isfile(output):
+                    with open(output, "r", encoding="utf-8") as fh:
+                        xml_str = fh.read()
+
+            # Also check output dir for generated files
+            if not xml_str:
+                for f in os.listdir(output_dir):
+                    if f.endswith((".musicxml", ".xml", ".mxl")):
+                        fpath = os.path.join(output_dir, f)
+                        with open(fpath, "r", encoding="utf-8") as fh:
+                            xml_str = fh.read()
+                        break
+
+            if xml_str and ("<score" in xml_str or "<?xml" in xml_str):
                 result.musicxml = xml_str
                 result.success = True
                 logger.info("oemer: Erkennung erfolgreich")
             else:
-                # Check output dir for generated file
-                for f in os.listdir(output_dir):
-                    if f.endswith((".musicxml", ".xml")):
-                        with open(os.path.join(output_dir, f),
-                                  "r", encoding="utf-8") as fh:
-                            result.musicxml = fh.read()
-                        result.success = True
-                        break
-                if not result.success:
-                    result.error = "oemer: Keine Noten erkannt"
+                result.error = (f"oemer: Kein gültiges MusicXML erzeugt"
+                                f" (output={repr(output)[:100]})")
+                logger.warning(result.error)
         except ImportError as e:
             result.error = f"oemer nicht installiert: {e}"
             logger.error(result.error)
