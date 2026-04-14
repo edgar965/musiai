@@ -817,8 +817,14 @@ class AppController:
         self.signal_bus.status_message.emit("Auswahl aufgehoben")
 
     def _import_from_image(self) -> None:
-        """Bearbeiten → Neue Spur aus Bild/PDF."""
-        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        """Bearbeiten → Neue Spur aus Bild/PDF (async)."""
+        from PySide6.QtWidgets import QFileDialog
+        if (hasattr(self, '_omr_worker') and self._omr_worker
+                and self._omr_worker.isRunning()):
+            self.signal_bus.status_message.emit(
+                "Notenerkennung läuft bereits...")
+            return
+
         path, _ = QFileDialog.getOpenFileName(
             self.main_window, "Bild/PDF mit Noten laden",
             "../media",
@@ -827,37 +833,64 @@ class AppController:
         if not path:
             return
 
-        from PySide6.QtCore import Qt
-        from PySide6.QtWidgets import QApplication
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        QApplication.processEvents()
+        from musiai.omr.OMRWorker import OMRWorker
+        engine = self._omr_engine or "oemer"
+        self.signal_bus.status_message.emit(
+            f"Notenerkennung läuft ({engine})...")
+
+        # Show progress on scene
+        scene = self._active_scene()
+        self._omr_progress_item = None
+        if scene:
+            from PySide6.QtGui import QFont, QColor, QBrush
+            from PySide6.QtWidgets import QGraphicsSimpleTextItem
+            item = QGraphicsSimpleTextItem(
+                f"\u23F3 Notenerkennung läuft ({engine})...")
+            item.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+            item.setBrush(QBrush(QColor(0, 100, 200)))
+            item.setZValue(100)
+            rect = scene.sceneRect()
+            item.setPos(120, max(rect.height() - 40, 100))
+            scene.addItem(item)
+            self._omr_progress_item = item
+            view = self.main_window.notation_view
+            if view:
+                view.ensureVisible(item)
+
+        self._omr_worker = OMRWorker(path, engine)
+        self._omr_source_path = path
+        self._omr_worker.finished.connect(self._on_omr_finished)
+        self._omr_worker.error.connect(self._on_omr_error)
+        self._omr_worker.start()
+
+    def _remove_omr_progress(self) -> None:
+        item = getattr(self, '_omr_progress_item', None)
+        if item:
+            scene = item.scene()
+            if scene:
+                scene.removeItem(item)
+            self._omr_progress_item = None
+
+    def _on_omr_finished(self, result) -> None:
+        """OMR fertig — Ergebnis verarbeiten (Main Thread)."""
+        from PySide6.QtWidgets import QMessageBox
+        self._remove_omr_progress()
+        path = self._omr_source_path
+
+        if not result.success:
+            QMessageBox.warning(
+                self.main_window, "Fehler",
+                f"Notenerkennung fehlgeschlagen:\n{result.error}")
+            return
 
         try:
-            from musiai.omr.SheetMusicRecognizer import SheetMusicRecognizer
-            engine = self._omr_engine or "oemer"
-            self.signal_bus.status_message.emit(
-                f"Notenerkennung läuft ({engine})...")
-            QApplication.processEvents()
-
-            result = SheetMusicRecognizer.recognize(path, engine)
-            QApplication.restoreOverrideCursor()
-
-            if not result.success:
-                QMessageBox.warning(
-                    self.main_window, "Fehler",
-                    f"Notenerkennung fehlgeschlagen:\n{result.error}")
-                return
-
-            # Parse MusicXML result into Piece
             from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
-            import tempfile
+            import tempfile, os
             tmp = tempfile.mktemp(suffix=".musicxml")
             with open(tmp, "w", encoding="utf-8") as f:
                 f.write(result.musicxml)
 
-            importer = MusicXmlImporter()
-            piece = importer.import_file(tmp)
-            import os
+            piece = MusicXmlImporter().import_file(tmp)
             os.unlink(tmp)
 
             piece.source_file = path
@@ -866,13 +899,18 @@ class AppController:
             self.signal_bus.status_message.emit(
                 f"Noten erkannt: {len(piece.parts)} Stimmen, "
                 f"{piece.total_measures} Takte")
-
         except Exception as e:
-            QApplication.restoreOverrideCursor()
-            logger.error(f"OMR fehlgeschlagen: {e}", exc_info=True)
+            logger.error(f"OMR Import fehlgeschlagen: {e}", exc_info=True)
             QMessageBox.warning(
-                self.main_window, "Fehler",
-                f"Notenerkennung fehlgeschlagen:\n{e}")
+                self.main_window, "Fehler", f"Import fehlgeschlagen:\n{e}")
+
+    def _on_omr_error(self, msg: str) -> None:
+        """OMR Fehler (Main Thread)."""
+        from PySide6.QtWidgets import QMessageBox
+        self._remove_omr_progress()
+        QMessageBox.warning(
+            self.main_window, "Fehler",
+            f"Notenerkennung fehlgeschlagen:\n{msg}")
 
     def _on_beat_detect_part(self, part_idx: int) -> None:
         """Beats erkennen für eine Audio-Stimme (Rechtsklick)."""
