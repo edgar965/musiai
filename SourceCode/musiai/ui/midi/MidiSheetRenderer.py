@@ -875,6 +875,9 @@ class MidiSheetRenderer:
             for si, (staff, y_top, y_bot) in enumerate(layout):
                 start_sec = staff.start_time / tpb * 60.0 / bpm
                 end_sec = staff.end_time / tpb * 60.0 / bpm
+                # If last row or empty staff, extend to full audio
+                if end_sec <= start_sec or si == len(layout) - 1:
+                    end_sec = total_sec
                 end_sec = min(end_sec, total_sec)
                 if start_sec >= total_sec:
                     continue
