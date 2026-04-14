@@ -1,6 +1,7 @@
 """NoteDuration - Notentypen und Dauer-Klassifikation."""
 
 # NoteDuration Enum (aufsteigend nach Dauer)
+SIXTYFOURTH = -1
 THIRTYSECOND = 0
 SIXTEENTH = 1
 TRIPLET = 2
@@ -13,12 +14,12 @@ DOTTED_HALF = 8
 WHOLE = 9
 
 # Beambare Dauern
-BEAMABLE = {THIRTYSECOND, SIXTEENTH, TRIPLET, EIGHTH, DOTTED_EIGHTH}
+BEAMABLE = {SIXTYFOURTH, THIRTYSECOND, SIXTEENTH, TRIPLET, EIGHTH, DOTTED_EIGHTH}
 
 # Balken-Anzahl pro Typ
 BEAM_COUNT = {
     EIGHTH: 1, DOTTED_EIGHTH: 1, TRIPLET: 1,
-    SIXTEENTH: 2, THIRTYSECOND: 3,
+    SIXTEENTH: 2, THIRTYSECOND: 3, SIXTYFOURTH: 4,
 }
 
 
@@ -34,6 +35,7 @@ BEATS = {
     TRIPLET: 1.0 / 3.0,
     SIXTEENTH: 0.25,
     THIRTYSECOND: 0.125,
+    SIXTYFOURTH: 0.0625,
 }
 
 # Sorted from longest to shortest for nearest-match lookup
@@ -103,9 +105,9 @@ def split_complex(beats: float) -> list[float]:
 def name(dur: int) -> str:
     """Lesbare Bezeichnung."""
     names = {
-        THIRTYSECOND: "32nd", SIXTEENTH: "16th", TRIPLET: "Triplet",
-        EIGHTH: "8th", DOTTED_EIGHTH: "Dotted 8th", QUARTER: "Quarter",
-        DOTTED_QUARTER: "Dotted Quarter", HALF: "Half",
+        SIXTYFOURTH: "64th", THIRTYSECOND: "32nd", SIXTEENTH: "16th",
+        TRIPLET: "Triplet", EIGHTH: "8th", DOTTED_EIGHTH: "Dotted 8th",
+        QUARTER: "Quarter", DOTTED_QUARTER: "Dotted Quarter", HALF: "Half",
         DOTTED_HALF: "Dotted Half", WHOLE: "Whole",
     }
     return names.get(dur, "?")

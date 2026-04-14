@@ -67,6 +67,11 @@ class MidiSheetRenderer:
         if not parts_data:
             return
 
+        # Sync model expression data into converter symbols
+        piece = getattr(scene, 'piece', None)
+        if piece:
+            self._sync_model_velocity(parts_data, piece)
+
         track_symbols = [pd['symbols'] for pd in parts_data]
         total_symbols = sum(len(s) for s in track_symbols)
         logger.debug(f"render_from_file: {len(parts_data)} Parts, "
@@ -548,9 +553,9 @@ class MidiSheetRenderer:
                 quarter, measure_len)
 
         self._create_beamed_chords(
-            all_symbols, 3, True, time_num, time_den, quarter, measure_len)
-        self._create_beamed_chords(
             all_symbols, 4, True, time_num, time_den, quarter, measure_len)
+        self._create_beamed_chords(
+            all_symbols, 3, True, time_num, time_den, quarter, measure_len)
         self._create_beamed_chords(
             all_symbols, 2, True, time_num, time_den, quarter, measure_len)
         self._create_beamed_chords(
@@ -639,62 +644,195 @@ class MidiSheetRenderer:
         tpb = 480
 
         # 1) Measure tempo changes from model
+        #    Show at the first note where the tempo applies.
+        #    If there's no note in the tempo's measure, show at next measure.
         if note_parts:
             part = note_parts[0]
             abs_beat = 0.0
             prev_tempo = piece.initial_tempo
-            for m in part.measures:
+            for mi, m in enumerate(part.measures):
                 if m.tempo and abs(m.tempo.bpm - prev_tempo) >= 0.5:
+                    # Find first note tick in this measure or next
                     tick = int(abs_beat * tpb)
+                    if m.notes:
+                        tick = int((abs_beat + m.notes[0].start_beat) * tpb)
+                    elif mi + 1 < len(part.measures):
+                        next_beat = abs_beat + m.duration_beats
+                        tick = int(next_beat * tpb)
+
                     bpm = int(round(m.tempo.bpm))
-                    for staff_i, staff in enumerate(first_staffs):
-                        if staff_i >= len(y_offsets):
-                            break
+                    # Search through staff layout.
+                    # If tick is at/near end of a staff (line break),
+                    # show tempo at beginning of NEXT staff.
+                    layout = getattr(self, '_staff_y_positions', [])
+                    for si, (staff, y_top, y_bot) in enumerate(layout):
                         x = staff.find_x_for_pulse(tick)
                         if x is not None:
-                            scene_x = 100 + x
-                            scene_y = y_offsets[staff_i] - 5
+                            # Check if tick is near end of staff
+                            if (tick >= staff.end_time - 1
+                                    and si + 1 < len(layout)):
+                                # Use next staff beginning
+                                next_staff, ny_top, ny_bot = layout[si + 1]
+                                scene_x = 100 + next_staff.keysig_width
+                                scene_y = ny_top - 5
+                            else:
+                                scene_x = 100 + x
+                                scene_y = y_top - 5
                             self._add_tempo_label(
                                 scene, bpm, scene_x, scene_y)
                             break
                     prev_tempo = m.tempo.bpm
                 abs_beat += m.duration_beats
 
-        # 2) Per-note tempo deviations from model
+        # 2) Per-note expression overlays (cent offset + tempo dev)
         if note_parts:
-            part = note_parts[0]
-            abs_beat = 0.0
-            for m in part.measures:
-                for n in m.notes:
-                    dev = n.expression.duration_deviation
-                    if abs(dev - 1.0) >= 0.01:
+            for part in note_parts:
+                abs_beat = 0.0
+                for m in part.measures:
+                    for n in m.notes:
+                        cents = n.expression.cent_offset
+                        dev = n.expression.duration_deviation
+                        has_cents = abs(cents) >= 1.0
+                        has_dev = abs(dev - 1.0) >= 0.01
+                        if not has_cents and not has_dev:
+                            continue
                         tick = int((abs_beat + n.start_beat) * tpb)
-                        for staff_i, staff in enumerate(first_staffs):
-                            if staff_i >= len(y_offsets):
-                                break
+                        layout = getattr(self, '_staff_y_positions', [])
+                        for staff, y_top, y_bot in layout:
                             x = staff.find_x_for_pulse(tick)
                             if x is not None:
                                 scene_x = 100 + x
-                                scene_y = y_offsets[staff_i] - 5
-                                item = QGraphicsSimpleTextItem(
-                                    f"\u00d7{dev:.2f}")
-                                item.setFont(QFont(
-                                    "Arial", 8, QFont.Weight.Bold))
-                                color = (QColor(200, 100, 0) if dev < 1.0
-                                         else QColor(0, 80, 200))
-                                item.setBrush(QBrush(color))
-                                item.setPos(scene_x - 10, scene_y)
-                                item.setZValue(20)
-                                scene.addItem(item)
+                                y_base = y_top + staff.ytop - 14
+                                if has_cents:
+                                    sign = "+" if cents > 0 else ""
+                                    item = QGraphicsSimpleTextItem(
+                                        f"{sign}{cents:.0f}ct")
+                                    item.setFont(QFont(
+                                        "Arial", 7, QFont.Weight.Bold))
+                                    from PySide6.QtCore import QSettings as _QS
+                                    _s = _QS("MusiAI", "MusiAI")
+                                    if cents > 0:
+                                        _pc = _s.value("musicxml/pitch_color_high", "#FF4400")
+                                    else:
+                                        _pc = _s.value("musicxml/pitch_color_low", "#0088FF")
+                                    item.setBrush(QBrush(QColor(_pc)))
+                                    item.setPos(scene_x - 8, y_base)
+                                    item.setZValue(20)
+                                    scene.addItem(item)
+                                    # Visual marker (zigzag or curve) before note
+                                    glide = n.expression.glide_type
+                                    self._draw_cent_marker(
+                                        scene, scene_x - 22, y_base + 12,
+                                        cents, glide)
+                                if has_dev:
+                                    y_dev = y_base - 10 if has_cents else y_base
+                                    item = QGraphicsSimpleTextItem(
+                                        f"\u00d7{dev:.2f}")
+                                    item.setFont(QFont(
+                                        "Arial", 7, QFont.Weight.Bold))
+                                    color = (QColor(200, 100, 0) if dev < 1.0
+                                             else QColor(0, 80, 200))
+                                    item.setBrush(QBrush(color))
+                                    item.setPos(scene_x - 10, y_dev)
+                                    item.setZValue(20)
+                                    scene.addItem(item)
                                 break
-                abs_beat += m.duration_beats
+                    abs_beat += m.duration_beats
 
-        # 3) Tempo from parts_data (music21 file-based rendering)
+        # 4) Tempo from parts_data (music21 file-based rendering)
         if not note_parts and parts_data:
             tempo = parts_data[0].get('tempo_bpm')
             if tempo and tempo > 0:
                 y = y_offsets[0] - 5 if y_offsets else 40
                 self._add_tempo_label(scene, int(round(tempo)), 105, y)
+
+    @staticmethod
+    def _sync_model_velocity(parts_data, piece):
+        """Copy velocity from model Notes into converter NoteData.
+
+        The converter parses from file and doesn't know about model edits.
+        This syncs velocity so pixmap colors reflect user changes.
+        Matches by MIDI pitch with tick tolerance (±5 ticks).
+        """
+        tpb = 480
+        note_parts = [p for p in piece.parts
+                      if not (p.audio_track and p.audio_track.blocks)]
+        for pi, pd in enumerate(parts_data):
+            if pi >= len(note_parts):
+                break
+            # Build sorted list of (tick, midi, velocity) from model
+            model_notes = []
+            abs_beat = 0.0
+            for m in note_parts[pi].measures:
+                for n in m.notes:
+                    tick = int((abs_beat + n.start_beat) * tpb)
+                    model_notes.append((tick, n.pitch, n.expression.velocity))
+                abs_beat += m.duration_beats
+            # Update NoteData velocity in symbols — match by pitch + nearest tick
+            for sym in pd['symbols']:
+                if isinstance(sym, ChordSymbol):
+                    for nd in sym.notedata:
+                        best_vel = None
+                        best_dist = 999
+                        for mt, mp, mv in model_notes:
+                            if mp == nd.number and abs(mt - sym.start_time) < best_dist:
+                                best_dist = abs(mt - sym.start_time)
+                                best_vel = mv
+                        if best_vel is not None and best_dist <= 60:
+                            nd.velocity = best_vel
+
+    @staticmethod
+    def _draw_cent_marker(scene, x, y, cents, glide_type):
+        """Draw zigzag or curve marker for cent offset."""
+        from PySide6.QtWidgets import QGraphicsPathItem
+        from PySide6.QtGui import QPainterPath
+        from PySide6.QtCore import QSettings
+        settings = QSettings("MusiAI", "MusiAI")
+        if cents > 0:
+            color = QColor(settings.value("musicxml/pitch_color_high", "#FF4400"))
+        elif cents < 0:
+            color = QColor(settings.value("musicxml/pitch_color_low", "#0088FF"))
+        else:
+            color = QColor(settings.value("musicxml/pitch_color_std", "#FF8C1E"))
+        pen = QPen(color, 1.5)
+        w = min(20, max(8, abs(cents) / 5))
+        h = min(6, max(3, abs(cents) / 15))
+
+        path = QPainterPath()
+        if glide_type == "zigzag":
+            # Zigzag pattern
+            path.moveTo(x, y)
+            steps = 4
+            dx = w / steps
+            for i in range(steps):
+                dy = h if i % 2 == 0 else -h
+                path.lineTo(x + dx * (i + 1), y + dy)
+        elif glide_type == "curve":
+            # Smooth curve
+            path.moveTo(x, y)
+            path.cubicTo(x + w * 0.3, y - h,
+                         x + w * 0.7, y + h,
+                         x + w, y)
+        else:
+            # Default: small circle
+            path.addEllipse(x, y - 2, 5, 5)
+
+        item = QGraphicsPathItem(path)
+        item.setPen(pen)
+        item.setZValue(20)
+        scene.addItem(item)
+
+    @staticmethod
+    def _find_bar_x(staff, tick: int) -> int | None:
+        """Find x position of the barline at the given tick."""
+        from musiai.ui.midi.BarSymbol import BarSymbol
+        xpos = staff.keysig_width
+        for sym in staff.symbols:
+            if isinstance(sym, BarSymbol) and sym.start_time == tick:
+                return xpos
+            xpos += sym.width
+        # Fallback: use find_x_for_pulse
+        return staff.find_x_for_pulse(tick)
 
     def _store_staff_layout(self, scene):
         """Store staff layout on the scene for playhead positioning.
@@ -775,29 +913,20 @@ class MidiSheetRenderer:
         """Draw tempo marking (quarter note = BPM) above first system."""
         self._add_tempo_label(scene, int(round(tempo_bpm)), 105, y_offset - 28)
 
-    def _add_tempo_label(self, scene, bpm: int, x: float, y: float):
-        """Draw ♩= BPM with Bravura quarter note glyph + stem."""
-        if self.use_bravura:
-            # noteQuarterUp (U+E1D5) renders correctly via addText
-            note_item = scene.addText("\uE1D5")
-            note_item.setFont(QFont("Bravura", 14))
-            note_item.setDefaultTextColor(QColor(0, 0, 0))
-            note_item.setPos(x, y - 6)
-            note_item.setZValue(20)
+    @staticmethod
+    def _add_tempo_label(scene, bpm: int, x: float, y: float):
+        """Draw ♩= BPM above the staff. Large note, normal text."""
+        note = scene.addText("\u2669")
+        note.setFont(QFont("Arial", 18))
+        note.setDefaultTextColor(QColor(0, 0, 0))
+        note.setPos(x, y - 4)
+        note.setZValue(20)
 
-            text_item = scene.addText(f"= {bpm}")
-            text_item.setFont(QFont("Arial", 11, QFont.Weight.Bold))
-            text_item.setDefaultTextColor(QColor(0, 0, 0))
-            text_item.setPos(x + 9, y - 1)
-            text_item.setZValue(20)
-        else:
-            from PySide6.QtWidgets import QGraphicsSimpleTextItem
-            item = QGraphicsSimpleTextItem(f"\u2669 = {bpm}")
-            item.setFont(QFont("Arial", 11, QFont.Weight.Bold))
-            item.setBrush(QBrush(QColor(0, 0, 0)))
-            item.setPos(x, y)
-            item.setZValue(20)
-            scene.addItem(item)
+        text = scene.addText(f"= {bpm}")
+        text.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        text.setDefaultTextColor(QColor(0, 0, 0))
+        text.setPos(x + 14, y)
+        text.setZValue(20)
 
     def _render_staff(self, staff: Staff, cfg: dict) -> QPixmap:
         """Render a staff onto a QPixmap at 2x resolution for sharpness.

@@ -258,6 +258,7 @@ class NotationView(QGraphicsView):
                 menu.exec(event.globalPos())
                 return
         # Standard-Kontextmenü: Abspielen ab Position
+        scene._last_click_y = scene_pos.y()
         beat = scene.beat_at_x(scene_pos.x())
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)

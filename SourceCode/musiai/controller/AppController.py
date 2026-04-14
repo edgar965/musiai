@@ -26,6 +26,7 @@ class AppController:
     def __init__(self):
         self.project = Project()
         self.signal_bus = SignalBus()
+        self._dirty = False
 
         # MIDI
         self.midi_keyboard = MidiKeyboard()
@@ -180,15 +181,22 @@ class AppController:
         toolbar.import_midi_clicked.connect(self.file_controller.import_midi)
         toolbar.import_musicxml_clicked.connect(self.file_controller.import_musicxml)
         toolbar.import_pdf_clicked.connect(self._import_pdf)
-        toolbar.save_project_clicked.connect(self.file_controller.save_project)
+        self.main_window._save_project_action.triggered.connect(
+            self._save_project)
         toolbar.load_project_clicked.connect(self.file_controller.load_project)
         toolbar.export_midi_clicked.connect(self._export_midi)
         toolbar.export_pdf_clicked.connect(self._export_pdf)
         self.main_window._save_music_action.triggered.connect(
-            self.file_controller.save_music
+            self._save_and_refresh
         )
         self.main_window._save_music_as_action.triggered.connect(
             self.file_controller.save_music_as
+        )
+        self.main_window._save_project_as_action.triggered.connect(
+            self._save_project_as
+        )
+        self.main_window._new_project_action.triggered.connect(
+            self._new_project
         )
 
         # --- Tabs ---
@@ -260,6 +268,7 @@ class AppController:
         props.duration_changed.connect(self._change_duration)
         props.glide_type_changed.connect(self._on_glide_type_changed)
         props.tempo_changed.connect(self._on_tempo_changed)
+        props.save_requested.connect(self._save_and_refresh)
 
         # --- Delete ---
         self.main_window._delete_action.triggered.connect(self._delete_selected)
@@ -347,6 +356,12 @@ class AppController:
             abs_beat += m.duration_beats
 
         if best and best_dist < 1.0:
+            # Select note in EditController so property changes apply
+            ec = self._active_edit_controller()
+            if ec:
+                ec._selected_notes = [best]
+                logger.info(f"Staff note selected: {best.name} MIDI {best.pitch}, "
+                           f"ec has {len(ec._selected_notes)} selected")
             self.main_window.properties_panel.show_note(best)
             self.signal_bus.status_message.emit(
                 f"Note: {best.name} (MIDI {best.pitch}, "
@@ -377,6 +392,7 @@ class AppController:
     def _change_velocity(self, v):
         ec = self._active_edit_controller()
         if ec:
+            logger.info(f"change_velocity({v}), selected={len(ec._selected_notes)}")
             ec.change_velocity(v)
 
     def _change_cent_offset(self, c):
@@ -769,10 +785,36 @@ class AppController:
         self.main_window.properties_panel.clear()
         self.signal_bus.status_message.emit("Auswahl aufgehoben")
 
+    def _new_project(self) -> None:
+        """Neues leeres Projekt in neuem Tab."""
+        from musiai.model.Piece import Piece
+        piece = Piece("Neues Projekt")
+        from musiai.model.Part import Part
+        part = Part("Stimme 1")
+        from musiai.model.Measure import Measure
+        part.add_measure(Measure(1))
+        piece.add_part(part)
+        self.project.add_piece(piece)
+        self._open_piece_in_tab(piece)
+        self.signal_bus.status_message.emit("Neues Projekt erstellt")
+
+    def _save_and_refresh(self) -> None:
+        """Apply pending property changes and refresh scene (no file dialog)."""
+        props = self.main_window.properties_panel
+        props.apply_pending_changes()
+        self._dirty = False
+        scene = self._active_scene()
+        if scene:
+            scene.refresh()
+        self.signal_bus.status_message.emit("Änderungen übernommen")
+
     def _on_note_changed(self, note) -> None:
         ec = self._active_edit_controller()
         if ec and ec.selected_note is note:
             self.main_window.properties_panel.show_note(note)
+        # Mark as dirty (refresh on save)
+        self._dirty = True
+        self.signal_bus.status_message.emit("Geändert — Ctrl+S zum Speichern")
 
     # ------------------------------------------------------------------
     # Voice / Part Management
@@ -1104,6 +1146,20 @@ class AppController:
 
     def _load_default_file(self) -> None:
         import os
+        from PySide6.QtCore import QSettings
+        settings = QSettings("MusiAI", "MusiAI")
+
+        # Check if we should reopen last project
+        reopen = settings.value("ui/reopen_last_project", "false") == "true"
+        last_project = settings.value("ui/last_project_path", "")
+        if reopen and last_project and os.path.exists(last_project):
+            try:
+                self.file_controller.project.load(last_project)
+                self.signal_bus.project_loaded.emit(last_project)
+                logger.info(f"Letztes Projekt geladen: {last_project}")
+                return
+            except Exception as e:
+                logger.warning(f"Letztes Projekt laden fehlgeschlagen: {e}")
 
         default_file = os.path.abspath(
             "../media/music/musicXML/_Echte/"
@@ -1120,12 +1176,76 @@ class AppController:
                     piece = MusicXmlImporter().import_file(default_file)
                     file_type = "musicxml"
                 self.project.add_piece(piece)
+                self.file_controller._source_path = default_file
+                self.file_controller._source_type = file_type
                 self._open_piece_in_tab(piece, default_file, file_type)
                 logger.info(f"Standard-Datei geladen: {default_file}")
             except Exception as e:
                 logger.warning(f"Standard-Datei laden fehlgeschlagen: {e}")
 
-        # Audio-Stimme nur laden wenn explizit gewünscht (nicht automatisch)
+    def _save_project(self) -> None:
+        """Projekt speichern (inkl. Musik-Datei) und Pfad merken."""
+        props = self.main_window.properties_panel
+        props.apply_pending_changes()
+        self._dirty = False
+        # Save music file if path is known (no dialog)
+        if self.file_controller._source_path:
+            self.file_controller.save_music()
+        # Save project
+        self.file_controller.save_project()
+        path = self.project.file_path
+        if path:
+            from PySide6.QtCore import QSettings
+            settings = QSettings("MusiAI", "MusiAI")
+            settings.setValue("ui/last_project_path", path)
+            self._update_recent_menu()
+        scene = self._active_scene()
+        if scene:
+            scene.refresh()
+
+    def _save_project_as(self) -> None:
+        """Projekt speichern unter... und Pfad merken."""
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self.main_window, "Projekt speichern unter...",
+            "../media/projects",
+            "MusiAI Projekte (*.musiai);;Alle Dateien (*)")
+        if not path:
+            return
+        try:
+            self.project.save(path)
+            from PySide6.QtCore import QSettings
+            settings = QSettings("MusiAI", "MusiAI")
+            settings.setValue("ui/last_project_path", path)
+            self._update_recent_menu()
+            self.signal_bus.status_message.emit(
+                f"Projekt gespeichert: {path}")
+        except Exception as e:
+            logger.error(f"Projekt speichern fehlgeschlagen: {e}")
+
+    def _update_recent_menu(self) -> None:
+        """Update the recent projects submenu."""
+        from PySide6.QtCore import QSettings
+        menu = self.main_window._recent_menu
+        menu.clear()
+        settings = QSettings("MusiAI", "MusiAI")
+        last = settings.value("ui/last_project_path", "")
+        if last:
+            import os
+            name = os.path.basename(last)
+            menu.addAction(name, lambda p=last: self._open_recent(p))
+
+    def _open_recent(self, path: str) -> None:
+        """Open a recent project."""
+        import os
+        if not os.path.exists(path):
+            self.signal_bus.status_message.emit(f"Nicht gefunden: {path}")
+            return
+        try:
+            self.file_controller.project.load(path)
+            self.signal_bus.project_loaded.emit(path)
+        except Exception as e:
+            logger.error(f"Projekt laden fehlgeschlagen: {e}")
 
     def start(self) -> None:
         # Akkorde-Default aus Settings laden

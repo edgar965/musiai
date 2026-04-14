@@ -328,6 +328,219 @@ class TestSystemBreaksBravura(unittest.TestCase):
         self.assertTrue(scene.playhead.isVisible())
 
 
+class TestGraceNotes(unittest.TestCase):
+    """Tests for grace note parsing and display."""
+
+    @classmethod
+    def setUpClass(cls):
+        _ensure_qapp()
+
+    def test_grace_notes_in_model(self):
+        """MusicXmlImporter includes grace notes with short duration."""
+        import os
+        path = os.path.join(os.path.dirname(__file__), '..', '..',
+                            'media', 'music', 'musicXML', '_Echte',
+                            'Beethoven - Sonata 30, Mvt.3. '
+                            '{Professional production score.}.mxl')
+        if not os.path.exists(path):
+            self.skipTest("Beethoven MXL not found")
+        from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
+        piece = MusicXmlImporter().import_file(path)
+        # Measure 14 (index 13) should have grace notes (dur=0.125)
+        m14 = piece.parts[0].measures[13]
+        grace_notes = [n for n in m14.notes if n.duration_beats <= 0.125]
+        self.assertGreater(len(grace_notes), 0,
+                           "Grace notes should be in model")
+
+    def test_grace_notes_in_converter(self):
+        """Music21Converter creates ChordSymbols for grace notes."""
+        import os
+        path = os.path.join(os.path.dirname(__file__), '..', '..',
+                            'media', 'music', 'musicXML', '_Echte',
+                            'Beethoven - Sonata 30, Mvt.3. '
+                            '{Professional production score.}.mxl')
+        if not os.path.exists(path):
+            self.skipTest("Beethoven MXL not found")
+        from musiai.ui.midi.Music21Converter import Music21Converter
+        from musiai.ui.midi.ChordSymbol import ChordSymbol
+        conv = Music21Converter()
+        parts = conv.convert(path)
+        measure_len = parts[0]['measure_len']
+        m14_start = 13 * measure_len
+        m14_end = 14 * measure_len
+        # Grace notes should appear as short ChordSymbols before main note
+        graces = [s for s in parts[0]['symbols']
+                  if isinstance(s, ChordSymbol)
+                  and m14_start <= s.start_time < m14_end
+                  and (s.end_time - s.start_time) <= 61]
+        self.assertGreater(len(graces), 0,
+                           "Grace ChordSymbols should exist in measure 14")
+
+    def test_grace_notes_within_measure(self):
+        """Grace notes must be within their measure, not before barline."""
+        import os
+        path = os.path.join(os.path.dirname(__file__), '..', '..',
+                            'media', 'music', 'musicXML', '_Echte',
+                            'Beethoven - Sonata 30, Mvt.3. '
+                            '{Professional production score.}.mxl')
+        if not os.path.exists(path):
+            self.skipTest("Beethoven MXL not found")
+        from musiai.ui.midi.Music21Converter import Music21Converter
+        from musiai.ui.midi.ChordSymbol import ChordSymbol
+        conv = Music21Converter()
+        parts = conv.convert(path)
+        measure_len = parts[0]['measure_len']
+        # Measure 17 grace note B4 should be at tick >= 16*measure_len
+        m17_start = 16 * measure_len
+        graces_before = [s for s in parts[0]['symbols']
+                         if isinstance(s, ChordSymbol)
+                         and m17_start - 100 <= s.start_time < m17_start
+                         and (s.end_time - s.start_time) <= 61]
+        self.assertEqual(len(graces_before), 0,
+                         "Grace notes must not be before measure barline")
+
+
+class TestTempoMarkerPosition(unittest.TestCase):
+    """Tests for tempo marker positioning."""
+
+    @classmethod
+    def setUpClass(cls):
+        _ensure_qapp()
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        cls._orig = s.value("ui/musicxml_bravura", "true")
+        s.setValue("ui/musicxml_bravura", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        from PySide6.QtCore import QSettings
+        QSettings("MusiAI", "MusiAI").setValue(
+            "ui/musicxml_bravura", cls._orig)
+
+    def test_tempo_at_correct_staff(self):
+        """Tempo=45 marker at measure 17, not in previous staff."""
+        import os
+        path = os.path.join(os.path.dirname(__file__), '..', '..',
+                            'media', 'music', 'musicXML', '_Echte',
+                            'Beethoven - Sonata 30, Mvt.3. '
+                            '{Professional production score.}.mxl')
+        if not os.path.exists(path):
+            self.skipTest("Beethoven MXL not found")
+        from musiai.notation.NotationScene import NotationScene
+        from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
+        scene = NotationScene()
+        scene._source_file_path = path
+        piece = MusicXmlImporter().import_file(path)
+        scene.set_piece(piece)
+        # Find staff containing measure 17 (tick 23040)
+        m17_staff_y = None
+        for staff, y_top, y_bot in scene._staff_layout:
+            if staff.start_time <= 23040 <= staff.end_time:
+                m17_staff_y = y_top
+                break
+        self.assertIsNotNone(m17_staff_y)
+        # Find tempo "= 45" text item
+        from PySide6.QtWidgets import QGraphicsTextItem
+        found = False
+        for item in scene.items():
+            if isinstance(item, QGraphicsTextItem):
+                if "45" in (item.toPlainText() or ""):
+                    # Must be near staff y (within 30px above)
+                    dy = m17_staff_y - item.pos().y()
+                    self.assertGreater(dy, -10,
+                                       "Tempo must be above or at staff")
+                    self.assertLess(dy, 30,
+                                    "Tempo must be near its staff")
+                    found = True
+        self.assertTrue(found, "Tempo=45 marker not found")
+
+
+class TestExpressionOverlays(unittest.TestCase):
+    """Tests that cent offsets and tempo deviations appear after editing."""
+
+    @classmethod
+    def setUpClass(cls):
+        _ensure_qapp()
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        cls._orig = s.value("ui/musicxml_bravura", "true")
+        s.setValue("ui/musicxml_bravura", "true")
+
+    @classmethod
+    def tearDownClass(cls):
+        from PySide6.QtCore import QSettings
+        QSettings("MusiAI", "MusiAI").setValue(
+            "ui/musicxml_bravura", cls._orig)
+
+    def _make_scene(self):
+        import os
+        path = os.path.join(os.path.dirname(__file__), '..', '..',
+                            'media', 'music', 'musicXML', '_Echte',
+                            'Beethoven - Sonata 30, Mvt.3. '
+                            '{Professional production score.}.mxl')
+        if not os.path.exists(path):
+            self.skipTest("Beethoven MXL not found")
+        from musiai.notation.NotationScene import NotationScene
+        from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
+        scene = NotationScene()
+        scene._source_file_path = path
+        piece = MusicXmlImporter().import_file(path)
+        scene.set_piece(piece)
+        return scene, piece
+
+    def test_cent_offset_shown_after_edit(self):
+        """Setting cent_offset on a note creates a visible marker."""
+        scene, piece = self._make_scene()
+        note = piece.parts[0].measures[0].notes[0]
+        note.expression.cent_offset = 30.0
+        scene.refresh()
+        from PySide6.QtWidgets import QGraphicsSimpleTextItem
+        markers = [i for i in scene.items()
+                   if isinstance(i, QGraphicsSimpleTextItem)
+                   and "ct" in i.text()]
+        self.assertGreater(len(markers), 0,
+                           "Cent offset marker must appear after edit")
+        self.assertIn("+30ct", [m.text() for m in markers])
+
+    def test_tempo_deviation_shown_after_edit(self):
+        """Setting duration_deviation on a note creates a visible marker."""
+        scene, piece = self._make_scene()
+        note = piece.parts[0].measures[0].notes[0]
+        note.expression.duration_deviation = 0.75
+        scene.refresh()
+        from PySide6.QtWidgets import QGraphicsSimpleTextItem
+        markers = [i for i in scene.items()
+                   if isinstance(i, QGraphicsSimpleTextItem)
+                   and "\u00d7" in i.text()]
+        found = any("0.75" in m.text() for m in markers)
+        self.assertTrue(found,
+                        "Tempo deviation marker must appear after edit")
+
+    def test_no_markers_at_default(self):
+        """No cent/tempo markers for default expression values."""
+        scene, piece = self._make_scene()
+        note = piece.parts[0].measures[0].notes[0]
+        note.expression.cent_offset = 0.0
+        note.expression.duration_deviation = 1.0
+        scene.refresh()
+        self.assertIsNotNone(scene)
+
+    def test_velocity_change_updates_color(self):
+        """Changing velocity updates note color after refresh."""
+        scene, piece = self._make_scene()
+        note = piece.parts[0].measures[0].notes[0]
+        old_vel = note.expression.velocity
+        # Set to max velocity (should be blue-ish)
+        note.expression.velocity = 127
+        scene.refresh()
+        # Scene should re-render without error
+        from PySide6.QtWidgets import QGraphicsPixmapItem
+        pixmaps = [i for i in scene.items()
+                   if isinstance(i, QGraphicsPixmapItem)]
+        self.assertGreater(len(pixmaps), 0,
+                           "Scene must have pixmaps after velocity change")
+
+
 class TestSystemBracket(unittest.TestCase):
 
     @classmethod

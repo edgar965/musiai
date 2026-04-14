@@ -20,6 +20,7 @@ class PropertiesPanel(QDockWidget):
     cent_offset_changed = Signal(float)
     duration_changed = Signal(float)
     glide_type_changed = Signal(str)
+    save_requested = Signal()
     time_sig_changed = Signal(int, int)
     # Stimme
     part_instrument_changed = Signal(int, int)  # part_index, program
@@ -72,6 +73,7 @@ class PropertiesPanel(QDockWidget):
         self._note_label.setStyleSheet("font-size: 14px; font-weight: bold;")
         layout.addWidget(self._note_label)
 
+        # 1) Velocity
         vel_group = QGroupBox("Velocity (Lautstärke)")
         vel_lay = QFormLayout(vel_group)
         self._vel_slider = QSlider(Qt.Orientation.Horizontal)
@@ -82,20 +84,7 @@ class PropertiesPanel(QDockWidget):
         vel_lay.addRow(self._vel_label, self._vel_slider)
         layout.addWidget(vel_group)
 
-        cent_group = QGroupBox("Tonhöhe (Cent-Offset)")
-        cent_lay = QFormLayout(cent_group)
-        self._cent_slider = QSlider(Qt.Orientation.Horizontal)
-        self._cent_slider.setRange(-50, 50)
-        self._cent_slider.setValue(0)
-        self._cent_label = QLabel("0 ct")
-        self._cent_slider.valueChanged.connect(self._on_cent_changed)
-        cent_lay.addRow(self._cent_label, self._cent_slider)
-        self._glide_combo = QComboBox()
-        self._glide_combo.addItems(["none", "zigzag", "curve"])
-        self._glide_combo.currentTextChanged.connect(self._on_glide_changed)
-        cent_lay.addRow("Typ:", self._glide_combo)
-        layout.addWidget(cent_group)
-
+        # 2) Tempo-Abweichung
         dur_group = QGroupBox("Tempo-Abweichung")
         dur_lay = QFormLayout(dur_group)
         self._dur_spin = QDoubleSpinBox()
@@ -113,6 +102,32 @@ class PropertiesPanel(QDockWidget):
         self._dur_spin.valueChanged.connect(self._on_duration_changed)
         dur_lay.addRow("Faktor:", self._dur_spin)
         layout.addWidget(dur_group)
+
+        # 3) Tonhöhe (Cent)
+        cent_group = QGroupBox("Tonhöhe (Cent: 100 Cent = Halbton)")
+        cent_lay = QFormLayout(cent_group)
+        self._cent_slider = QSlider(Qt.Orientation.Horizontal)
+        self._cent_slider.setRange(-100, 100)
+        self._cent_slider.setValue(0)
+        self._cent_label = QLabel("0 ct")
+        self._cent_slider.valueChanged.connect(self._on_cent_changed)
+        cent_lay.addRow(self._cent_label, self._cent_slider)
+        self._glide_combo = QComboBox()
+        self._glide_combo.addItems(["none", "zigzag", "curve"])
+        self._glide_combo.currentTextChanged.connect(self._on_glide_changed)
+        cent_lay.addRow("Darstellung:", self._glide_combo)
+        layout.addWidget(cent_group)
+
+        # 4) Save button
+        from PySide6.QtWidgets import QPushButton
+        save_btn = QPushButton("Noten speichern (Alt+S)")
+        save_btn.setStyleSheet(
+            "background: #0070e0; color: white; font-weight: bold; "
+            "padding: 6px 16px; border-radius: 4px;"
+        )
+        save_btn.clicked.connect(self.save_requested.emit)
+        layout.addWidget(save_btn)
+
         return page
 
     def _build_time_sig_page(self) -> QWidget:
@@ -345,18 +360,42 @@ class PropertiesPanel(QDockWidget):
         if self._updating:
             return
         self._update_vel_label(value)
-        self.velocity_changed.emit(value)
+        # Don't emit — wait for save
 
     def _on_cent_changed(self, value: int) -> None:
         if self._updating:
             return
         self._cent_label.setText(f"{value} ct")
-        self.cent_offset_changed.emit(float(value))
+        # Don't emit — wait for save
 
     def _on_duration_changed(self, value: float) -> None:
         if self._updating:
             return
-        self.duration_changed.emit(value)
+        # Don't emit — wait for save
+
+    def apply_pending_changes(self) -> None:
+        """Apply all pending slider/spin values to the model. Called on save."""
+        if self._current_note is None:
+            return
+        n = self._current_note
+        vel = self._vel_slider.value()
+        cents = float(self._cent_slider.value())
+        dev = self._dur_spin.value()
+        glide = self._glide_combo.currentText()
+        changed = False
+        if n.expression.velocity != vel:
+            self.velocity_changed.emit(vel)
+            changed = True
+        if abs(n.expression.cent_offset - cents) >= 0.5:
+            self.cent_offset_changed.emit(cents)
+            changed = True
+        if abs(n.expression.duration_deviation - dev) >= 0.005:
+            self.duration_changed.emit(dev)
+            changed = True
+        if n.expression.glide_type != glide:
+            self.glide_type_changed.emit(glide)
+            changed = True
+        return changed
 
     def _on_glide_changed(self, text: str) -> None:
         if self._updating:

@@ -224,24 +224,26 @@ class ChordSymbol(MusicSymbol):
             if time_num == 3 and time_den == 8:
                 return False
             ok = time_num in (2, 4, 8)
-            if not ok and dur != ND.SIXTEENTH:
+            if not ok and dur not in (ND.SIXTEENTH, ND.THIRTYSECOND, ND.SIXTYFOURTH):
                 return False
             beat = quarter
             if dur == ND.EIGHTH:
                 beat = quarter * 2
-            elif dur == ND.THIRTYSECOND:
-                beat = quarter // 2
-            if (chords[0].start_time % beat) > quarter // 6:
+            elif dur in (ND.THIRTYSECOND, ND.SIXTYFOURTH):
+                beat = quarter // 4
+            if dur not in (ND.THIRTYSECOND, ND.SIXTYFOURTH) and (chords[0].start_time % beat) > quarter // 6:
                 return False
         elif num_chords == 3:
-            valid = (dur == ND.TRIPLET or
+            valid = (dur in (ND.TRIPLET, ND.THIRTYSECOND, ND.SIXTYFOURTH) or
                      (dur == ND.EIGHTH and time_num == 12 and time_den == 8))
             if not valid:
                 return False
             beat = quarter
-            if time_num == 12 and time_den == 8:
+            if dur in (ND.THIRTYSECOND, ND.SIXTYFOURTH):
+                beat = quarter // 4
+            elif time_num == 12 and time_den == 8:
                 beat = quarter // 2 * 3
-            if (chords[0].start_time % beat) > quarter // 6:
+            if dur not in (ND.THIRTYSECOND, ND.SIXTYFOURTH) and (chords[0].start_time % beat) > quarter // 6:
                 return False
         elif num_chords == 2:
             if start_beat:

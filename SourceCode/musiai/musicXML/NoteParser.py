@@ -39,8 +39,15 @@ class NoteParser:
         if pitch_result is None:
             return None
 
+        # Grace note? Use short duration (32nd = 0.125 beats)
+        is_grace = note_elem.find(f"{ns}grace") is not None
+
         # Duration
-        duration_beats = NoteParser._parse_duration(note_elem, ns, divisions)
+        if is_grace:
+            duration_beats = 0.125
+        else:
+            duration_beats = NoteParser._parse_duration(
+                note_elem, ns, divisions)
 
         # Velocity
         velocity = NoteParser._parse_velocity(note_elem, ns, current_velocity)

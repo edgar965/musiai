@@ -49,6 +49,10 @@ class Music21Converter:
                 part_data['tempo_bpm'] = tempo_bpm
                 results.append(part_data)
 
+        # Synchronize clef changes: if one part changes clef,
+        # other parts get a reminder clef symbol at the same tick
+        self._sync_clef_changes(results)
+
         logger.info(f"Konvertierung abgeschlossen: {len(results)} Parts, "
                     f"Tempo={tempo_bpm}")
         for i, pd in enumerate(results):
@@ -85,17 +89,24 @@ class Music21Converter:
         for m_idx, m21_measure in enumerate(measures):
             abs_offset = m21_measure.offset  # in quarter-note beats
             # Check for mid-piece clef changes
+            clef_changed = False
             measure_clefs = list(m21_measure.getElementsByClass('Clef'))
             if measure_clefs:
                 from musiai.music21 import clef as m21_clef
                 new_clef = BASS if isinstance(
                     measure_clefs[-1], m21_clef.BassClef) else TREBLE
                 if new_clef != current_clef:
-                    # Insert a clef change symbol
                     from musiai.ui.midi.ClefSymbol import ClefSymbol
                     tick = int(abs_offset * TPB)
                     chords.append(ClefSymbol(new_clef, tick, small=True))
+                    # Add key signature after clef change
+                    accids = self._create_key_accid_symbols(
+                        key_sharps, new_clef)
+                    for ac in accids:
+                        ac._start_time = tick
+                        chords.append(ac)
                     current_clef = new_clef
+                    clef_changed = True
             m_chords = self._convert_measure(
                 m21_measure, abs_offset, current_clef)
             chords.extend(m_chords)
@@ -103,7 +114,15 @@ class Music21Converter:
         if not chords:
             return None
 
-        last_tick = int(measures[-1].offset * TPB) + measure_len
+        # Find last measure with actual notes (skip trailing empty measures)
+        last_measure = measures[-1]
+        for m in reversed(measures):
+            elems = list(m.recurse().notesAndRests)
+            has_notes = any(not self._is_rest(e) for e in elems)
+            if has_notes:
+                last_measure = m
+                break
+        last_tick = int(last_measure.offset * TPB) + measure_len
         symbols = self._add_bars(chords, measure_len, last_tick)
         symbols = self._add_rests(symbols, time_num, time_den)
 
@@ -153,10 +172,13 @@ class Music21Converter:
         # Insert grace notes just before their main tick (within same measure)
         measure_start_tick = int(abs_offset * TPB)
         for main_tick, graces in grace_groups.items():
+            n_graces = len(graces)
+            # Make room: shift main note forward if grace lands on same tick
+            if main_tick in time_groups and main_tick == measure_start_tick:
+                main_els = time_groups.pop(main_tick)
+                time_groups[main_tick + n_graces] = main_els
             for i, gel in enumerate(graces):
-                # Place 1-2 ticks before main note, never before measure start
-                g_tick = main_tick - len(graces) + i
-                g_tick = max(measure_start_tick, g_tick)
+                g_tick = max(measure_start_tick, main_tick - n_graces) + i
                 while g_tick in time_groups:
                     g_tick += 1
                 time_groups[g_tick] = [gel]
@@ -364,6 +386,47 @@ class Music21Converter:
             for i in range(min(-key_sharps, 7)):
                 accids.append(AccidSymbol(FLAT, flat_notes[i], clef))
         return accids
+
+    def _sync_clef_changes(self, results: list[dict]) -> None:
+        """When one part has a clef change, add reminder clefs to other parts.
+
+        E.g. if Part 0 changes from Bass back to Treble at tick X,
+        Part 1 gets a Bass ClefSymbol + key signature at tick X.
+        """
+        if len(results) < 2:
+            return
+        from musiai.ui.midi.ClefSymbol import ClefSymbol
+
+        # Collect all clef change ticks from all parts
+        clef_ticks = set()
+        for pd in results:
+            for sym in pd['symbols']:
+                if isinstance(sym, ClefSymbol) and sym.small:
+                    clef_ticks.add(sym.start_time)
+
+        if not clef_ticks:
+            return
+
+        # For each part, add reminder clefs + key sig at missing ticks
+        for pd in results:
+            existing_ticks = {
+                sym.start_time for sym in pd['symbols']
+                if isinstance(sym, ClefSymbol) and sym.small
+            }
+            part_clef = pd['clef']
+            key_sharps = pd.get('key_sharps', 0)
+            for tick in sorted(clef_ticks):
+                if tick not in existing_ticks:
+                    pd['symbols'].append(
+                        ClefSymbol(part_clef, tick, small=True))
+                    # Add key signature accidentals
+                    accids = self._create_key_accid_symbols(
+                        key_sharps, part_clef)
+                    for ac in accids:
+                        ac._start_time = tick
+                        pd['symbols'].append(ac)
+            # Re-sort symbols by start_time
+            pd['symbols'].sort(key=lambda s: s.start_time)
 
     # ------------------------------------------------------------------
     # Type checks (avoid isinstance with music21 classes at module level)

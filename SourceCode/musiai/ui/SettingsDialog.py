@@ -102,56 +102,14 @@ class SettingsDialog(QDialog):
 
         settings = QSettings("MusiAI", "MusiAI")
 
-        # Bravura-Glyphen für MusicXML-Noten
-        self._musicxml_bravura = QCheckBox(
-            "Bravura-Glyphen für Noten (MusicXML-Ansicht)")
-        self._musicxml_bravura.setChecked(
-            settings.value("ui/musicxml_bravura", "false") == "true"
+        # Letztes Projekt beim Start öffnen
+        self._reopen_last = QCheckBox(
+            "Letztes Projekt beim Start öffnen")
+        self._reopen_last.setChecked(
+            settings.value("ui/reopen_last_project", "false") == "true"
         )
-        layout.addWidget(self._musicxml_bravura)
+        layout.addWidget(self._reopen_last)
 
-        # Akkorde per Default anzeigen
-        self._chords_default = QCheckBox("Akkorde per Default anzeigen")
-        self._chords_default.setChecked(
-            settings.value("ui/chords_default", "false") == "true"
-        )
-        layout.addWidget(self._chords_default)
-
-        group = QGroupBox("Font Akkorde")
-        form = QFormLayout(group)
-
-        self._chord_font_combo = QFontComboBox()
-        family = settings.value("ui/chord_font_family", "Arial")
-        self._chord_font_combo.setCurrentFont(QFont(family))
-        form.addRow("Schriftart:", self._chord_font_combo)
-
-        self._chord_font_size = QSpinBox()
-        self._chord_font_size.setRange(6, 72)
-        self._chord_font_size.setValue(int(settings.value("ui/chord_font_size", 11)))
-        form.addRow("Schriftgröße:", self._chord_font_size)
-
-        self._chord_bold = QCheckBox("Fett")
-        self._chord_bold.setChecked(
-            settings.value("ui/chord_font_bold", "true") == "true"
-        )
-        form.addRow("", self._chord_bold)
-
-        self._chord_italic = QCheckBox("Kursiv")
-        self._chord_italic.setChecked(
-            settings.value("ui/chord_font_italic", "false") == "true"
-        )
-        form.addRow("", self._chord_italic)
-
-        color_row = QHBoxLayout()
-        self._chord_color_btn = QPushButton()
-        self._chord_color_hex = settings.value("ui/chord_font_color", "#0044AA")
-        self._update_color_button()
-        self._chord_color_btn.clicked.connect(self._pick_chord_color)
-        color_row.addWidget(self._chord_color_btn)
-        color_row.addStretch()
-        form.addRow("Farbe:", color_row)
-
-        layout.addWidget(group)
         layout.addStretch()
         return page
 
@@ -176,6 +134,51 @@ class SettingsDialog(QDialog):
         page = QWidget()
         layout = QVBoxLayout(page)
         settings = QSettings("MusiAI", "MusiAI")
+
+        # Bravura-Glyphen (moved from UI tab)
+        self._musicxml_bravura = QCheckBox(
+            "Bravura-Glyphen für Noten (MusicXML-Ansicht)")
+        self._musicxml_bravura.setChecked(
+            settings.value("ui/musicxml_bravura", "false") == "true"
+        )
+        layout.addWidget(self._musicxml_bravura)
+
+        # Akkorde (moved from UI tab)
+        self._chords_default = QCheckBox("Akkorde per Default anzeigen")
+        self._chords_default.setChecked(
+            settings.value("ui/chords_default", "false") == "true"
+        )
+        layout.addWidget(self._chords_default)
+
+        chord_group = QGroupBox("Font Akkorde")
+        chord_form = QFormLayout(chord_group)
+        self._chord_font_combo = QFontComboBox()
+        family = settings.value("ui/chord_font_family", "Arial")
+        self._chord_font_combo.setCurrentFont(QFont(family))
+        chord_form.addRow("Schriftart:", self._chord_font_combo)
+        self._chord_font_size = QSpinBox()
+        self._chord_font_size.setRange(6, 72)
+        self._chord_font_size.setValue(
+            int(settings.value("ui/chord_font_size", 11)))
+        chord_form.addRow("Schriftgröße:", self._chord_font_size)
+        self._chord_bold = QCheckBox("Fett")
+        self._chord_bold.setChecked(
+            settings.value("ui/chord_font_bold", "true") == "true")
+        chord_form.addRow("", self._chord_bold)
+        self._chord_italic = QCheckBox("Kursiv")
+        self._chord_italic.setChecked(
+            settings.value("ui/chord_font_italic", "false") == "true")
+        chord_form.addRow("", self._chord_italic)
+        color_row = QHBoxLayout()
+        self._chord_color_btn = QPushButton()
+        self._chord_color_hex = settings.value(
+            "ui/chord_font_color", "#0044AA")
+        self._update_color_button()
+        self._chord_color_btn.clicked.connect(self._pick_chord_color)
+        color_row.addWidget(self._chord_color_btn)
+        color_row.addStretch()
+        chord_form.addRow("Farbe:", color_row)
+        layout.addWidget(chord_group)
 
         group = QGroupBox("Lautstärke-Farben (Velocity)")
         form = QFormLayout(group)
@@ -215,8 +218,57 @@ class SettingsDialog(QDialog):
         form.addRow("Lauter (ff, Vel 127):", self._vel_color_loud_btn)
 
         layout.addWidget(group)
+
+        # Pitch (cent offset) colors
+        pitch_group = QGroupBox("Tonhöhen-Farben (Cent-Abweichung)")
+        pitch_form = QFormLayout(pitch_group)
+
+        pitch_info = QLabel(
+            "Farben für Tonhöhen-Abweichung (Zacken/Bögen)."
+        )
+        pitch_info.setStyleSheet("color: #666; font-size: 10px;")
+        pitch_form.addRow(pitch_info)
+
+        self._pitch_color_std_hex = settings.value(
+            "musicxml/pitch_color_std", "#FF8C1E")
+        self._pitch_color_std_btn = QPushButton()
+        self._update_vel_btn(self._pitch_color_std_btn, self._pitch_color_std_hex)
+        self._pitch_color_std_btn.clicked.connect(
+            lambda: self._pick_pitch_color("std"))
+        pitch_form.addRow("Standard:", self._pitch_color_std_btn)
+
+        self._pitch_color_high_hex = settings.value(
+            "musicxml/pitch_color_high", "#FF4400")
+        self._pitch_color_high_btn = QPushButton()
+        self._update_vel_btn(self._pitch_color_high_btn, self._pitch_color_high_hex)
+        self._pitch_color_high_btn.clicked.connect(
+            lambda: self._pick_pitch_color("high"))
+        pitch_form.addRow("Höher (+Cent):", self._pitch_color_high_btn)
+
+        self._pitch_color_low_hex = settings.value(
+            "musicxml/pitch_color_low", "#0088FF")
+        self._pitch_color_low_btn = QPushButton()
+        self._update_vel_btn(self._pitch_color_low_btn, self._pitch_color_low_hex)
+        self._pitch_color_low_btn.clicked.connect(
+            lambda: self._pick_pitch_color("low"))
+        pitch_form.addRow("Tiefer (-Cent):", self._pitch_color_low_btn)
+
+        layout.addWidget(pitch_group)
         layout.addStretch()
         return page
+
+    def _pick_pitch_color(self, which: str) -> None:
+        mapping = {
+            "std": (self._pitch_color_std_btn, "_pitch_color_std_hex"),
+            "high": (self._pitch_color_high_btn, "_pitch_color_high_hex"),
+            "low": (self._pitch_color_low_btn, "_pitch_color_low_hex"),
+        }
+        btn, attr = mapping[which]
+        current = getattr(self, attr)
+        color = QColorDialog.getColor(QColor(current), self, "Farbe wählen")
+        if color.isValid():
+            setattr(self, attr, color.name())
+            self._update_vel_btn(btn, color.name())
 
     @staticmethod
     def _update_vel_btn(btn: QPushButton, hex_color: str) -> None:
@@ -493,5 +545,12 @@ class SettingsDialog(QDialog):
         settings.setValue("musicxml/vel_color_std", self._vel_color_std_hex)
         settings.setValue("musicxml/vel_color_soft", self._vel_color_soft_hex)
         settings.setValue("musicxml/vel_color_loud", self._vel_color_loud_hex)
+        # Pitch colors
+        settings.setValue("musicxml/pitch_color_std", self._pitch_color_std_hex)
+        settings.setValue("musicxml/pitch_color_high", self._pitch_color_high_hex)
+        settings.setValue("musicxml/pitch_color_low", self._pitch_color_low_hex)
+        # UI
+        settings.setValue("ui/reopen_last_project",
+                          "true" if self._reopen_last.isChecked() else "false")
         settings.setValue("logging/level", self._log_level_slider.value())
         super().accept()

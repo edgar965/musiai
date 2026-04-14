@@ -43,6 +43,19 @@ class MeasureParser:
         for elem in measure_elem:
             tag = elem.tag.replace(ns, "")
 
+            if tag == "backup":
+                dur_elem = elem.find(f"{ns}duration")
+                if dur_elem is not None and dur_elem.text:
+                    current_beat -= int(dur_elem.text) / state.divisions
+                    current_beat = max(0.0, current_beat)
+                continue
+
+            if tag == "forward":
+                dur_elem = elem.find(f"{ns}duration")
+                if dur_elem is not None and dur_elem.text:
+                    current_beat += int(dur_elem.text) / state.divisions
+                continue
+
             if tag == "direction":
                 MeasureParser._parse_direction(
                     elem, ns, state, measure, tempos_list, current_beat
@@ -116,10 +129,15 @@ class MeasureParser:
         )
 
         if note is not None:
+            is_grace = note_elem.find(f"{ns}grace") is not None
             # Akkord: gleiche Position wie vorherige Note
             if NoteParser.is_chord(note_elem, ns):
                 if measure.notes:
                     note.start_beat = measure.notes[-1].start_beat
+            elif is_grace:
+                # Grace note: place slightly before current_beat
+                note.start_beat = current_beat
+                # Don't advance current_beat
             else:
                 note.start_beat = current_beat
                 dur_ticks = NoteParser.get_duration_ticks(note_elem, ns)

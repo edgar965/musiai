@@ -302,6 +302,10 @@ class NotationScene(QGraphicsScene):
         return x
 
     def x_to_beat(self, x: float) -> float:
+        # MidiSheet mode: use staff layout to find beat from x,y
+        staff_layout = getattr(self, '_staff_layout', [])
+        if staff_layout:
+            return self._x_to_beat_staff(x, staff_layout)
         if not self._primary_renderers:
             return max(0.0, (x - self.MARGIN_LEFT) / PIXELS_PER_BEAT)
         cumulative = 0.0
@@ -391,6 +395,43 @@ class NotationScene(QGraphicsScene):
             return x_offset + x, y_top - TOP_EXTRA, y_bot
 
         return self.MARGIN_LEFT, None, None
+
+    def _x_to_beat_staff(self, x: float, staff_layout) -> float:
+        """Convert scene x to beat using staff layout (MidiSheet mode).
+
+        Uses last known y from context menu to find the correct staff row,
+        then walks symbols to find the beat at x.
+        """
+        from musiai.ui.midi.ChordSymbol import ChordSymbol
+        from musiai.ui.midi.BarSymbol import BarSymbol
+        x_offset = getattr(self, '_staff_x_offset', 100)
+        local_x = x - x_offset
+        ctx_y = getattr(self, '_last_click_y', None)
+
+        # Find the right staff row using y if available
+        target_staffs = staff_layout
+        if ctx_y is not None:
+            for staff, y_top, y_bot in staff_layout:
+                if y_top - 20 <= ctx_y <= y_bot + 20:
+                    target_staffs = [(staff, y_top, y_bot)]
+                    break
+
+        for staff, y_top, y_bot in target_staffs:
+            xpos = staff.keysig_width
+            prev_tick = staff.start_time
+            for sym in staff.symbols:
+                if xpos >= local_x:
+                    return prev_tick / 480.0
+                if isinstance(sym, (ChordSymbol, BarSymbol)):
+                    prev_tick = sym.start_time
+                xpos += sym.width
+            # x is past end of this staff
+            if target_staffs is not staff_layout:
+                return staff.end_time / 480.0
+
+        if staff_layout:
+            return staff_layout[-1][0].end_time / 480.0
+        return 0.0
 
     def _get_total_beats(self) -> float:
         """Gesamtdauer des Stücks in Beats."""

@@ -11,6 +11,31 @@ app = QApplication.instance() or QApplication(sys.argv)
 
 
 class TestColorScheme(unittest.TestCase):
+    def setUp(self):
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        # Ensure default colors for tests
+        self._orig_std = s.value("musicxml/vel_color_std")
+        self._orig_soft = s.value("musicxml/vel_color_soft")
+        self._orig_loud = s.value("musicxml/vel_color_loud")
+        s.setValue("musicxml/vel_color_std", "#FF0000")
+        s.setValue("musicxml/vel_color_soft", "#FFFF00")
+        s.setValue("musicxml/vel_color_loud", "#0000FF")
+        from musiai.notation.ColorScheme import ColorScheme
+        ColorScheme.reload_colors()
+
+    def tearDown(self):
+        from PySide6.QtCore import QSettings
+        s = QSettings("MusiAI", "MusiAI")
+        if self._orig_std:
+            s.setValue("musicxml/vel_color_std", self._orig_std)
+        if self._orig_soft:
+            s.setValue("musicxml/vel_color_soft", self._orig_soft)
+        if self._orig_loud:
+            s.setValue("musicxml/vel_color_loud", self._orig_loud)
+        from musiai.notation.ColorScheme import ColorScheme
+        ColorScheme.reload_colors()
+
     def test_velocity_yellow_at_zero(self):
         from musiai.notation.ColorScheme import ColorScheme
         c = ColorScheme.velocity_to_color(0)
@@ -196,7 +221,7 @@ class TestNoteItem(unittest.TestCase):
         n.expression.velocity = 120
         item.update_from_note()
         color_after = item.brush().color()
-        self.assertNotEqual(color_before.blue(), color_after.blue())
+        self.assertNotEqual(color_before.rgb(), color_after.rgb())
 
     def test_selection_visual(self):
         from musiai.notation.NoteItem import NoteItem
