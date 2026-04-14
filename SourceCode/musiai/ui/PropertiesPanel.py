@@ -87,20 +87,18 @@ class PropertiesPanel(QDockWidget):
         # 2) Tempo-Abweichung
         dur_group = QGroupBox("Tempo-Abweichung")
         dur_lay = QFormLayout(dur_group)
-        self._dur_spin = QDoubleSpinBox()
-        self._dur_spin.setRange(0.10, 10.0)
-        self._dur_spin.setValue(1.0)
-        self._dur_spin.setSingleStep(0.05)
-        self._dur_spin.setDecimals(2)
-        self._dur_spin.setKeyboardTracking(False)
-        self._dur_spin.setToolTip(
+        self._dur_slider = QSlider(Qt.Orientation.Horizontal)
+        self._dur_slider.setRange(10, 200)  # 0.10 - 2.00 (×100)
+        self._dur_slider.setValue(100)       # 1.00
+        self._dur_label = QLabel("×1.00")
+        self._dur_slider.setToolTip(
             "Tempo-Faktor ab dieser Note:\n"
             "1.0 = Standard-Tempo\n"
             "0.8 = 20% langsamer (rit.)\n"
             "1.2 = 20% schneller (accel.)"
         )
-        self._dur_spin.valueChanged.connect(self._on_duration_changed)
-        dur_lay.addRow("Faktor:", self._dur_spin)
+        self._dur_slider.valueChanged.connect(self._on_duration_changed)
+        dur_lay.addRow(self._dur_label, self._dur_slider)
         layout.addWidget(dur_group)
 
         # 3) Tonhöhe (Cent)
@@ -283,7 +281,8 @@ class PropertiesPanel(QDockWidget):
         self._update_vel_label(note.expression.velocity)
         self._cent_slider.setValue(int(note.expression.cent_offset))
         self._cent_label.setText(f"{note.expression.cent_offset:.0f} ct")
-        self._dur_spin.setValue(note.expression.duration_deviation)
+        self._dur_slider.setValue(int(note.expression.duration_deviation * 100))
+        self._dur_label.setText(f"\u00d7{note.expression.duration_deviation:.2f}")
         idx = self._glide_combo.findText(note.expression.glide_type)
         if idx >= 0:
             self._glide_combo.setCurrentIndex(idx)
@@ -368,9 +367,10 @@ class PropertiesPanel(QDockWidget):
         self._cent_label.setText(f"{value} ct")
         # Don't emit — wait for save
 
-    def _on_duration_changed(self, value: float) -> None:
+    def _on_duration_changed(self, value: int) -> None:
         if self._updating:
             return
+        self._dur_label.setText(f"\u00d7{value / 100.0:.2f}")
         # Don't emit — wait for save
 
     def apply_pending_changes(self) -> None:
@@ -380,7 +380,7 @@ class PropertiesPanel(QDockWidget):
         n = self._current_note
         vel = self._vel_slider.value()
         cents = float(self._cent_slider.value())
-        dev = self._dur_spin.value()
+        dev = self._dur_slider.value() / 100.0
         glide = self._glide_combo.currentText()
         changed = False
         if n.expression.velocity != vel:

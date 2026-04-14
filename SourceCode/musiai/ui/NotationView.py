@@ -23,6 +23,7 @@ class NotationView(QGraphicsView):
     part_label_clicked = Signal(int)           # Part-Index
     part_mute_clicked = Signal(int)            # Part-Index
     part_detect_requested = Signal(int)        # Part-Index (Rechtsklick)
+    part_beat_detect_requested = Signal(int)   # Part-Index (Beats erkennen)
     part_delete_requested = Signal(int)        # Part-Index (Rechtsklick)
     copy_requested = Signal()
     paste_requested = Signal()
@@ -243,6 +244,7 @@ class NotationView(QGraphicsView):
             tag = item.data(0)
             if tag in ("part_label", "part_mute", "waveform"):
                 idx = item.data(1)
+                is_waveform = (tag == "waveform")
                 from PySide6.QtWidgets import QMenu
                 menu = QMenu(self)
                 menu.addAction("Eigenschaften").triggered.connect(
@@ -251,6 +253,10 @@ class NotationView(QGraphicsView):
                 menu.addAction("Noten erkennen...").triggered.connect(
                     lambda _, i=idx: self.part_detect_requested.emit(i)
                 )
+                if is_waveform:
+                    menu.addAction("Beats erkennen...").triggered.connect(
+                        lambda _, i=idx: self.part_beat_detect_requested.emit(i)
+                    )
                 menu.addSeparator()
                 menu.addAction("Stimme löschen").triggered.connect(
                     lambda _, i=idx: self.part_delete_requested.emit(i)

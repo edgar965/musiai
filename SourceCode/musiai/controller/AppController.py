@@ -27,6 +27,8 @@ class AppController:
         self.project = Project()
         self.signal_bus = SignalBus()
         self._dirty = False
+        self._beat_engine = "librosa"
+        self._omr_engine = "oemer"
 
         # MIDI
         self.midi_keyboard = MidiKeyboard()
@@ -148,6 +150,7 @@ class AppController:
             (view.part_label_clicked, self._on_part_label_clicked),
             (view.part_mute_clicked, self._on_part_mute_clicked),
             (view.part_detect_requested, self._on_part_detect),
+            (view.part_beat_detect_requested, self._on_beat_detect_part),
             (view.part_delete_requested, self._on_part_delete),
             (view.deselect_requested, self._on_deselect),
             (view.edit_mode_changed, self._on_edit_mode_changed),
@@ -276,6 +279,7 @@ class AppController:
         # --- Neue Stimme ---
         self.main_window._new_voice_action.triggered.connect(self._add_new_voice)
         self.main_window._new_audio_action.triggered.connect(self._add_audio_voice)
+        self.main_window._new_omr_action.triggered.connect(self._import_from_image)
 
         # --- Note changed → Refresh ---
         self.signal_bus.note_changed.connect(self._on_note_changed)
@@ -625,8 +629,15 @@ class AppController:
                 dialog._pdf_import_engines[self._pdf_import_engine].setChecked(True)
             if dialog._pdf_export_engines.get(self._pdf_export_engine):
                 dialog._pdf_export_engines[self._pdf_export_engine].setChecked(True)
+        # Beat engine vorselektieren
+        if hasattr(dialog, '_beat_engines'):
+            if dialog._beat_engines.get(self._beat_engine):
+                dialog._beat_engines[self._beat_engine].setChecked(True)
         if dialog.exec():
             self._detection_engine = dialog.selected_engine
+            self._beat_engine = dialog.selected_beat_engine
+            if hasattr(dialog, 'selected_omr_engine'):
+                self._omr_engine = dialog.selected_omr_engine
             if hasattr(dialog, 'selected_pdf_import_engine'):
                 self._pdf_import_engine = dialog.selected_pdf_import_engine
             if hasattr(dialog, 'selected_pdf_export_engine'):
@@ -785,6 +796,224 @@ class AppController:
         self.main_window.properties_panel.clear()
         self.signal_bus.status_message.emit("Auswahl aufgehoben")
 
+    def _import_from_image(self) -> None:
+        """Bearbeiten → Neue Spur aus Bild/PDF."""
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        path, _ = QFileDialog.getOpenFileName(
+            self.main_window, "Bild/PDF mit Noten laden",
+            "../media",
+            "Bilder/PDF (*.png *.jpg *.jpeg *.bmp *.tiff *.pdf)"
+            ";;Alle Dateien (*)")
+        if not path:
+            return
+
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
+
+        try:
+            from musiai.omr.SheetMusicRecognizer import SheetMusicRecognizer
+            engine = self._omr_engine or "oemer"
+            self.signal_bus.status_message.emit(
+                f"Notenerkennung läuft ({engine})...")
+            QApplication.processEvents()
+
+            result = SheetMusicRecognizer.recognize(path, engine)
+            QApplication.restoreOverrideCursor()
+
+            if not result.success:
+                QMessageBox.warning(
+                    self.main_window, "Fehler",
+                    f"Notenerkennung fehlgeschlagen:\n{result.error}")
+                return
+
+            # Parse MusicXML result into Piece
+            from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
+            import tempfile
+            tmp = tempfile.mktemp(suffix=".musicxml")
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(result.musicxml)
+
+            importer = MusicXmlImporter()
+            piece = importer.import_file(tmp)
+            import os
+            os.unlink(tmp)
+
+            piece.source_file = path
+            self.project.add_piece(piece)
+            self._open_piece_in_tab(piece, path, "musicxml")
+            self.signal_bus.status_message.emit(
+                f"Noten erkannt: {len(piece.parts)} Stimmen, "
+                f"{piece.total_measures} Takte")
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            logger.error(f"OMR fehlgeschlagen: {e}", exc_info=True)
+            QMessageBox.warning(
+                self.main_window, "Fehler",
+                f"Notenerkennung fehlgeschlagen:\n{e}")
+
+    def _on_beat_detect_part(self, part_idx: int) -> None:
+        """Beats erkennen für eine Audio-Stimme (Rechtsklick)."""
+        piece = self._active_piece()
+        if not piece or part_idx >= len(piece.parts):
+            return
+        part = piece.parts[part_idx]
+        if not part.audio_track or not part.audio_track.file_path:
+            self.signal_bus.status_message.emit(
+                "Keine Audio-Datei in dieser Stimme")
+            return
+        self._run_beat_detection_on_file(part.audio_track.file_path)
+
+    def _run_beat_detection(self) -> None:
+        """Beat-Erkennung via Datei-Dialog."""
+        from PySide6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self.main_window, "Audio-Datei für Beat-Erkennung",
+            "../media/mp3",
+            "Audio (*.wav *.mp3 *.ogg *.flac);;Alle Dateien (*)")
+        if not path:
+            return
+        self._run_beat_detection_on_file(path)
+
+    def _run_beat_detection_on_file(self, path: str) -> None:
+        """Beat-Erkennung auf eine Datei: Beats erkennen → Stimme anlegen."""
+        from PySide6.QtWidgets import QMessageBox
+
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
+
+        try:
+            from musiai.audio.BeatDetector import BeatDetector, BeatResult
+            from musiai.model.AudioTrack import AudioTrack
+            from musiai.model.Part import Part
+            from musiai.model.Measure import Measure
+            from musiai.model.Note import Note
+            from musiai.model.TimeSignature import TimeSignature
+            from musiai.model.Piece import Piece
+            import os
+
+            engine = self._beat_engine or "librosa"
+            self.signal_bus.status_message.emit(
+                f"Beat-Erkennung läuft ({engine})...")
+            QApplication.processEvents()
+
+            # 1) Detect beats
+            result = BeatDetector.detect(path, engine)
+
+            # 2) Load audio track
+            audio_track = AudioTrack()
+            if not audio_track.load(path):
+                QApplication.restoreOverrideCursor()
+                QMessageBox.warning(self.main_window, "Fehler",
+                                    "Audio laden fehlgeschlagen")
+                return
+
+            # 3) Create or use active piece
+            piece = self._active_piece()
+            scene = self._active_scene()
+            if not piece:
+                name = os.path.splitext(os.path.basename(path))[0]
+                piece = Piece(name)
+                self.project.add_piece(piece)
+                self._open_piece_in_tab(piece)
+                scene = self._active_scene()
+
+            # 4) Map beat times to piece beats
+            #    Each detected beat = 1 beat in the piece.
+            #    Group into measures by time signature.
+            ts_num, ts_den = result.time_signature
+            ts = TimeSignature(ts_num, ts_den)
+            beats_per_measure = int(ts.beats_per_measure())
+            total_beats = len(result.beat_times)
+            n_measures = max(1, total_beats // beats_per_measure + 1)
+
+            # 5) Audio part — only add if not already present
+            existing_audio = [p for p in piece.parts
+                              if p.audio_track and
+                              p.audio_track.file_path == path]
+            if not existing_audio:
+                audio_name = os.path.splitext(os.path.basename(path))[0]
+                audio_part = Part(
+                    name=f"Audio: {audio_name}",
+                    channel=len(piece.parts))
+                audio_part.audio_track = audio_track
+                for i in range(n_measures):
+                    audio_part.add_measure(Measure(i + 1, ts))
+                piece.add_part(audio_part)
+
+            # 6) Beat part — one note per detected beat,
+            #    duration = time until next beat (variable lengths)
+            beat_part = Part(
+                name=f"Beats ({engine})", channel=len(piece.parts))
+            # Calculate duration of each beat in beats (relative to BPM)
+            beat_durations = []
+            for bi in range(total_beats):
+                if bi + 1 < total_beats:
+                    dt_sec = result.beat_times[bi + 1] - result.beat_times[bi]
+                    dur_beats = dt_sec * result.bpm / 60.0
+                else:
+                    dur_beats = 1.0
+                beat_durations.append(dur_beats)
+
+            for i in range(n_measures):
+                m = Measure(i + 1, ts)
+                measure_start_beat = i * beats_per_measure
+                for j in range(beats_per_measure):
+                    beat_idx = measure_start_beat + j
+                    if beat_idx < total_beats:
+                        dur = beat_durations[beat_idx]
+                        m.add_note(Note(60, float(j), dur))
+                beat_part.add_measure(m)
+            piece.add_part(beat_part)
+
+            # 7) Set tempo from detected BPM
+            #    Offset: first beat might not be at time 0
+            from musiai.model.Tempo import Tempo
+            first_beat_sec = result.beat_times[0] if result.beat_times else 0
+            first_beat_offset = first_beat_sec * result.bpm / 60.0
+            # Shift audio start so beat 0 aligns with first detected beat
+            if audio_track.blocks:
+                audio_track.blocks[0].start_beat = -first_beat_offset
+            piece.tempos = [Tempo(result.bpm, 0.0)]
+
+            # Add per-beat tempo variations as duration_deviation
+            if len(result.tempo_curve) > 1:
+                median_bpm = result.bpm
+                beat_idx = 0
+                for m in beat_part.measures:
+                    for n in m.notes:
+                        if beat_idx < len(result.tempo_curve):
+                            _, local_bpm = result.tempo_curve[beat_idx]
+                            dev = local_bpm / median_bpm
+                            if abs(dev - 1.0) >= 0.02:
+                                n.expression.duration_deviation = dev
+                        beat_idx += 1
+
+            # 8) Refresh
+            self.playback_engine.set_piece(piece)
+            if scene:
+                scene.refresh()
+
+            QApplication.restoreOverrideCursor()
+
+            total_beat_notes = sum(len(m.notes) for m in beat_part.measures)
+            self.signal_bus.status_message.emit(
+                f"Beat-Erkennung: {result.bpm:.0f} BPM, "
+                f"{total_beat_notes} Beats, Taktart {ts_num}/{ts_den}")
+            logger.info(f"Beat-Erkennung fertig: {result.bpm:.0f} BPM, "
+                        f"{total_beat_notes} Beats, engine={engine}")
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            logger.error(f"Beat-Erkennung fehlgeschlagen: {e}", exc_info=True)
+            QMessageBox.warning(
+                self.main_window, "Fehler",
+                f"Beat-Erkennung fehlgeschlagen:\n{e}")
+
     def _new_project(self) -> None:
         """Neues leeres Projekt in neuem Tab."""
         from musiai.model.Piece import Piece
@@ -873,12 +1102,15 @@ class AppController:
         )
 
     def _add_audio_voice(self) -> None:
+        logger.info("_add_audio_voice aufgerufen")
         path, _ = QFileDialog.getOpenFileName(
             self.main_window, "Audio laden", "../media/mp3",
             "Audio Dateien (*.wav *.mp3 *.flac *.ogg);;Alle Dateien (*)"
         )
         if not path:
+            logger.warning("_add_audio_voice: kein Pfad ausgewählt")
             return
+        logger.info(f"Audio-Datei ausgewählt: {path}")
 
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QApplication
@@ -1153,13 +1385,9 @@ class AppController:
         reopen = settings.value("ui/reopen_last_project", "false") == "true"
         last_project = settings.value("ui/last_project_path", "")
         if reopen and last_project and os.path.exists(last_project):
-            try:
-                self.file_controller.project.load(last_project)
-                self.signal_bus.project_loaded.emit(last_project)
+            if self._load_project_from_path(last_project):
                 logger.info(f"Letztes Projekt geladen: {last_project}")
                 return
-            except Exception as e:
-                logger.warning(f"Letztes Projekt laden fehlgeschlagen: {e}")
 
         default_file = os.path.abspath(
             "../media/music/musicXML/_Echte/"
@@ -1175,6 +1403,7 @@ class AppController:
                     from musiai.musicXML.MusicXmlImporter import MusicXmlImporter
                     piece = MusicXmlImporter().import_file(default_file)
                     file_type = "musicxml"
+                piece.source_file = default_file
                 self.project.add_piece(piece)
                 self.file_controller._source_path = default_file
                 self.file_controller._source_type = file_type
@@ -1195,10 +1424,7 @@ class AppController:
         self.file_controller.save_project()
         path = self.project.file_path
         if path:
-            from PySide6.QtCore import QSettings
-            settings = QSettings("MusiAI", "MusiAI")
-            settings.setValue("ui/last_project_path", path)
-            self._update_recent_menu()
+            self._add_to_recent(path)
         scene = self._active_scene()
         if scene:
             scene.refresh()
@@ -1214,38 +1440,71 @@ class AppController:
             return
         try:
             self.project.save(path)
-            from PySide6.QtCore import QSettings
-            settings = QSettings("MusiAI", "MusiAI")
-            settings.setValue("ui/last_project_path", path)
-            self._update_recent_menu()
+            self._add_to_recent(path)
             self.signal_bus.status_message.emit(
                 f"Projekt gespeichert: {path}")
         except Exception as e:
             logger.error(f"Projekt speichern fehlgeschlagen: {e}")
 
+    def _add_to_recent(self, path: str) -> None:
+        """Add a project path to the recent list (max 10)."""
+        from PySide6.QtCore import QSettings
+        settings = QSettings("MusiAI", "MusiAI")
+        recent = settings.value("ui/recent_projects", []) or []
+        if isinstance(recent, str):
+            recent = [recent] if recent else []
+        # Remove if already in list, add to front
+        recent = [p for p in recent if p != path]
+        recent.insert(0, path)
+        recent = recent[:10]
+        settings.setValue("ui/recent_projects", recent)
+        settings.setValue("ui/last_project_path", path)
+        self._update_recent_menu()
+
     def _update_recent_menu(self) -> None:
         """Update the recent projects submenu."""
+        import os
         from PySide6.QtCore import QSettings
         menu = self.main_window._recent_menu
         menu.clear()
         settings = QSettings("MusiAI", "MusiAI")
-        last = settings.value("ui/last_project_path", "")
-        if last:
-            import os
-            name = os.path.basename(last)
-            menu.addAction(name, lambda p=last: self._open_recent(p))
+        recent = settings.value("ui/recent_projects", []) or []
+        if isinstance(recent, str):
+            recent = [recent] if recent else []
+        for path in recent:
+            if os.path.exists(path):
+                name = os.path.basename(path)
+                menu.addAction(name, lambda p=path: self._open_recent(p))
+        if not recent:
+            menu.addAction("(keine)").setEnabled(False)
 
     def _open_recent(self, path: str) -> None:
         """Open a recent project."""
+        self._load_project_from_path(path)
+
+    def _load_project_from_path(self, path: str) -> bool:
+        """Load a project file and open all pieces in tabs."""
         import os
         if not os.path.exists(path):
             self.signal_bus.status_message.emit(f"Nicht gefunden: {path}")
-            return
+            return False
         try:
-            self.file_controller.project.load(path)
-            self.signal_bus.project_loaded.emit(path)
+            self.project.load(path)
+            # Open each piece in a tab
+            for piece in self.project.pieces:
+                # Try to find original source file path from piece metadata
+                source = getattr(piece, 'source_file', None)
+                file_type = "musicxml"
+                if source and source.endswith(('.mid', '.midi')):
+                    file_type = "midi"
+                self._open_piece_in_tab(piece, source, file_type)
+            self._add_to_recent(path)
+            self.signal_bus.status_message.emit(
+                f"Projekt geladen: {os.path.basename(path)}")
+            return True
         except Exception as e:
             logger.error(f"Projekt laden fehlgeschlagen: {e}")
+            return False
 
     def start(self) -> None:
         # Akkorde-Default aus Settings laden
@@ -1255,6 +1514,7 @@ class AppController:
         if chords_default:
             self.main_window._chord_toggle.setChecked(True)
 
+        self._update_recent_menu()
         self.main_window.show()
         self._load_default_file()
 

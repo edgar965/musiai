@@ -574,7 +574,8 @@ class NotationScene(QGraphicsScene):
                     file_path, self, self._system_width,
                     interleave=interleave)
             else:
-                renderer.render(self.piece, self, self._system_width)
+                renderer.render(self.piece, self, self._system_width,
+                                interleave=interleave)
         except Exception as e:
             logger.error(f"MIDI Sheet Fehler: {e}", exc_info=True)
             text = self.addText(f"MIDI Sheet Fehler: {e}")

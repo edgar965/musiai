@@ -34,6 +34,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._tabs)
 
         self._tabs.addTab(self._build_detection_tab(), "Notenerkennung")
+        self._tabs.addTab(self._build_beat_tab(), "Beat-Erkennung")
+        self._tabs.addTab(self._build_omr_tab(), "Noten von Bild")
         self._tabs.addTab(self._build_audio_tab(), "Audio")
         self._tabs.addTab(self._build_ui_tab(), "UI")
         self._tabs.addTab(self._build_musicxml_tab(), "MusicXML")
@@ -86,6 +88,98 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(group)
         return page
+
+    def _build_beat_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        group = QGroupBox("Engine für Beat-Erkennung")
+        g_lay = QVBoxLayout(group)
+        self._beat_engine_group = QButtonGroup(self)
+        self._beat_engines = {}
+        self._beat_status = {}
+
+        from musiai.audio.BeatDetector import BeatDetector
+        for i, (key, info) in enumerate(BeatDetector.ENGINES.items()):
+            radio = QRadioButton(info["name"])
+            desc = QLabel(info["desc"])
+            desc.setStyleSheet("color: #666; font-size: 9px; margin-left: 20px;")
+            status = QLabel("")
+            status.setStyleSheet("font-weight: bold; margin-left: 20px;")
+            self._beat_engine_group.addButton(radio, i)
+            self._beat_engines[key] = radio
+            self._beat_status[key] = status
+            g_lay.addWidget(radio)
+            g_lay.addWidget(desc)
+            g_lay.addWidget(status)
+
+        layout.addWidget(group)
+
+        # Detect available engines
+        avail = BeatDetector.detect_available()
+        for key, available in avail.items():
+            self._set_engine_status(
+                self._beat_status[key], self._beat_engines[key], available)
+        # Select first available
+        for key in BeatDetector.ENGINES:
+            if self._beat_engines[key].isEnabled():
+                self._beat_engines[key].setChecked(True)
+                break
+
+        layout.addStretch()
+        return page
+
+    @property
+    def selected_beat_engine(self) -> str:
+        for key, radio in self._beat_engines.items():
+            if radio.isChecked():
+                return key
+        return "librosa"
+
+    def _build_omr_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        group = QGroupBox("Engine für Noten-Erkennung aus Bild/PDF")
+        g_lay = QVBoxLayout(group)
+        self._omr_engine_group = QButtonGroup(self)
+        self._omr_engines = {}
+        self._omr_status = {}
+
+        from musiai.omr.SheetMusicRecognizer import SheetMusicRecognizer
+        for i, (key, info) in enumerate(SheetMusicRecognizer.ENGINES.items()):
+            radio = QRadioButton(info["name"])
+            desc = QLabel(info["desc"])
+            desc.setStyleSheet("color: #666; font-size: 9px; margin-left: 20px;")
+            status = QLabel("")
+            status.setStyleSheet("font-weight: bold; margin-left: 20px;")
+            self._omr_engine_group.addButton(radio, i)
+            self._omr_engines[key] = radio
+            self._omr_status[key] = status
+            g_lay.addWidget(radio)
+            g_lay.addWidget(desc)
+            g_lay.addWidget(status)
+
+        layout.addWidget(group)
+
+        avail = SheetMusicRecognizer.detect_available()
+        for key, available in avail.items():
+            self._set_engine_status(
+                self._omr_status[key], self._omr_engines[key], available)
+        for key in SheetMusicRecognizer.ENGINES:
+            if self._omr_engines[key].isEnabled():
+                self._omr_engines[key].setChecked(True)
+                break
+
+        layout.addStretch()
+        return page
+
+    @property
+    def selected_omr_engine(self) -> str:
+        for key, radio in self._omr_engines.items():
+            if radio.isChecked():
+                return key
+        return "oemer"
 
     def _build_audio_tab(self) -> QWidget:
         page = QWidget()

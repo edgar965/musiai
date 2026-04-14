@@ -182,6 +182,7 @@ class MainWindow(QMainWindow):
         edit_menu.addSeparator()
         self._new_voice_action = edit_menu.addAction("Neue Stimme")
         self._new_audio_action = edit_menu.addAction("Neue Stimme — Aufnahme...")
+        self._new_omr_action = edit_menu.addAction("Neue Spur aus Bild/PDF...")
 
         # Ansicht
         view_menu = menu_bar.addMenu("&Ansicht")

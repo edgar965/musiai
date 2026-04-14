@@ -117,6 +117,19 @@ class MidiSheetRenderer:
             y_offset = self._render_sequential(
                 scene, all_staffs, parts_data, cfg, y_offset, system_width)
 
+        # Draw audio waveforms if piece has audio parts
+        piece = getattr(scene, 'piece', None)
+        if piece:
+            for part in piece.parts:
+                if part.audio_track and part.audio_track.blocks:
+                    self._draw_part_label(
+                        scene, part.name, piece.parts.index(part),
+                        4, y_offset, font_size=10)
+                    self._draw_waveform(
+                        scene, part, y_offset, system_width,
+                        piece.initial_tempo)
+                    y_offset += 80
+
         scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
 
         # Pass staff layout to scene for playhead positioning
@@ -222,7 +235,8 @@ class MidiSheetRenderer:
         return y_offset
 
     def render(self, piece: Piece, scene: QGraphicsScene,
-               system_width: float = 1100) -> None:
+               system_width: float = 1100,
+               interleave: bool = False) -> None:
         if not piece or not piece.parts:
             return
         logger.info(f"render gestartet: '{piece.title}', "
@@ -267,49 +281,50 @@ class MidiSheetRenderer:
         # Create beams
         self._create_all_beamed_chords(
             track_symbols, time_num, time_den, quarter, measure_len)
-        # Create staffs and render
-        self._staff_y_positions = []
-        self._first_track_y_offsets = []
-        all_staffs_list = []  # for tempo markers
-        first_track = True
+        # Create staffs per track
+        all_staffs_list = []
         for track_idx, symbols in enumerate(track_symbols):
-            clef = track_clefs[track_idx]
-            part = self._get_part(piece, track_idx)
-
             staffs = self._create_staffs_for_track(
                 symbols, measure_len, track_idx, len(track_symbols))
             all_staffs_list.append((track_idx, staffs))
-
-            # Recalculate heights after beaming
             for s in staffs:
                 s.calculate_height()
 
-            # Part label
-            self._draw_part_label(
-                scene, part.name if part else f"Track {track_idx}",
-                track_idx, 4, y_offset, font_size=10)
+        # Build parts_data for interleaved renderer
+        parts_data = []
+        for track_idx, symbols in enumerate(track_symbols):
+            part = self._get_part(piece, track_idx)
+            parts_data.append({
+                'part_name': part.name if part else f"Track {track_idx}",
+            })
 
-            for staff in staffs:
-                pixmap = self._render_staff(staff, cfg)
-                item = scene.addPixmap(pixmap)
-                item.setPos(100, y_offset)
-                item.setData(0, "staff_pixmap")
-                item.setData(1, staff)
-                item.setData(2, track_idx)
-                if first_track:
-                    self._staff_y_positions.append(
-                        (staff, y_offset, y_offset + staff.height))
-                    self._first_track_y_offsets.append(y_offset)
-                y_offset += staff.height + 15
-            y_offset += 20
-            first_track = False
+        if interleave and len(all_staffs_list) > 1:
+            y_offset = self._render_interleaved(
+                scene, all_staffs_list, parts_data, cfg, y_offset,
+                system_width)
+        else:
+            y_offset = self._render_sequential(
+                scene, all_staffs_list, parts_data, cfg, y_offset,
+                system_width)
+
+        # Draw audio waveforms for audio parts
+        for part in piece.parts:
+            if part.audio_track and part.audio_track.blocks:
+                self._draw_part_label(
+                    scene, part.name, piece.parts.index(part),
+                    4, y_offset, font_size=10)
+                self._draw_waveform(
+                    scene, part, y_offset, system_width,
+                    piece.initial_tempo)
+                y_offset += 80
 
         scene.setSceneRect(0, 0, system_width + 60, y_offset + 40)
         self._store_staff_layout(scene)
 
         # Draw tempo markers
+        y_offsets = getattr(self, '_first_track_y_offsets', [])
         self._draw_tempo_markers(
-            scene, all_staffs_list, [], self._first_track_y_offsets)
+            scene, all_staffs_list, [], y_offsets)
 
     # ------------------------------------------------------------------
     # Symbol creation
@@ -823,6 +838,24 @@ class MidiSheetRenderer:
         scene.addItem(item)
 
     @staticmethod
+    def _draw_waveform(scene, part, y_offset, system_width, tempo):
+        """Draw audio waveform for an audio part."""
+        from musiai.notation.WaveformItem import WaveformItem
+        ppb = 40  # pixels per beat for waveform
+        for i, block in enumerate(part.audio_track.blocks):
+            dur_beats = block.duration_beats(tempo)
+            width = min(dur_beats * ppb, system_width - 120)
+            x = 100 + block.start_beat * ppb
+            item = WaveformItem(block.samples, block.sr, width, x,
+                                y_offset + 10, i)
+            item.setData(0, "waveform")
+            # Store part index for context menu
+            piece = getattr(scene, 'piece', None)
+            part_idx = piece.parts.index(part) if piece and part in piece.parts else 0
+            item.setData(1, part_idx)
+            scene.addItem(item)
+
+    @staticmethod
     def _find_bar_x(staff, tick: int) -> int | None:
         """Find x position of the barline at the given tick."""
         from musiai.ui.midi.BarSymbol import BarSymbol
@@ -873,9 +906,17 @@ class MidiSheetRenderer:
         return 4, 4
 
     def _get_last_start(self, part, tpb) -> int:
+        """Tick nach dem letzten Takt mit Noten + 1 Takt für Endstrich."""
+        last_tick = 0
         abs_tick = 0
+        measure_len = int(part.measures[0].duration_beats * tpb) if part.measures else tpb * 4
         for m in part.measures:
             abs_tick += int(m.duration_beats * tpb)
+            if m.notes:
+                last_tick = abs_tick
+        # Add one measure for the final barline
+        if last_tick > 0:
+            return last_tick + measure_len
         return abs_tick
 
     def _get_part(self, piece, track_idx):
