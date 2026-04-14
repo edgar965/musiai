@@ -176,37 +176,70 @@ class SheetMusicRecognizer:
             output_dir = tempfile.mkdtemp(prefix="musiai_omr_")
             logger.info(f"Audiveris: {image_path} → {output_dir}")
 
+            # Upscale image if needed (Audiveris needs ~300 DPI)
+            from PIL import Image
+            img = Image.open(image_path)
+            w, h = img.size
+            if w < 2000 or h < 2000:
+                scale = max(2, 3000 // max(w, h))
+                img = img.resize((w * scale, h * scale),
+                                 Image.Resampling.LANCZOS)
+                upscaled = os.path.join(output_dir, "upscaled.png")
+                img.save(upscaled)
+                actual_input = upscaled
+                logger.info(f"Audiveris: Bild hochskaliert "
+                            f"{w}x{h} → {w*scale}x{h*scale}")
+            else:
+                actual_input = image_path
+
             # Use bundled JRE + classpath
             java = os.path.join(audiveris_dir, "runtime", "bin", "java.exe")
             app_dir = os.path.join(audiveris_dir, "app", "*")
             if not os.path.exists(java):
-                java = "java"  # fallback to system Java
+                java = "java"
 
             proc = subprocess.run(
                 [java, "-cp", app_dir, "Audiveris",
                  "-batch", "-export",
-                 "-output", output_dir, image_path],
-                capture_output=True, text=True, timeout=180)
+                 "-output", output_dir, actual_input],
+                capture_output=True, text=True, timeout=300)
 
-            if proc.returncode != 0:
-                # Extract useful error from stdout (Audiveris logs to stdout)
+            # Audiveris may exit non-zero even with warnings
+            # Check if MusicXML was actually generated before failing
+            has_output = False
+            for f in os.listdir(output_dir):
+                if f.endswith((".xml", ".musicxml", ".mxl")):
+                    has_output = True
+                    break
+            if proc.returncode != 0 and not has_output:
                 err_msg = proc.stdout or proc.stderr or ""
-                if "too low" in err_msg or "NOT RELIABLE" in err_msg:
-                    result.error = ("Bildauflösung zu niedrig. "
-                                    "Bitte 300 DPI Scan verwenden.")
-                elif "not complete" in err_msg:
-                    result.error = "Audiveris: Erkennung fehlgeschlagen"
-                else:
-                    result.error = f"Audiveris Fehler: {err_msg[-300:]}"
+                result.error = f"Audiveris: {err_msg[-300:]}"
                 logger.warning(f"Audiveris exit {proc.returncode}")
                 return result
 
-            # Find generated MusicXML
+            # Find generated MusicXML (may be .mxl ZIP or .xml)
             for f in os.listdir(output_dir):
-                if f.endswith((".xml", ".musicxml", ".mxl")):
+                if f.endswith(".mxl"):
+                    # MXL is a ZIP — extract XML from it
+                    import zipfile
+                    mxl_path = os.path.join(output_dir, f)
+                    with zipfile.ZipFile(mxl_path) as z:
+                        for n in z.namelist():
+                            if n.endswith(".xml") and "META" not in n:
+                                result.musicxml = z.read(n).decode("utf-8")
+                                result.success = True
+                                break
+                    if result.success:
+                        break
+                elif f.endswith((".xml", ".musicxml")):
                     xml_path = os.path.join(output_dir, f)
-                    with open(xml_path, "r", encoding="utf-8") as fh:
-                        result.musicxml = fh.read()
+                    try:
+                        with open(xml_path, "r", encoding="utf-8") as fh:
+                            result.musicxml = fh.read()
+                    except UnicodeDecodeError:
+                        with open(xml_path, "rb") as fh:
+                            result.musicxml = fh.read().decode(
+                                "latin-1", errors="replace")
                     result.success = True
                     break
 
