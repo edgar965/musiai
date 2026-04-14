@@ -33,9 +33,11 @@ class MeasureParser:
         staff_filter: 0 = alle Noten, 1/2/... = nur Noten mit <staff>N</staff>.
         """
         measure_num = int(measure_elem.get("number", "1"))
+        is_implicit = measure_elem.get("implicit", "no") == "yes"
         measure = Measure(number=measure_num, time_signature=TimeSignature(
             state.time_signature.numerator, state.time_signature.denominator
         ))
+        measure.is_pickup = is_implicit
 
         MeasureParser._parse_attributes(measure_elem, ns, state, measure)
 
@@ -80,6 +82,10 @@ class MeasureParser:
                 current_beat = MeasureParser._handle_note(
                     elem, ns, state, measure, current_beat
                 )
+
+        # For pickup measures, set actual duration from content
+        if is_implicit and current_beat > 0:
+            measure._actual_beats = current_beat
 
         return measure
 

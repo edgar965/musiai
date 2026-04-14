@@ -28,9 +28,13 @@ class Measure:
         self.tempo = tempo
         self.notes: list[Note] = []
         self.duration_deviation: float = 1.0
+        self.is_pickup: bool = False  # Auftakt (unvollständiger Takt)
+        self._actual_beats: float | None = None  # Override für Auftakte
 
     @property
     def duration_beats(self) -> float:
+        if self._actual_beats is not None:
+            return self._actual_beats
         return self.time_signature.beats_per_measure()
 
     @property
@@ -70,6 +74,10 @@ class Measure:
         }
         if self.tempo:
             result["tempo"] = self.tempo.to_dict()
+        if self.is_pickup:
+            result["is_pickup"] = True
+        if self._actual_beats is not None:
+            result["actual_beats"] = self._actual_beats
         return result
 
     @classmethod
@@ -80,6 +88,8 @@ class Measure:
             tempo=Tempo.from_dict(data["tempo"]) if "tempo" in data else None,
         )
         measure.duration_deviation = data.get("duration_deviation", 1.0)
+        measure.is_pickup = data.get("is_pickup", False)
+        measure._actual_beats = data.get("actual_beats")
         for note_data in data.get("notes", []):
             measure.notes.append(Note.from_dict(note_data))
         return measure
