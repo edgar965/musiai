@@ -56,7 +56,7 @@ class AccidSymbol(MusicSymbol):
 
         # Align to right
         offset = self.width - self.min_width
-        ynote = ytop + WhiteNote.top(self.clef).dist(self.whitenote) * nh // 2
+        ynote = ytop - lw + WhiteNote.top(self.clef).dist(self.whitenote) * nh // 2
 
         ax = x + offset
 
