@@ -941,7 +941,10 @@ class AppController:
             ts = TimeSignature(ts_num, ts_den)
             beats_per_measure = int(ts.beats_per_measure())
             total_beats = len(result.beat_times)
-            n_measures = max(1, total_beats // beats_per_measure + 1)
+            # Enough measures for both beats AND full audio duration
+            audio_total_beats = audio_track.duration_seconds * result.bpm / 60.0
+            max_beats = max(total_beats, int(audio_total_beats) + 1)
+            n_measures = max(1, max_beats // beats_per_measure + 1)
 
             # 5) Audio part — only add if not already present
             existing_audio = [p for p in piece.parts
