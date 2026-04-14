@@ -167,10 +167,12 @@ class MidiSheetRenderer:
                     continue
                 staff = staffs[row]
 
-                # Part-Label links neben dem Staff (jede Zeile)
+                # Part-Label — use real piece.parts index
                 pd = parts_data[track_idx]
+                real_idx = pd.get('part_idx', track_idx)
+                part_name = pd.get('part_name', f'Track {track_idx}')
                 self._draw_part_label(
-                    scene, pd['part_name'], track_idx,
+                    scene, part_name, real_idx,
                     4, y_offset + 15, font_size=8)
 
                 pixmap = self._render_staff(staff, cfg)
@@ -178,7 +180,7 @@ class MidiSheetRenderer:
                 item.setPos(100, y_offset)
                 item.setData(0, "staff_pixmap")
                 item.setData(1, staff)
-                item.setData(2, track_idx)
+                item.setData(2, real_idx)
 
                 # Remember first track's staff for x-lookup
                 if track_idx == all_staffs[0][0]:
@@ -213,9 +215,10 @@ class MidiSheetRenderer:
         first_track = True
         for track_idx, staffs in all_staffs:
             pd = parts_data[track_idx]
+            real_idx = pd.get('part_idx', track_idx)
 
             self._draw_part_label(
-                scene, pd['part_name'], track_idx,
+                scene, pd['part_name'], real_idx,
                 4, y_offset, font_size=10)
 
             for staff in staffs:
@@ -224,7 +227,7 @@ class MidiSheetRenderer:
                 item.setPos(100, y_offset)
                 item.setData(0, "staff_pixmap")
                 item.setData(1, staff)
-                item.setData(2, track_idx)
+                item.setData(2, real_idx)
                 if first_track:
                     self._staff_y_positions.append(
                         (staff, y_offset, y_offset + staff.height))
@@ -249,15 +252,17 @@ class MidiSheetRenderer:
         cfg["color_mode"] = self.color_mode
         y_offset = 60
 
-        # Collect tracks
+        # Collect tracks (skip audio-only parts)
         track_symbols = []
         track_clefs = []
+        track_to_part_idx = []  # maps track index → piece.parts index
         tpb = 480  # ticks per beat
 
-        for part in piece.parts:
+        for pi, part in enumerate(piece.parts):
             if part.audio_track and part.audio_track.blocks:
                 continue
 
+            track_to_part_idx.append(pi)
             all_notes = [n for m in part.measures for n in m.notes]
             clef_str = ClefHelper.detect_clef(all_notes)
             clef = TREBLE if clef_str == "treble" else BASS
@@ -290,12 +295,14 @@ class MidiSheetRenderer:
             for s in staffs:
                 s.calculate_height()
 
-        # Build parts_data for interleaved renderer
+        # Build parts_data with real piece.parts index
         parts_data = []
         for track_idx, symbols in enumerate(track_symbols):
             part = self._get_part(piece, track_idx)
+            real_idx = track_to_part_idx[track_idx] if track_idx < len(track_to_part_idx) else track_idx
             parts_data.append({
                 'part_name': part.name if part else f"Track {track_idx}",
+                'part_idx': real_idx,
             })
 
         if interleave and len(all_staffs_list) > 1:

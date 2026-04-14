@@ -27,8 +27,10 @@ class AppController:
         self.project = Project()
         self.signal_bus = SignalBus()
         self._dirty = False
-        self._beat_engine = "librosa"
-        self._omr_engine = "oemer"
+        from PySide6.QtCore import QSettings
+        _s = QSettings("MusiAI", "MusiAI")
+        self._beat_engine = _s.value("engines/beat", "librosa")
+        self._omr_engine = _s.value("engines/omr", "oemer")
 
         # MIDI
         self.midi_keyboard = MidiKeyboard()
@@ -53,9 +55,11 @@ class AppController:
         # Tab-Zustand
         self._active_tab: DocumentTab | None = None
         self._tempo_target_measure = None
-        self._detection_engine = "demucs+pyin"
-        self._pdf_import_engine = "audiveris"
-        self._pdf_export_engine = "lilypond"
+        from PySide6.QtCore import QSettings as _QS
+        _es = _QS("MusiAI", "MusiAI")
+        self._detection_engine = _es.value("engines/detection", "pyin")
+        self._pdf_import_engine = _es.value("engines/pdf_import", "audiveris")
+        self._pdf_export_engine = _es.value("engines/pdf_export", "lilypond")
 
         self._connect_signals()
         logger.info("AppController initialisiert")
@@ -638,6 +642,14 @@ class AppController:
             self._beat_engine = dialog.selected_beat_engine
             if hasattr(dialog, 'selected_omr_engine'):
                 self._omr_engine = dialog.selected_omr_engine
+            # Persist ALL engine choices
+            from PySide6.QtCore import QSettings
+            s = QSettings("MusiAI", "MusiAI")
+            s.setValue("engines/detection", self._detection_engine)
+            s.setValue("engines/beat", self._beat_engine)
+            s.setValue("engines/omr", self._omr_engine)
+            s.setValue("engines/pdf_import", self._pdf_import_engine)
+            s.setValue("engines/pdf_export", self._pdf_export_engine)
             if hasattr(dialog, 'selected_pdf_import_engine'):
                 self._pdf_import_engine = dialog.selected_pdf_import_engine
             if hasattr(dialog, 'selected_pdf_export_engine'):
@@ -959,25 +971,26 @@ class AppController:
                     dur_beats = 1.0
                 beat_durations.append(dur_beats)
 
+            # Place beat notes at their actual time positions
+            # Beat time in seconds → beat position = time * bpm / 60
+            from musiai.model.Tempo import Tempo
             for i in range(n_measures):
                 m = Measure(i + 1, ts)
-                measure_start_beat = i * beats_per_measure
+                measure_start_idx = i * beats_per_measure
                 for j in range(beats_per_measure):
-                    beat_idx = measure_start_beat + j
+                    beat_idx = measure_start_idx + j
                     if beat_idx < total_beats:
+                        # Convert absolute time to beat position
+                        beat_pos = result.beat_times[beat_idx] * result.bpm / 60.0
+                        # Position within this measure
+                        measure_start_beat = i * beats_per_measure
+                        local_beat = beat_pos - measure_start_beat
                         dur = beat_durations[beat_idx]
-                        m.add_note(Note(60, float(j), dur))
+                        m.add_note(Note(60, local_beat, dur))
                 beat_part.add_measure(m)
             piece.add_part(beat_part)
 
             # 7) Set tempo from detected BPM
-            #    Offset: first beat might not be at time 0
-            from musiai.model.Tempo import Tempo
-            first_beat_sec = result.beat_times[0] if result.beat_times else 0
-            first_beat_offset = first_beat_sec * result.bpm / 60.0
-            # Shift audio start so beat 0 aligns with first detected beat
-            if audio_track.blocks:
-                audio_track.blocks[0].start_beat = -first_beat_offset
             piece.tempos = [Tempo(result.bpm, 0.0)]
 
             # Add per-beat tempo variations as duration_deviation

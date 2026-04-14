@@ -512,7 +512,10 @@ class SettingsDialog(QDialog):
             available = False
             if key == "basic-pitch":
                 import os
-                available = os.path.exists(os.path.join("python310ENV", "python.exe"))
+                base = os.path.abspath(os.path.join(
+                    os.path.dirname(__file__), "..", "..", ".."))
+                available = os.path.exists(
+                    os.path.join(base, "python310ENV", "python.exe"))
             else:
                 try:
                     __import__(module)
